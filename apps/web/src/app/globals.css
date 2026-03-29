@@ -1,0 +1,82 @@
+@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@200;300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@200;300;400;500;600;700;800&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --nav-height: 5.5rem;
+  --font-display: "Manrope";
+  --font-body: "Plus Jakarta Sans";
+  --color-bg: #0a0f13;
+  --color-surface: #11181d;
+  --color-surface-soft: #162128;
+  --color-surface-strong: #1c2830;
+  --color-border: rgba(118, 228, 255, 0.14);
+  --color-text: #eef4f7;
+  --color-muted: #9daab3;
+  --color-cyan: #76e4ff;
+  --color-cyan-strong: #0fd8ff;
+  --color-gold: #d8ba67;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 20% 18%, rgba(15, 216, 255, 0.12), transparent 28%),
+    radial-gradient(circle at 85% 16%, rgba(216, 186, 103, 0.1), transparent 22%),
+    radial-gradient(circle at 50% 60%, rgba(118, 228, 255, 0.05), transparent 35%),
+    linear-gradient(180deg, #091015 0%, #0a0f13 50%, #0b1015 100%);
+  color: var(--color-text);
+  font-family: var(--font-body), sans-serif;
+}
+
+::selection {
+  background: rgba(15, 216, 255, 0.26);
+}
+
+.text-balance {
+  text-wrap: balance;
+}
+
+.section-grid {
+  background-image:
+    linear-gradient(rgba(118, 228, 255, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(118, 228, 255, 0.05) 1px, transparent 1px);
+  background-position: center center;
+  background-size: 72px 72px;
+  mask-image: radial-gradient(circle at center, rgba(0, 0, 0, 0.85), transparent 82%);
+}
+
+.glass-sheen::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.1) 0%,
+    rgba(255, 255, 255, 0.02) 22%,
+    transparent 38%
+  );
+  pointer-events: none;
+}
+
+.fine-scrollbar::-webkit-scrollbar {
+  height: 0.35rem;
+  width: 0.35rem;
+}
+
+.fine-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(118, 228, 255, 0.18);
+  border-radius: 999px;
+}

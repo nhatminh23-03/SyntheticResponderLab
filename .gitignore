@@ -1,0 +1,55 @@
+# macOS / editor
+.DS_Store
+.vscode/
+.idea/
+
+# Env files and secrets
+.env
+.env.local
+.env.*.local
+!.env.example
+**/.env
+**/.env.local
+**/.env.*.local
+!apps/api/.env.example
+!apps/web/.env.example
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+.turbo/
+.test-dist/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Databases / local runtime state
+*.db
+*.sqlite
+*.sqlite3
+tmp_api.db
+tmp_api_artifacts/
+
+# Generated artifacts
+artifacts/
+apps/api/artifacts/
+
+# Legacy local environments / caches
+NeoSmart-Hackathon-App/venv/
+NeoSmart-Hackathon-App/.streamlit/
+
+# Coverage / reports
+.coverage
+coverage/
+htmlcov/

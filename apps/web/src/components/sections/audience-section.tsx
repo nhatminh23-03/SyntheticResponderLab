@@ -1,0 +1,882 @@
+"use client";
+
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+
+import {
+  AudiencePayload,
+  saveAudience,
+  WorkflowReadiness,
+} from "@/lib/api";
+import { resolveSetupSeedSource } from "@/lib/setup-flow-utils";
+import { cn } from "@/lib/utils";
+import { useStudy } from "@/providers/study-provider";
+import { useSectionRegistry } from "@/providers/section-registry-provider";
+import { BadgeChip } from "@/components/ui/badge-chip";
+import { Button } from "@/components/ui/button";
+import {
+  Field,
+  SelectInput,
+  TagMultiSelect,
+  TextAreaInput,
+  TextInput,
+  ToggleChip,
+} from "@/components/ui/form-controls";
+import { GlassPanel } from "@/components/ui/glass-panel";
+import { RevealOnScroll } from "@/components/ui/reveal-on-scroll";
+import { SectionHeader } from "@/components/ui/section-header";
+import { SectionWrapper } from "@/components/ui/section-wrapper";
+
+const LIFESTYLE_OPTIONS = [
+  "remote work",
+  "home improvement",
+  "wellness",
+  "hosting guests",
+  "storage",
+  "outdoor lifestyle",
+  "Remote Worker",
+  "Outdoor Enthusiast",
+  "Wellness Focused",
+  "Budget Conscious",
+  "Guest Suite Interested",
+  "DIY Minded",
+];
+
+const HOME_TYPE_OPTIONS = [
+  "Any",
+  "Single-family",
+  "Condo",
+  "Townhome",
+  "Apartment",
+  "Multi-family",
+  "Other",
+];
+
+const US_STATES = [
+  "Any",
+  "Alabama",
+  "Alaska",
+  "Arizona",
+  "Arkansas",
+  "California",
+  "Colorado",
+  "Connecticut",
+  "Delaware",
+  "Florida",
+  "Georgia",
+  "Hawaii",
+  "Idaho",
+  "Illinois",
+  "Indiana",
+  "Iowa",
+  "Kansas",
+  "Kentucky",
+  "Louisiana",
+  "Maine",
+  "Maryland",
+  "Massachusetts",
+  "Michigan",
+  "Minnesota",
+  "Mississippi",
+  "Missouri",
+  "Montana",
+  "Nebraska",
+  "Nevada",
+  "New Hampshire",
+  "New Jersey",
+  "New Mexico",
+  "New York",
+  "North Carolina",
+  "North Dakota",
+  "Ohio",
+  "Oklahoma",
+  "Oregon",
+  "Pennsylvania",
+  "Rhode Island",
+  "South Carolina",
+  "South Dakota",
+  "Tennessee",
+  "Texas",
+  "Utah",
+  "Vermont",
+  "Virginia",
+  "Washington",
+  "West Virginia",
+  "Wisconsin",
+  "Wyoming",
+] as const;
+
+type AudienceDraft = {
+  state: string;
+  metro: string;
+  zip_code: string;
+  age_min: string;
+  age_max: string;
+  income_min: string;
+  income_max: string;
+  household_size_min: string;
+  household_size_max: string;
+  homeowner_only: boolean;
+  renter_only: boolean;
+  work_from_home: "Any" | "Yes" | "No";
+  home_type: string;
+  lifestyle_tags: string[];
+  notes: string;
+};
+
+type FieldErrors = Partial<Record<keyof AudienceDraft | "form", string>>;
+
+const EMPTY_DRAFT: AudienceDraft = {
+  state: "Any",
+  metro: "",
+  zip_code: "",
+  age_min: "",
+  age_max: "",
+  income_min: "",
+  income_max: "",
+  household_size_min: "",
+  household_size_max: "",
+  homeowner_only: false,
+  renter_only: false,
+  work_from_home: "Any",
+  home_type: "Any",
+  lifestyle_tags: [],
+  notes: "",
+};
+
+const NEO_AUDIENCE_DRAFT: AudienceDraft = {
+  state: "Any",
+  metro: "",
+  zip_code: "",
+  age_min: "25",
+  age_max: "64",
+  income_min: "50000",
+  income_max: "199999",
+  household_size_min: "",
+  household_size_max: "",
+  homeowner_only: true,
+  renter_only: false,
+  work_from_home: "Any",
+  home_type: "Single-family",
+  lifestyle_tags: [
+    "remote work",
+    "home improvement",
+    "wellness",
+    "hosting guests",
+    "storage",
+    "outdoor lifestyle",
+  ],
+  notes:
+    "Neo benchmark default: backyard-space-compatible homeowners, broad geography (not locked to a specific state or metro).",
+};
+
+export function AudienceSection() {
+  const {
+    studyId,
+    study,
+    createOrLoadStudy,
+    isCreatingStudy,
+    isHydratingStudy,
+    refreshStudy,
+  } = useStudy();
+  const { scrollToSection } = useSectionRegistry();
+  const [draft, setDraft] = useState<AudienceDraft>(EMPTY_DRAFT);
+  const [savedSnapshot, setSavedSnapshot] = useState<string>("");
+  const [workflow, setWorkflow] = useState<WorkflowReadiness | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  const [status, setStatus] = useState<{
+    tone: "neutral" | "success" | "error";
+    message: string;
+  }>({
+    tone: "neutral",
+    message: "No audience saved yet. Edits stay local until you save.",
+  });
+  const [isSaving, setIsSaving] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function hydrateAudience() {
+      if (!studyId || !study) {
+        if (!cancelled) {
+          setDraft(EMPTY_DRAFT);
+          setSavedSnapshot("");
+          setWorkflow(null);
+          setStatus({
+            tone: "neutral",
+            message: "No audience saved yet. Edits stay local until you save.",
+          });
+        }
+        return;
+      }
+
+      if (!cancelled) {
+        const seedSource = resolveSetupSeedSource({
+          sectionStatus: study.audience?.status,
+          studyMode: study.study_mode.value,
+        });
+        const nextDraft =
+          seedSource === "saved"
+            ? audiencePayloadToDraft(study.audience?.value)
+            : seedSource === "neo_default"
+              ? {
+                  ...NEO_AUDIENCE_DRAFT,
+                  lifestyle_tags: [...NEO_AUDIENCE_DRAFT.lifestyle_tags],
+                }
+              : EMPTY_DRAFT;
+
+        setDraft(nextDraft);
+        setSavedSnapshot(
+          study.audience?.status === "saved"
+            ? JSON.stringify(draftToPayload(nextDraft))
+            : ""
+        );
+        setWorkflow(study.derived?.workflow ?? null);
+        setFieldErrors({});
+        setStatus({
+          tone: study.audience?.status === "saved" ? "success" : "neutral",
+          message:
+            seedSource === "saved"
+              ? "Saved audience loaded from the current study."
+              : seedSource === "neo_default"
+                ? "Neo audience defaults loaded locally. Save to persist canonical audience state."
+                : "No audience saved yet. Edits stay local until you save.",
+        });
+      }
+    }
+
+    void hydrateAudience();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    studyId,
+    study?.audience?.updated_at,
+    study?.audience?.status,
+    study?.study_mode?.value,
+  ]);
+
+  useEffect(() => {
+    setWorkflow(study?.derived?.workflow ?? null);
+  }, [study?.derived?.workflow]);
+
+  const draftPayload = useMemo(() => draftToPayload(draft), [draft]);
+  const isDirty = JSON.stringify(draftPayload) !== savedSnapshot;
+  const summary = useMemo(() => buildAudienceSummary(draft), [draft]);
+  const downstreamReadinessStage = workflow?.stages?.find(
+    (stage) => stage.stage_key === "experiment"
+  );
+  const downstreamMessages = [
+    ...(downstreamReadinessStage?.hard_blockers ?? []),
+    ...(downstreamReadinessStage?.warnings ?? []),
+  ];
+
+  function updateDraft<K extends keyof AudienceDraft>(key: K, value: AudienceDraft[K]) {
+    setDraft((current) => ({
+      ...current,
+      [key]: value,
+    }));
+  }
+
+  async function handleSave() {
+    const validationErrors = validateDraft(draft);
+    setFieldErrors(validationErrors);
+
+    if (Object.keys(validationErrors).length > 0) {
+      setStatus({
+        tone: "error",
+        message: validationErrors.form ?? "Please fix the audience inputs before saving.",
+      });
+      return;
+    }
+
+    setIsSaving(true);
+    setStatus({
+      tone: "neutral",
+      message: "Saving audience filter...",
+    });
+
+    try {
+      const resolvedStudyId = (await createOrLoadStudy()) ?? studyId;
+
+      if (!resolvedStudyId) {
+        throw new Error("No study is available yet.");
+      }
+
+      const result = await saveAudience(resolvedStudyId, draftPayload);
+      await refreshStudy(resolvedStudyId);
+      setSavedSnapshot(JSON.stringify(draftPayload));
+      setWorkflow(result.workflow ?? null);
+      setFieldErrors({});
+      setStatus({
+        tone: "success",
+        message: "Audience filter saved successfully.",
+      });
+      scrollToSection("product");
+    } catch (error) {
+      setStatus({
+        tone: "error",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Unable to save the audience filter right now.",
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function handleClear() {
+    setIsClearing(true);
+    setDraft(EMPTY_DRAFT);
+    setFieldErrors({});
+    setStatus({
+      tone: "neutral",
+      message: "Clearing saved audience...",
+    });
+
+    try {
+      const resolvedStudyId = (await createOrLoadStudy()) ?? studyId;
+
+      if (!resolvedStudyId) {
+        setSavedSnapshot("");
+        setStatus({
+          tone: "success",
+          message: "Audience reset locally. Save later to persist if needed.",
+        });
+        return;
+      }
+
+      const emptyPayload = draftToPayload(EMPTY_DRAFT);
+      const result = await saveAudience(resolvedStudyId, emptyPayload);
+      await refreshStudy(resolvedStudyId);
+      setSavedSnapshot(JSON.stringify(emptyPayload));
+      setWorkflow(result.workflow ?? null);
+      setStatus({
+        tone: "success",
+        message: "Saved audience cleared.",
+      });
+    } catch (error) {
+      setStatus({
+        tone: "error",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Unable to clear the saved audience right now.",
+      });
+    } finally {
+      setIsClearing(false);
+    }
+  }
+
+  return (
+    <SectionWrapper
+      id="audience"
+      scrollable
+      contentClassName="relative"
+    >
+      <div className="grid gap-8 lg:grid-cols-[minmax(0,1.1fr)_24rem] lg:items-start">
+        <div className="space-y-8">
+          <RevealOnScroll>
+            <SectionHeader
+              index={2}
+              eyebrow="Audience Builder"
+              title="Define the target audience you want to simulate."
+              description="These settings shape who the synthetic respondents should represent. The filter is validated and saved for the later product, survey, and persona steps."
+            />
+          </RevealOnScroll>
+
+          <RevealOnScroll delay={0.04}>
+            <div className="grid gap-5 lg:grid-cols-2">
+              <AudienceGroupCard
+                title="Geography"
+                description="Geography is optional. Leave it broad when you want the widest signal."
+              >
+                <Field
+                  label="State"
+                  hint="Choose a state only if you want to narrow the audience."
+                >
+                  <SelectInput
+                    value={draft.state}
+                    onChange={(value) => updateDraft("state", value)}
+                    options={US_STATES.map((state) => ({
+                      label: state,
+                      value: state,
+                    }))}
+                  />
+                </Field>
+                <Field label="Metro" hint="Optional. Leave blank to include all metros.">
+                  <TextInput
+                    value={draft.metro}
+                    onChange={(value) => updateDraft("metro", value)}
+                    placeholder="San Francisco-Oakland-Berkeley"
+                  />
+                </Field>
+                <Field
+                  label="ZIP Code"
+                  hint="Optional. Use ZIP only for tighter geography filters."
+                  error={fieldErrors.zip_code}
+                >
+                  <TextInput
+                    value={draft.zip_code}
+                    onChange={(value) => updateDraft("zip_code", value)}
+                    placeholder="94105"
+                    inputMode="numeric"
+                  />
+                </Field>
+              </AudienceGroupCard>
+
+              <AudienceGroupCard
+                title="Demographics"
+                description="Blank numeric fields include all values."
+              >
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field label="Age Min" error={fieldErrors.age_min}>
+                    <TextInput
+                      value={draft.age_min}
+                      onChange={(value) => updateDraft("age_min", value)}
+                      placeholder="25"
+                      inputMode="numeric"
+                    />
+                  </Field>
+                  <Field label="Age Max" error={fieldErrors.age_max}>
+                    <TextInput
+                      value={draft.age_max}
+                      onChange={(value) => updateDraft("age_max", value)}
+                      placeholder="64"
+                      inputMode="numeric"
+                    />
+                  </Field>
+                  <Field label="Income Min" error={fieldErrors.income_min}>
+                    <TextInput
+                      value={draft.income_min}
+                      onChange={(value) => updateDraft("income_min", value)}
+                      placeholder="50000"
+                      inputMode="numeric"
+                    />
+                  </Field>
+                  <Field label="Income Max" error={fieldErrors.income_max}>
+                    <TextInput
+                      value={draft.income_max}
+                      onChange={(value) => updateDraft("income_max", value)}
+                      placeholder="200000"
+                      inputMode="numeric"
+                    />
+                  </Field>
+                  <Field
+                    label="Household Size Min"
+                    error={fieldErrors.household_size_min}
+                  >
+                    <TextInput
+                      value={draft.household_size_min}
+                      onChange={(value) => updateDraft("household_size_min", value)}
+                      placeholder="1"
+                      inputMode="numeric"
+                    />
+                  </Field>
+                  <Field
+                    label="Household Size Max"
+                    error={fieldErrors.household_size_max}
+                  >
+                    <TextInput
+                      value={draft.household_size_max}
+                      onChange={(value) => updateDraft("household_size_max", value)}
+                      placeholder="5"
+                      inputMode="numeric"
+                    />
+                  </Field>
+                </div>
+              </AudienceGroupCard>
+
+              <AudienceGroupCard
+                title="Housing"
+                description="Use these only when you want tighter housing assumptions."
+              >
+                <div className="flex flex-wrap gap-3">
+                  <ToggleChip
+                    checked={draft.homeowner_only}
+                    onChange={(checked) => updateDraft("homeowner_only", checked)}
+                    label="Homeowner Only"
+                  />
+                  <ToggleChip
+                    checked={draft.renter_only}
+                    onChange={(checked) => updateDraft("renter_only", checked)}
+                    label="Renter Only"
+                  />
+                </div>
+                {fieldErrors.form ? (
+                  <p className="text-xs leading-5 text-app-gold">{fieldErrors.form}</p>
+                ) : null}
+                <Field label="Work From Home">
+                  <SelectInput
+                    value={draft.work_from_home}
+                    onChange={(value) =>
+                      updateDraft(
+                        "work_from_home",
+                        value as AudienceDraft["work_from_home"]
+                      )
+                    }
+                    options={[
+                      { label: "Any", value: "Any" },
+                      { label: "Yes", value: "Yes" },
+                      { label: "No", value: "No" },
+                    ]}
+                  />
+                </Field>
+                <Field label="Home Type">
+                  <SelectInput
+                    value={draft.home_type}
+                    onChange={(value) => updateDraft("home_type", value)}
+                    options={HOME_TYPE_OPTIONS.map((option) => ({
+                      label: option,
+                      value: option,
+                    }))}
+                  />
+                </Field>
+              </AudienceGroupCard>
+
+              <AudienceGroupCard
+                title="Lifestyle & Notes"
+                description="Lifestyle tags are optional. Notes help preserve researcher intent."
+              >
+                <Field label="Lifestyle Tags">
+                  <TagMultiSelect
+                    options={LIFESTYLE_OPTIONS}
+                    value={draft.lifestyle_tags}
+                    onChange={(value) => updateDraft("lifestyle_tags", value)}
+                  />
+                </Field>
+                <Field label="Notes">
+                  <TextAreaInput
+                    value={draft.notes}
+                    onChange={(value) => updateDraft("notes", value)}
+                    placeholder="Optional context, exclusions, or special audience guidance."
+                    rows={5}
+                  />
+                </Field>
+              </AudienceGroupCard>
+            </div>
+          </RevealOnScroll>
+        </div>
+
+        <RevealOnScroll delay={0.08} className="lg:sticky lg:top-0">
+          <GlassPanel className="p-5 sm:p-6">
+            <div className="rounded-[1.55rem] border border-white/5 bg-[linear-gradient(180deg,rgba(12,18,22,0.84),rgba(12,18,22,0.6))] p-5">
+              <div className="flex flex-wrap items-center gap-3">
+                <BadgeChip tone="gold">Audience Status</BadgeChip>
+                <BadgeChip tone={isDirty ? "gold" : "cyan"}>
+                  {isDirty ? "Unsaved edits" : "Saved state"}
+                </BadgeChip>
+              </div>
+
+              <div
+                className={cn(
+                  "mt-4 rounded-2xl border px-4 py-3 text-sm leading-6",
+                  status.tone === "success" &&
+                    "border-app-cyan/20 bg-[rgba(15,216,255,0.08)] text-app-cyan",
+                  status.tone === "error" &&
+                    "border-app-gold/20 bg-[rgba(216,186,103,0.08)] text-app-gold",
+                  status.tone === "neutral" &&
+                    "border-white/8 bg-white/[0.03] text-app-muted"
+                )}
+              >
+                {status.message}
+              </div>
+
+              <div className="mt-7">
+                <div className="text-[0.72rem] uppercase tracking-[0.24em] text-app-muted">
+                  Live Summary
+                </div>
+                <div className="mt-4 space-y-3">
+                  <SummaryLine label="Geography" value={summary.geography} />
+                  <SummaryLine label="Age" value={summary.age} />
+                  <SummaryLine label="Income" value={summary.income} />
+                  <SummaryLine label="Household" value={summary.household} />
+                  <SummaryLine label="Housing" value={summary.housing} />
+                  <SummaryLine label="Lifestyle" value={summary.lifestyle} />
+                  <SummaryLine label="Notes" value={summary.notes} />
+                </div>
+              </div>
+
+              <div className="mt-7 rounded-2xl border border-white/8 bg-white/[0.03] p-4">
+                <div className="text-[0.72rem] uppercase tracking-[0.24em] text-app-muted">
+                  Workflow Readiness
+                </div>
+                <div className="mt-3 text-sm text-app-text">
+                  {workflow?.ready_for_persona_preview
+                    ? "Audience is saved and the setup stack is in good shape for the later run flow."
+                    : "Audience can be saved now, but the later run flow still depends on other setup chapters."}
+                </div>
+                {downstreamMessages.length > 0 ? (
+                  <ul className="mt-3 space-y-2 text-sm text-app-muted">
+                    {downstreamMessages.map((message) => (
+                      <li key={message} className="flex gap-2">
+                        <span className="mt-1 inline-flex h-2 w-2 rounded-full bg-app-gold" />
+                        <span>{message}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
+            </div>
+          </GlassPanel>
+        </RevealOnScroll>
+
+        <RevealOnScroll delay={0.1}>
+          <div className="rounded-[1.55rem] border border-white/8 bg-[rgba(255,255,255,0.03)] p-5">
+            <div
+              className={cn(
+                "rounded-2xl border px-4 py-3 text-sm leading-6",
+                status.tone === "success" &&
+                  "border-app-cyan/20 bg-[rgba(15,216,255,0.08)] text-app-cyan",
+                status.tone === "error" &&
+                  "border-app-gold/20 bg-[rgba(216,186,103,0.08)] text-app-gold",
+                status.tone === "neutral" &&
+                  "border-white/8 bg-white/[0.03] text-app-muted"
+              )}
+            >
+              {status.message}
+            </div>
+
+            <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+              <Button
+                onClick={handleSave}
+                disabled={isSaving || isCreatingStudy || isHydratingStudy}
+              >
+                {isSaving ? "Saving Audience..." : "Save Audience Filter"}
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={handleClear}
+                disabled={isClearing || isSaving || isHydratingStudy}
+              >
+                {isClearing ? "Clearing..." : "Clear Saved Audience"}
+              </Button>
+              <BadgeChip tone={isDirty ? "gold" : "cyan"}>
+                {isDirty ? "Unsaved changes" : "Saved state"}
+              </BadgeChip>
+            </div>
+          </div>
+        </RevealOnScroll>
+      </div>
+    </SectionWrapper>
+  );
+}
+
+function AudienceGroupCard({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description: string;
+  children: ReactNode;
+}) {
+  return (
+    <GlassPanel className="p-4 sm:p-5">
+      <div className="rounded-[1.45rem] border border-white/5 bg-[linear-gradient(180deg,rgba(12,18,22,0.84),rgba(12,18,22,0.58))] p-5">
+        <div className="mb-5">
+          <div className="text-[0.72rem] uppercase tracking-[0.24em] text-app-gold">
+            {title}
+          </div>
+          <p className="mt-2 text-sm leading-6 text-app-muted">{description}</p>
+        </div>
+        <div className="space-y-4">{children}</div>
+      </div>
+    </GlassPanel>
+  );
+}
+
+function SummaryLine({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl border border-white/6 bg-white/[0.03] px-4 py-3">
+      <div className="text-[0.68rem] uppercase tracking-[0.22em] text-app-muted">
+        {label}
+      </div>
+      <div className="mt-1 text-sm leading-6 text-app-text">{value}</div>
+    </div>
+  );
+}
+
+function audiencePayloadToDraft(payload?: AudiencePayload | null): AudienceDraft {
+  return {
+    state: payload?.state ?? "Any",
+    metro: payload?.metro ?? "",
+    zip_code: payload?.zip_code ?? "",
+    age_min: optionalTextFromNumber(payload?.age_min),
+    age_max: optionalTextFromNumber(payload?.age_max),
+    income_min: optionalTextFromNumber(payload?.income_min),
+    income_max: optionalTextFromNumber(payload?.income_max),
+    household_size_min: optionalTextFromNumber(payload?.household_size_min),
+    household_size_max: optionalTextFromNumber(payload?.household_size_max),
+    homeowner_only: payload?.homeowner_only ?? false,
+    renter_only: payload?.renter_only ?? false,
+    work_from_home:
+      payload?.work_from_home === true
+        ? "Yes"
+        : payload?.work_from_home === false
+          ? "No"
+          : "Any",
+    home_type: payload?.home_type ?? "Any",
+    lifestyle_tags: payload?.lifestyle_tags ?? [],
+    notes: payload?.notes ?? "",
+  };
+}
+
+function optionalTextFromNumber(value?: number | null) {
+  return value === null || value === undefined ? "" : String(value);
+}
+
+function parseOptionalNumber(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const numericValue = Number(trimmed);
+  if (!Number.isFinite(numericValue) || !Number.isInteger(numericValue)) {
+    throw new Error("Please enter whole numbers only.");
+  }
+
+  return numericValue;
+}
+
+function draftToPayload(draft: AudienceDraft): AudiencePayload {
+  return {
+    state: draft.state === "Any" ? null : draft.state || null,
+    metro: draft.metro.trim() || null,
+    zip_code: draft.zip_code.trim() || null,
+    age_min: draft.age_min.trim() ? Number(draft.age_min) : null,
+    age_max: draft.age_max.trim() ? Number(draft.age_max) : null,
+    income_min: draft.income_min.trim() ? Number(draft.income_min) : null,
+    income_max: draft.income_max.trim() ? Number(draft.income_max) : null,
+    household_size_min: draft.household_size_min.trim()
+      ? Number(draft.household_size_min)
+      : null,
+    household_size_max: draft.household_size_max.trim()
+      ? Number(draft.household_size_max)
+      : null,
+    homeowner_only: draft.homeowner_only,
+    renter_only: draft.renter_only,
+    work_from_home:
+      draft.work_from_home === "Any"
+        ? null
+        : draft.work_from_home === "Yes",
+    home_type: draft.home_type === "Any" ? null : draft.home_type || null,
+    lifestyle_tags: draft.lifestyle_tags,
+    notes: draft.notes.trim() || null,
+  };
+}
+
+function validateDraft(draft: AudienceDraft): FieldErrors {
+  const errors: FieldErrors = {};
+
+  try {
+    parseOptionalNumber(draft.age_min);
+  } catch {
+    errors.age_min = "Whole numbers only.";
+  }
+  try {
+    parseOptionalNumber(draft.age_max);
+  } catch {
+    errors.age_max = "Whole numbers only.";
+  }
+  try {
+    parseOptionalNumber(draft.income_min);
+  } catch {
+    errors.income_min = "Whole numbers only.";
+  }
+  try {
+    parseOptionalNumber(draft.income_max);
+  } catch {
+    errors.income_max = "Whole numbers only.";
+  }
+  try {
+    parseOptionalNumber(draft.household_size_min);
+  } catch {
+    errors.household_size_min = "Whole numbers only.";
+  }
+  try {
+    parseOptionalNumber(draft.household_size_max);
+  } catch {
+    errors.household_size_max = "Whole numbers only.";
+  }
+
+  const zip = draft.zip_code.trim();
+  if (zip && !/^\d{5}$/.test(zip)) {
+    errors.zip_code = "Use a 5-digit US ZIP code.";
+  }
+
+  const ageMin = draft.age_min.trim() ? Number(draft.age_min) : null;
+  const ageMax = draft.age_max.trim() ? Number(draft.age_max) : null;
+  const incomeMin = draft.income_min.trim() ? Number(draft.income_min) : null;
+  const incomeMax = draft.income_max.trim() ? Number(draft.income_max) : null;
+  const hhMin = draft.household_size_min.trim()
+    ? Number(draft.household_size_min)
+    : null;
+  const hhMax = draft.household_size_max.trim()
+    ? Number(draft.household_size_max)
+    : null;
+
+  if (ageMin !== null && ageMax !== null && ageMin > ageMax) {
+    errors.form = "Age Min cannot be greater than Age Max.";
+  }
+  if (incomeMin !== null && incomeMax !== null && incomeMin > incomeMax) {
+    errors.form = "Income Min cannot be greater than Income Max.";
+  }
+  if (hhMin !== null && hhMax !== null && hhMin > hhMax) {
+    errors.form = "Household Size Min cannot be greater than Household Size Max.";
+  }
+  if (draft.homeowner_only && draft.renter_only) {
+    errors.form = "Homeowner Only and Renter Only cannot both be selected.";
+  }
+
+  return errors;
+}
+
+function buildAudienceSummary(draft: AudienceDraft) {
+  const geographyParts = [
+    draft.state !== "Any" ? draft.state : null,
+    draft.metro.trim() || null,
+    draft.zip_code.trim() ? `ZIP ${draft.zip_code.trim()}` : null,
+  ].filter(Boolean);
+
+  return {
+    geography:
+      geographyParts.length > 0
+        ? geographyParts.join(" • ")
+        : "All geographies",
+    age:
+      draft.age_min || draft.age_max
+        ? `${draft.age_min || "Any"} to ${draft.age_max || "Any"}`
+        : "All ages",
+    income:
+      draft.income_min || draft.income_max
+        ? `${draft.income_min || "Any"} to ${draft.income_max || "Any"}`
+        : "All incomes",
+    household:
+      draft.household_size_min || draft.household_size_max
+        ? `${draft.household_size_min || "Any"} to ${
+            draft.household_size_max || "Any"
+          } people`
+        : "All household sizes",
+    housing: [
+      draft.homeowner_only ? "Homeowners only" : null,
+      draft.renter_only ? "Renters only" : null,
+      draft.work_from_home !== "Any"
+        ? draft.work_from_home === "Yes"
+          ? "Work from home"
+          : "Not work from home"
+        : null,
+      draft.home_type !== "Any" ? draft.home_type : null,
+    ]
+      .filter(Boolean)
+      .join(" • ") || "No housing constraints",
+    lifestyle:
+      draft.lifestyle_tags.length > 0
+        ? draft.lifestyle_tags.join(", ")
+        : "All lifestyle profiles",
+    notes: draft.notes.trim() || "No notes added",
+  };
+}
