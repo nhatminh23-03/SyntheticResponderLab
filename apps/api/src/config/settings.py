@@ -7,6 +7,8 @@ from typing import Optional
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+API_ROOT = Path(__file__).resolve().parents[2]
+
 
 class AppSettings(BaseSettings):
     app_env: str = Field(alias="APP_ENV")
@@ -31,7 +33,7 @@ class AppSettings(BaseSettings):
 
     model_config = SettingsConfigDict(
         extra="ignore",
-        env_file=".env",
+        env_file=API_ROOT / ".env",
         case_sensitive=False,
     )
 
