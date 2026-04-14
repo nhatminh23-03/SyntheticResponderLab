@@ -36,7 +36,7 @@ def score_interview_batch(
     questions: list[dict[str, str]] | None,
     product: dict | None,
     api_key: str,
-    judge_model: str = "openai/gpt-4o-mini",
+    judge_model: str = "openai/o4-mini",
     timeout: int = 60,
 ) -> dict:
     """Score all interview pairs and return a corpus-level grounding report.
@@ -192,15 +192,18 @@ def _call_openrouter(
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
+    is_o_series = model.startswith("openai/o")
     body: dict[str, Any] = {
         "model": model,
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ],
-        "temperature": 0.0,
-        "max_tokens": 200,
+        # o-series reasoning models do not accept temperature; other models default to 0
+        "max_tokens": 1000 if is_o_series else 200,
     }
+    if not is_o_series:
+        body["temperature"] = 0.0
     if model.startswith("openai/"):
         body["response_format"] = {"type": "json_object"}
 

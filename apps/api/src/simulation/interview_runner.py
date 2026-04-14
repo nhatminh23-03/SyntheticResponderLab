@@ -30,7 +30,7 @@ _MAX_WORKERS = 10
 # Default model pair for dual-LLM grounding
 DEFAULT_MODEL_A = "openai/gpt-4.1-mini"
 DEFAULT_MODEL_B = "google/gemini-2.5-flash"
-JUDGE_MODEL = "openai/gpt-4o-mini"
+JUDGE_MODEL = "openai/o4-mini"
 
 
 # ---------------------------------------------------------------------------
