@@ -5,6 +5,7 @@
 @tailwind utilities;
 
 :root {
+  color-scheme: dark;
   --nav-height: 5.5rem;
   --font-display: "Manrope";
   --font-body: "Plus Jakarta Sans";
@@ -18,6 +19,165 @@
   --color-cyan: #76e4ff;
   --color-cyan-strong: #0fd8ff;
   --color-gold: #d8ba67;
+  --app-background:
+    radial-gradient(circle at 20% 18%, rgba(15, 216, 255, 0.12), transparent 28%),
+    radial-gradient(circle at 85% 16%, rgba(216, 186, 103, 0.1), transparent 22%),
+    radial-gradient(circle at 50% 60%, rgba(118, 228, 255, 0.05), transparent 35%),
+    linear-gradient(180deg, #091015 0%, #0a0f13 50%, #0b1015 100%);
+  --selection-bg: rgba(15, 216, 255, 0.26);
+  --app-backdrop-top: radial-gradient(circle at top, rgba(15, 216, 255, 0.16), transparent 55%);
+  --app-backdrop-gold: radial-gradient(circle, rgba(216, 186, 103, 0.12), transparent 65%);
+  --app-backdrop-cyan: radial-gradient(circle, rgba(15, 216, 255, 0.1), transparent 65%);
+  --nav-bg: rgba(10, 15, 19, 0.78);
+  --nav-border: rgba(255, 255, 255, 0.06);
+  --glass-panel-bg: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.07) 0%,
+    rgba(255, 255, 255, 0.02) 16%,
+    rgba(17, 24, 29, 0.62) 100%
+  );
+  --glass-sheen-bg: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.1) 0%,
+    rgba(255, 255, 255, 0.02) 22%,
+    transparent 38%
+  );
+  --glass-panel-shadow: 0 18px 80px rgba(6, 12, 18, 0.46);
+  --button-secondary-bg: rgba(255, 255, 255, 0.02);
+  --button-secondary-bg-hover: rgba(255, 255, 255, 0.05);
+  --button-secondary-border: rgba(118, 228, 255, 0.14);
+  --badge-neutral-bg: rgba(255, 255, 255, 0.05);
+  --badge-neutral-border: rgba(255, 255, 255, 0.1);
+  --control-bg: rgba(255, 255, 255, 0.03);
+  --control-bg-hover: rgba(255, 255, 255, 0.05);
+  --control-border: rgba(255, 255, 255, 0.08);
+  --floating-control-bg: radial-gradient(
+    circle at 30% 30%,
+    rgba(15, 216, 255, 0.24),
+    rgba(17, 24, 29, 0.92) 68%
+  );
+  --floating-control-label-bg: rgba(10, 14, 18, 0.84);
+  --floating-control-shadow:
+    0 0 0 1px rgba(15, 216, 255, 0.12),
+    0 0 28px rgba(15, 216, 255, 0.16),
+    0 18px 42px rgba(0, 0, 0, 0.4);
+  --floating-control-secondary-bg: rgba(255, 255, 255, 0.03);
+  --floating-control-secondary-shadow:
+    0 0 0 1px rgba(15, 216, 255, 0.08),
+    0 10px 24px rgba(0, 0, 0, 0.22);
+  --hero-signal-panel-bg: linear-gradient(
+    180deg,
+    rgba(8, 13, 16, 0.86),
+    rgba(12, 18, 22, 0.72)
+  );
+  --hero-signal-panel-border: rgba(255, 255, 255, 0.05);
+  --hero-signal-node-bg: rgba(255, 255, 255, 0.05);
+  --hero-signal-card-bg: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.035),
+    rgba(255, 255, 255, 0.015)
+  );
+  --hero-signal-card-border: rgba(255, 255, 255, 0.1);
+  --hero-signal-card-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  --metric-pill-bg: rgba(255, 255, 255, 0.03);
+  --metric-pill-border: rgba(255, 255, 255, 0.06);
+}
+
+[data-theme="light"] {
+  color-scheme: light;
+  --color-bg: #f5f8fb;
+  --color-surface: #ffffff;
+  --color-surface-soft: #f0f5f9;
+  --color-surface-strong: #e4edf4;
+  --color-border: rgba(58, 120, 160, 0.22);
+  --color-text: #0f2530;
+  --color-muted: #4a6b7c;
+  --color-cyan: #3a82a8;
+  --color-cyan-strong: #2d7a9e;
+  --color-gold: #7a6520;
+  --app-background:
+    radial-gradient(circle at 18% 14%, rgba(58, 130, 168, 0.1), transparent 24%),
+    radial-gradient(circle at 82% 14%, rgba(120, 140, 155, 0.06), transparent 18%),
+    radial-gradient(circle at 50% 52%, rgba(58, 130, 168, 0.05), transparent 34%),
+    linear-gradient(180deg, #f5f8fb 0%, #f0f4f8 46%, #eaf0f5 100%);
+  --selection-bg: rgba(58, 130, 168, 0.24);
+  --app-backdrop-top: radial-gradient(circle at top, rgba(58, 130, 168, 0.1), transparent 54%);
+  --app-backdrop-gold: radial-gradient(circle, rgba(122, 101, 32, 0.05), transparent 62%);
+  --app-backdrop-cyan: radial-gradient(circle, rgba(58, 130, 168, 0.08), transparent 62%);
+  --nav-bg: rgba(245, 248, 251, 0.92);
+  --nav-border: rgba(58, 120, 160, 0.12);
+  --glass-panel-bg: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.99) 0%,
+    rgba(255, 255, 255, 0.97) 42%,
+    rgba(252, 254, 255, 0.98) 100%
+  );
+  --glass-sheen-bg: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.7) 0%,
+    rgba(255, 255, 255, 0.2) 18%,
+    transparent 36%
+  );
+  --glass-panel-shadow:
+    0 2px 6px rgba(70, 100, 125, 0.06),
+    0 8px 24px rgba(70, 100, 125, 0.08),
+    0 20px 48px rgba(70, 100, 125, 0.1);
+  --button-secondary-bg: rgba(255, 255, 255, 0.94);
+  --button-secondary-bg-hover: rgba(255, 255, 255, 1);
+  --button-secondary-border: rgba(58, 120, 160, 0.24);
+  --badge-neutral-bg: rgba(255, 255, 255, 0.92);
+  --badge-neutral-border: rgba(58, 120, 160, 0.18);
+  --control-bg: rgba(237, 243, 248, 0.88);
+  --control-bg-hover: rgba(255, 255, 255, 1);
+  --control-border: rgba(58, 120, 160, 0.24);
+  --floating-control-bg: radial-gradient(
+    circle at 30% 30%,
+    rgba(58, 130, 168, 0.2),
+    rgba(240, 245, 250, 0.98) 68%
+  );
+  --floating-control-label-bg: rgba(255, 255, 255, 0.98);
+  --floating-control-shadow:
+    0 0 0 1px rgba(58, 130, 168, 0.18),
+    0 0 20px rgba(58, 130, 168, 0.1),
+    0 12px 36px rgba(70, 100, 125, 0.18);
+  --floating-control-secondary-bg: rgba(255, 255, 255, 0.97);
+  --floating-control-secondary-shadow:
+    0 0 0 1px rgba(58, 120, 160, 0.12),
+    0 4px 12px rgba(70, 100, 125, 0.08),
+    0 10px 28px rgba(70, 100, 125, 0.12);
+  --hero-signal-panel-bg: linear-gradient(
+    180deg,
+    rgba(58, 130, 168, 0.16) 0%,
+    rgba(58, 130, 168, 0.26) 100%
+  );
+  --hero-signal-panel-border: rgba(58, 120, 160, 0.24);
+  --hero-signal-node-bg: rgba(58, 130, 168, 0.14);
+  --hero-signal-card-bg: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.94) 0%,
+    rgba(252, 254, 255, 0.96) 100%
+  );
+  --hero-signal-card-border: rgba(58, 120, 160, 0.22);
+  --hero-signal-card-shadow:
+    0 2px 8px rgba(70, 100, 125, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  --metric-pill-bg: rgba(255, 255, 255, 0.96);
+  --metric-pill-border: rgba(58, 120, 160, 0.22);
+  --theme-panel-gradient: linear-gradient(
+    180deg,
+    rgba(58, 130, 168, 0.18),
+    rgba(58, 130, 168, 0.28)
+  );
+  --theme-panel-gradient-strong: linear-gradient(
+    180deg,
+    rgba(58, 130, 168, 0.22),
+    rgba(58, 130, 168, 0.32)
+  );
+  --theme-panel-inline-gradient: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.9),
+    rgba(250, 253, 255, 0.92)
+  );
 }
 
 * {
@@ -31,17 +191,16 @@ html {
 body {
   margin: 0;
   min-height: 100vh;
-  background:
-    radial-gradient(circle at 20% 18%, rgba(15, 216, 255, 0.12), transparent 28%),
-    radial-gradient(circle at 85% 16%, rgba(216, 186, 103, 0.1), transparent 22%),
-    radial-gradient(circle at 50% 60%, rgba(118, 228, 255, 0.05), transparent 35%),
-    linear-gradient(180deg, #091015 0%, #0a0f13 50%, #0b1015 100%);
+  background: var(--app-background);
   color: var(--color-text);
   font-family: var(--font-body), sans-serif;
+  transition:
+    background 220ms ease,
+    color 220ms ease;
 }
 
 ::selection {
-  background: rgba(15, 216, 255, 0.26);
+  background: var(--selection-bg);
 }
 
 .text-balance {
@@ -62,12 +221,7 @@ body {
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  background: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.1) 0%,
-    rgba(255, 255, 255, 0.02) 22%,
-    transparent 38%
-  );
+  background: var(--glass-sheen-bg);
   pointer-events: none;
 }
 
@@ -80,3 +234,92 @@ body {
   background: rgba(118, 228, 255, 0.18);
   border-radius: 999px;
 }
+
+.scrollbar-hidden {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hidden::-webkit-scrollbar {
+  display: none;
+  height: 0;
+  width: 0;
+}
+
+[data-theme="light"] [class*="bg-[linear-gradient(180deg,rgba(12,18,22"] {
+  background: var(--theme-panel-gradient) !important;
+}
+
+[data-theme="light"] [class*="bg-[linear-gradient(180deg,rgba(8,13,16"] {
+  background: var(--theme-panel-gradient-strong) !important;
+}
+
+[data-theme="light"] [class*="bg-[linear-gradient(180deg,rgba(255,255,255,0.035)"],
+[data-theme="light"] [class*="bg-[linear-gradient(180deg,rgba(255,255,255,0.06)"],
+[data-theme="light"] [class*="bg-[linear-gradient(180deg,rgba(118,228,255,0.12)"] {
+  background: var(--theme-panel-inline-gradient) !important;
+}
+
+[data-theme="light"] [class*="bg-[rgba(255,255,255,0.03)]"],
+[data-theme="light"] [class*="bg-white/[0.03]"] {
+  background-color: rgba(255, 255, 255, 0.88) !important;
+}
+
+[data-theme="light"] [class*="bg-[rgba(255,255,255,0.05)]"],
+[data-theme="light"] [class*="bg-white/[0.05]"] {
+  background-color: rgba(255, 255, 255, 0.94) !important;
+}
+
+[data-theme="light"] [class*="bg-white/[0.04]"] {
+  background-color: rgba(255, 255, 255, 0.9) !important;
+}
+
+[data-theme="light"] [class*="bg-white/[0.02]"],
+[data-theme="light"] [class*="bg-white/[0.015]"] {
+  background-color: rgba(255, 255, 255, 0.82) !important;
+}
+
+[data-theme="light"] [class*="bg-black/10"] {
+  background-color: rgba(255, 255, 255, 0.78) !important;
+}
+
+[data-theme="light"] [class*="bg-white/70"],
+[data-theme="light"] [class*="bg-white/[0.7]"] {
+  background-color: rgba(58, 120, 160, 0.3) !important;
+}
+
+[data-theme="light"] [class*="bg-white/20"],
+[data-theme="light"] [class*="bg-white/[0.2]"] {
+  background-color: rgba(58, 120, 160, 0.22) !important;
+}
+
+[data-theme="light"] [class*="border-white/5"],
+[data-theme="light"] [class*="border-white/6"],
+[data-theme="light"] [class*="border-white/8"],
+[data-theme="light"] [class*="border-white/10"] {
+  border-color: rgba(58, 120, 160, 0.2) !important;
+}
+
+[data-theme="light"] [class*="border-white/12"],
+[data-theme="light"] [class*="border-white/14"],
+[data-theme="light"] [class*="border-white/15"] {
+  border-color: rgba(58, 120, 160, 0.24) !important;
+}
+
+[data-theme="light"] [class*="border-white/20"],
+[data-theme="light"] [class*="border-white/25"],
+[data-theme="light"] [class*="border-white/30"] {
+  border-color: rgba(58, 120, 160, 0.28) !important;
+}
+
+[data-theme="light"] .section-grid {
+  background-image:
+    linear-gradient(rgba(58, 120, 160, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(58, 120, 160, 0.08) 1px, transparent 1px);
+  mask-image: radial-gradient(circle at center, rgba(0, 0, 0, 0.5), transparent 82%);
+}
+
+[data-theme="light"] .fine-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(58, 120, 160, 0.22);
+}
+

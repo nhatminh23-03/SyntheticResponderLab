@@ -19,7 +19,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
           variant === "primary" &&
             "bg-[linear-gradient(135deg,rgba(118,228,255,1)_0%,rgba(15,216,255,0.92)_100%)] text-slate-950 shadow-glow hover:-translate-y-0.5 hover:shadow-[0_0_50px_rgba(15,216,255,0.26)]",
           variant === "secondary" &&
-            "border border-app-border bg-white/[0.02] text-app-text hover:border-app-cyan/30 hover:bg-white/[0.05] hover:text-app-cyan",
+            "border text-app-text [background:var(--button-secondary-bg)] [border-color:var(--button-secondary-border)] hover:border-app-cyan/30 hover:text-app-cyan hover:[background:var(--button-secondary-bg-hover)]",
           className
         )}
         {...props}

@@ -96,8 +96,6 @@ export function MarketSection() {
   const [hasSavedMarket, setHasSavedMarket] = useState(false);
   const [studyMode, setStudyMode] = useState<string | null>(null);
   const [workflow, setWorkflow] = useState<WorkflowReadiness | null>(null);
-  const [audienceSummary, setAudienceSummary] = useState("Audience not configured yet.");
-  const [productSummary, setProductSummary] = useState("Product not configured yet.");
   const [status, setStatus] = useState<MarketStatusState>({
     tone: "neutral",
     message: "Market context is local until you save it.",
@@ -116,8 +114,6 @@ export function MarketSection() {
           setHasSavedMarket(false);
           setStudyMode(null);
           setWorkflow(null);
-          setAudienceSummary("Audience not configured yet.");
-          setProductSummary("Product not configured yet.");
           setExpandedCompetitorIds([]);
           setStatus({
             tone: "neutral",
@@ -148,8 +144,6 @@ export function MarketSection() {
         setHasSavedMarket(hasSaved);
         setStudyMode(nextStudyMode ?? null);
         setWorkflow(study.derived?.workflow ?? null);
-        setAudienceSummary(buildAudienceAnchor(study.audience?.value));
-        setProductSummary(buildProductAnchor(study.product?.value));
         setExpandedCompetitorIds(
           seededDraft.direct_competitors[0]
             ? [seededDraft.direct_competitors[0].client_id]
@@ -175,13 +169,10 @@ export function MarketSection() {
 
   useEffect(() => {
     setWorkflow(study?.derived?.workflow ?? null);
-    setAudienceSummary(buildAudienceAnchor(study?.audience?.value));
-    setProductSummary(buildProductAnchor(study?.product?.value));
-  }, [study?.derived?.workflow, study?.audience?.updated_at, study?.product?.updated_at]);
+  }, [study?.derived?.workflow]);
 
   const draftPayload = useMemo(() => marketDraftToPayload(draft), [draft]);
   const isDirty = JSON.stringify(draftPayload) !== savedSnapshot;
-  const marketNarrative = useMemo(() => buildMarketNarrative(draft), [draft]);
   const visibleCompetitors = draft.direct_competitors.filter(hasCompetitorContent);
 
   function updateDraft<K extends keyof MarketDraft>(key: K, value: MarketDraft[K]) {
@@ -306,8 +297,12 @@ export function MarketSection() {
   }
 
   return (
-    <SectionWrapper id="market" scrollable contentClassName="relative">
-      <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_20rem] xl:grid-cols-[minmax(0,1.02fr)_22rem] 2xl:grid-cols-[minmax(0,1.03fr)_28rem]">
+    <SectionWrapper
+      id="market"
+      scrollable
+      contentClassName="relative scrollbar-hidden pr-0"
+    >
+      <div className="grid gap-8">
         <div className="min-w-0 space-y-8">
           <RevealOnScroll>
             <SectionHeader
@@ -316,11 +311,6 @@ export function MarketSection() {
               title="Define the comparison frame respondents carry into the study."
               description="This chapter captures category expectations, likely alternatives, and the objections or price anchors respondents will use when they evaluate the product."
             />
-
-            <div className="mt-6 grid gap-3 sm:grid-cols-2">
-              <ContinuityPanel label="Current Audience" value={audienceSummary} />
-              <ContinuityPanel label="Current Product" value={productSummary} />
-            </div>
           </RevealOnScroll>
 
           <RevealOnScroll delay={0.04}>
@@ -334,13 +324,12 @@ export function MarketSection() {
                 </Button>
               ) : null}
               <BadgeChip tone={hasSavedMarket ? "cyan" : "gold"}>
-                {hasSavedMarket ? "Saved market frame" : "Local draft only"}
+                {hasSavedMarket ? "Saved market frame" : "Unsaved market"}
               </BadgeChip>
             </div>
           </RevealOnScroll>
 
-          <RevealOnScroll delay={0.06}>
-            <div className="grid gap-5">
+          <div className="grid gap-5">
               <MarketGroupCard
                 title="Market Framing"
                 description="Define what feels normal in the category and what respondents will compare against."
@@ -451,155 +440,42 @@ export function MarketSection() {
                 </Field>
               </MarketGroupCard>
 
-              <RevealOnScroll delay={0.08}>
-                <div className="rounded-[1.55rem] border border-white/8 bg-[rgba(255,255,255,0.03)] p-5">
-                  <div
-                    className={cn(
-                      "rounded-2xl border px-4 py-3 text-sm leading-6",
-                      status.tone === "success" &&
-                        "border-app-cyan/20 bg-[rgba(15,216,255,0.08)] text-app-cyan",
-                      status.tone === "error" &&
-                        "border-app-gold/20 bg-[rgba(216,186,103,0.08)] text-app-gold",
-                      status.tone === "warning" &&
-                        "border-app-gold/20 bg-[rgba(216,186,103,0.08)] text-app-gold",
-                      status.tone === "neutral" &&
-                        "border-white/8 bg-white/[0.03] text-app-muted"
-                    )}
-                  >
-                    {status.message}
-                  </div>
-
-                  <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-                    <Button
-                      onClick={handleSaveMarket}
-                      disabled={isSaving || isCreatingStudy || isHydratingStudy}
-                    >
-                      {isSaving ? "Saving Market..." : "Save Competitor & Market Context"}
-                    </Button>
-                    <BadgeChip tone={isDirty ? "gold" : "cyan"}>
-                      {isDirty ? "Unsaved changes" : "Saved state"}
-                    </BadgeChip>
-                    <BadgeChip>
-                      {workflow?.ready_for_persona_preview
-                        ? "Core setup aligned"
-                        : "More setup still required"}
-                    </BadgeChip>
-                  </div>
+              <div className="rounded-[1.55rem] border border-white/8 bg-[rgba(255,255,255,0.03)] p-5">
+                <div
+                  className={cn(
+                    "rounded-2xl border px-4 py-3 text-sm leading-6",
+                    status.tone === "success" &&
+                      "border-app-cyan/20 bg-[rgba(15,216,255,0.08)] text-app-cyan",
+                    status.tone === "error" &&
+                      "border-app-gold/20 bg-[rgba(216,186,103,0.08)] text-app-gold",
+                    status.tone === "warning" &&
+                      "border-app-gold/20 bg-[rgba(216,186,103,0.08)] text-app-gold",
+                    status.tone === "neutral" &&
+                      "border-white/8 bg-white/[0.03] text-app-muted"
+                  )}
+                >
+                  {status.message}
                 </div>
-              </RevealOnScroll>
-            </div>
-          </RevealOnScroll>
-        </div>
 
-        <RevealOnScroll
-          delay={0.08}
-          className="min-w-0 lg:sticky lg:top-6 lg:w-full lg:max-w-[20rem] lg:justify-self-end xl:max-w-[22rem] 2xl:max-w-[28rem]"
-        >
-          <div className="space-y-5">
-            <GlassPanel className="p-5 sm:p-6">
-              <div className="rounded-[1.55rem] border border-white/5 bg-[linear-gradient(180deg,rgba(12,18,22,0.84),rgba(12,18,22,0.6))] p-5">
-                <div className="flex flex-wrap gap-2">
-                  <BadgeChip tone="gold">Comparison Frame</BadgeChip>
-                  <BadgeChip tone={hasSavedMarket ? "cyan" : "gold"}>
-                    {hasSavedMarket ? "Saved to backend" : "Draft only"}
+                <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+                  <Button
+                    onClick={handleSaveMarket}
+                    disabled={isSaving || isCreatingStudy || isHydratingStudy}
+                  >
+                    {isSaving ? "Saving Market..." : "Save Competitor & Market Context"}
+                  </Button>
+                  <BadgeChip tone={isDirty ? "gold" : "cyan"}>
+                    {isDirty ? "Unsaved changes" : "Saved state"}
+                  </BadgeChip>
+                  <BadgeChip>
+                    {workflow?.ready_for_persona_preview
+                      ? "Core setup aligned"
+                      : "More setup still required"}
                   </BadgeChip>
                 </div>
-
-                <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                  <MetaCard label="Category" value={draft.category || "Not defined"} />
-                  <MetaCard
-                    label="Typical Price"
-                    value={draft.typical_price_band || "Not defined"}
-                  />
-                </div>
-
-                <div className="mt-5 rounded-[1.35rem] border border-white/6 bg-white/[0.03] p-4">
-                  <div className="text-[0.72rem] uppercase tracking-[0.24em] text-app-muted">
-                    Mental comparison frame
-                  </div>
-                  <p className="mt-3 text-sm leading-7 text-app-text">
-                    {marketNarrative}
-                  </p>
-                </div>
-
-                <div className="mt-5 space-y-4">
-                  <SummaryChipBlock
-                    title="Substitutes"
-                    emptyLabel="No substitutes added yet."
-                    items={draft.substitutes}
-                  />
-                  <SummaryChipBlock
-                    title="Expected Features"
-                    emptyLabel="No expected features added yet."
-                    items={draft.common_expected_features}
-                  />
-                  <SummaryChipBlock
-                    title="Common Objections"
-                    emptyLabel="No objections added yet."
-                    items={draft.common_objections}
-                  />
-                </div>
               </div>
-            </GlassPanel>
-
-            <GlassPanel className="p-5 sm:p-6">
-              <div className="rounded-[1.55rem] border border-white/5 bg-[linear-gradient(180deg,rgba(12,18,22,0.84),rgba(12,18,22,0.6))] p-5">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <div className="text-[0.72rem] uppercase tracking-[0.24em] text-app-muted">
-                      Competitor Snapshot
-                    </div>
-                    <div className="mt-2 text-lg font-medium text-app-text">
-                      {visibleCompetitors.length > 0
-                        ? `${visibleCompetitors.length} benchmark${visibleCompetitors.length === 1 ? "" : "s"} in view`
-                        : "No competitors added yet"}
-                    </div>
-                  </div>
-                  <BadgeChip>{`${visibleCompetitors.length} cards`}</BadgeChip>
-                </div>
-
-                <div className="mt-5 space-y-3">
-                  {visibleCompetitors.length > 0 ? (
-                    visibleCompetitors.map((competitor, index) => (
-                      <div
-                        key={competitor.client_id}
-                        className="rounded-[1.35rem] border border-white/6 bg-white/[0.03] p-4"
-                      >
-                        <div className="flex flex-wrap items-start justify-between gap-3">
-                          <div>
-                            <div className="text-sm font-medium text-app-text">
-                              {competitor.name || `Competitor ${index + 1}`}
-                            </div>
-                            <div className="mt-1 text-sm text-app-muted">
-                              {[
-                                competitor.product_type || "Type not defined",
-                                competitor.price_range || "Price not defined",
-                              ].join(" • ")}
-                            </div>
-                          </div>
-                          <BadgeChip>{`Comp ${index + 1}`}</BadgeChip>
-                        </div>
-
-                        <div className="mt-4 space-y-3">
-                          <CompactList
-                            title="Key features"
-                            items={competitor.key_features}
-                          />
-                          <CompactList title="Strengths" items={competitor.strengths} />
-                          <CompactList title="Weaknesses" items={competitor.weaknesses} />
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="rounded-[1.35rem] border border-dashed border-white/10 bg-white/[0.02] px-5 py-8 text-sm leading-6 text-app-muted">
-                      Add direct competitors if you want a sharper benchmark. The section remains valid with substitutes and category expectations alone.
-                    </div>
-                  )}
-                </div>
-              </div>
-            </GlassPanel>
-          </div>
-        </RevealOnScroll>
+            </div>
+        </div>
       </div>
     </SectionWrapper>
   );
@@ -771,70 +647,6 @@ function validateMarketDraft(draft: MarketDraft) {
   return null;
 }
 
-function buildAudienceAnchor(value?: Record<string, unknown> | null) {
-  if (!value) {
-    return "Audience not configured yet.";
-  }
-
-  const geography = [
-    toOptionalString(value.state),
-    toOptionalString(value.metro),
-    toOptionalString(value.zip_code),
-  ]
-    .filter(Boolean)
-    .join(" • ");
-
-  const ageMin = toOptionalNumber(value.age_min);
-  const ageMax = toOptionalNumber(value.age_max);
-  const ageRange =
-    ageMin !== null || ageMax !== null
-      ? `Ages ${ageMin ?? "any"}-${ageMax ?? "any"}`
-      : "All ages";
-
-  return [geography || "All geographies", ageRange].filter(Boolean).join(" • ");
-}
-
-function buildProductAnchor(value?: Record<string, unknown> | null) {
-  if (!value) {
-    return "Product not configured yet.";
-  }
-
-  return (
-    [
-      toOptionalString(value.product_name),
-      toOptionalString(value.product_type),
-      toOptionalString(value.price_range),
-    ]
-      .filter(Boolean)
-      .join(" • ") || "Product not configured yet."
-  );
-}
-
-function buildMarketNarrative(draft: MarketDraft) {
-  const substituteLead =
-    draft.substitutes.length > 0
-      ? summarizeList(draft.substitutes, 2)
-      : "broader alternatives in the category";
-  const expectationLead =
-    draft.common_expected_features.length > 0
-      ? summarizeList(draft.common_expected_features, 2)
-      : "the expected baseline of the category";
-  const objectionLead =
-    draft.common_objections.length > 0
-      ? summarizeList(draft.common_objections, 2)
-      : "uncertainty around the category fit";
-
-  return `Respondents may compare this against ${substituteLead}, expect ${expectationLead}, and hesitate because of ${objectionLead}.`;
-}
-
-function summarizeList(items: string[], maxVisible: number) {
-  const visible = items.slice(0, maxVisible);
-  if (items.length <= maxVisible) {
-    return visible.join(" and ");
-  }
-  return `${visible.join(", ")}, and more`;
-}
-
 function cleanTokens(values: string[]) {
   return values.map((value) => value.trim()).filter(Boolean);
 }
@@ -842,18 +654,6 @@ function cleanTokens(values: string[]) {
 function normalizeString(value: string) {
   const trimmed = value.trim();
   return trimmed ? trimmed : null;
-}
-
-function toOptionalString(value: unknown) {
-  if (typeof value !== "string") {
-    return null;
-  }
-  const trimmed = value.trim();
-  return trimmed ? trimmed : null;
-}
-
-function toOptionalNumber(value: unknown) {
-  return typeof value === "number" ? value : null;
 }
 
 function MarketGroupCard({
@@ -879,17 +679,6 @@ function MarketGroupCard({
         <div className="mt-5 space-y-5">{children}</div>
       </div>
     </GlassPanel>
-  );
-}
-
-function ContinuityPanel({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-[1.35rem] border border-white/8 bg-white/[0.03] p-4">
-      <div className="text-[0.72rem] uppercase tracking-[0.22em] text-app-muted">
-        {label}
-      </div>
-      <p className="mt-2 text-sm leading-6 text-app-text">{value}</p>
-    </div>
   );
 }
 
@@ -1009,59 +798,6 @@ function CompetitorEditorCard({
           </div>
         </div>
       ) : null}
-    </div>
-  );
-}
-
-function SummaryChipBlock({
-  title,
-  items,
-  emptyLabel,
-}: {
-  title: string;
-  items: string[];
-  emptyLabel: string;
-}) {
-  return (
-    <div className="rounded-[1.35rem] border border-white/6 bg-white/[0.03] p-4">
-      <div className="text-[0.72rem] uppercase tracking-[0.24em] text-app-muted">
-        {title}
-      </div>
-      <div className="mt-3 flex flex-wrap gap-2">
-        {items.length > 0 ? (
-          items.map((item) => <BadgeChip key={item}>{item}</BadgeChip>)
-        ) : (
-          <span className="text-sm text-app-muted">{emptyLabel}</span>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function CompactList({ title, items }: { title: string; items: string[] }) {
-  return (
-    <div>
-      <div className="text-[0.68rem] uppercase tracking-[0.22em] text-app-muted">
-        {title}
-      </div>
-      <div className="mt-2 flex flex-wrap gap-2">
-        {items.length > 0 ? (
-          items.map((item) => <BadgeChip key={`${title}-${item}`}>{item}</BadgeChip>)
-        ) : (
-          <span className="text-sm text-app-muted">None entered</span>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function MetaCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-[1.15rem] border border-white/6 bg-white/[0.03] p-4">
-      <div className="text-[0.68rem] uppercase tracking-[0.22em] text-app-muted">
-        {label}
-      </div>
-      <div className="mt-2 text-sm leading-6 text-app-text">{value}</div>
     </div>
   );
 }

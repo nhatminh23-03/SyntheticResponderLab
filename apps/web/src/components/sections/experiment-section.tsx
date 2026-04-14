@@ -15,7 +15,7 @@ import { useStudy } from "@/providers/study-provider";
 import { useSectionRegistry } from "@/providers/section-registry-provider";
 import { BadgeChip } from "@/components/ui/badge-chip";
 import { Button } from "@/components/ui/button";
-import { Field, TextAreaInput, TextInput } from "@/components/ui/form-controls";
+import { Field, TextInput } from "@/components/ui/form-controls";
 import { GlassPanel } from "@/components/ui/glass-panel";
 import { RevealOnScroll } from "@/components/ui/reveal-on-scroll";
 import { SectionHeader } from "@/components/ui/section-header";
@@ -28,7 +28,6 @@ type ExperimentDraft = {
   selected_models: string[];
   experiment_mode: ExperimentMode;
   reruns_per_persona: number;
-  notes: string;
 };
 
 type StatusTone = "neutral" | "success" | "warning" | "error";
@@ -73,10 +72,11 @@ const DEFAULT_DRAFT: ExperimentDraft = {
   selected_models: DEFAULT_MODEL_OPTIONS.map((model) => model.id),
   experiment_mode: "split",
   reruns_per_persona: 1,
-  notes: "",
 };
 
 const PERSONA_PREVIEW_SAMPLE_CAP = 12;
+const SHOW_EXPERIMENT_SUMMARY_CARD = false;
+const SHOW_LATEST_PERSONA_PREVIEW_CARD = false;
 
 export function ExperimentSection() {
   const {
@@ -89,10 +89,6 @@ export function ExperimentSection() {
   } = useStudy();
   const { scrollToSection } = useSectionRegistry();
   const [workflow, setWorkflow] = useState<WorkflowReadiness | null>(null);
-  const [audienceSummary, setAudienceSummary] = useState("Audience not configured yet.");
-  const [productSummary, setProductSummary] = useState("Product not configured yet.");
-  const [marketSummary, setMarketSummary] = useState("Market context not configured yet.");
-  const [surveySummary, setSurveySummary] = useState("Survey not uploaded yet.");
   const [draft, setDraft] = useState<ExperimentDraft>(DEFAULT_DRAFT);
   const [savedSnapshot, setSavedSnapshot] = useState("");
   const [hasSavedExperiment, setHasSavedExperiment] = useState(false);
@@ -106,6 +102,7 @@ export function ExperimentSection() {
       "Save the experiment plan first, then generate a persona preview as a realism check before Simulation UI exists.",
   });
   const [modelSearch, setModelSearch] = useState("");
+  const [isAddModelControlsOpen, setIsAddModelControlsOpen] = useState(false);
   const [isModelPickerOpen, setIsModelPickerOpen] = useState(false);
   const [catalogModels, setCatalogModels] = useState<ModelCatalogEntry[]>(DEFAULT_MODEL_OPTIONS);
   const [catalogSource, setCatalogSource] = useState<"openrouter" | "fallback">("fallback");
@@ -113,6 +110,7 @@ export function ExperimentSection() {
   const [isLoadingCatalog, setIsLoadingCatalog] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isGeneratingPreview, setIsGeneratingPreview] = useState(false);
+  const [isRerunConfigOpen, setIsRerunConfigOpen] = useState(false);
 
   const loadModelCatalog = useCallback(async () => {
     setIsLoadingCatalog(true);
@@ -147,11 +145,10 @@ export function ExperimentSection() {
       if (!studyId || !study) {
         if (!cancelled) {
           setWorkflow(null);
-          setAudienceSummary("Audience not configured yet.");
-          setProductSummary("Product not configured yet.");
-          setMarketSummary("Market context not configured yet.");
-          setSurveySummary("Survey not uploaded yet.");
           setDraft(DEFAULT_DRAFT);
+          setModelSearch("");
+          setIsAddModelControlsOpen(false);
+          setIsModelPickerOpen(false);
           setSavedSnapshot("");
           setHasSavedExperiment(false);
           setStatus({
@@ -175,11 +172,10 @@ export function ExperimentSection() {
 
       if (!cancelled) {
         setWorkflow(study.derived?.workflow ?? null);
-        setAudienceSummary(buildAudienceAnchor(study.audience?.value));
-        setProductSummary(buildProductAnchor(study.product?.value));
-        setMarketSummary(buildMarketAnchor(study.market?.value));
-        setSurveySummary(buildSurveyAnchor(study.survey));
         setDraft(nextDraft);
+        setModelSearch("");
+        setIsAddModelControlsOpen(false);
+        setIsModelPickerOpen(false);
         setSavedSnapshot(
           hasSaved ? JSON.stringify(experimentDraftToPayload(nextDraft)) : ""
         );
@@ -204,10 +200,6 @@ export function ExperimentSection() {
     study?.experiment?.updated_at,
     study?.experiment?.status,
     study?.derived?.latest_persona_preview?.completed_at,
-    study?.audience?.updated_at,
-    study?.product?.updated_at,
-    study?.market?.updated_at,
-    study?.survey?.updated_at,
   ]);
 
   const draftPayload = useMemo(() => experimentDraftToPayload(draft), [draft]);
@@ -215,9 +207,6 @@ export function ExperimentSection() {
   const validationMessage = validateExperimentDraft(draft);
   const currentMode = EXPERIMENT_MODE_OPTIONS.find(
     (option) => option.value === draft.experiment_mode
-  );
-  const experimentStage = workflow?.stages?.find(
-    (stage) => stage.stage_key === "experiment"
   );
   const latestPreview = study?.derived?.latest_persona_preview ?? null;
   const previewWarnings = latestPreview?.warning_messages ?? [];
@@ -227,6 +216,8 @@ export function ExperimentSection() {
     PERSONA_PREVIEW_SAMPLE_CAP
   );
   const availableModels = catalogModels.length > 0 ? catalogModels : DEFAULT_MODEL_OPTIONS;
+  const showExperimentSidebar =
+    SHOW_EXPERIMENT_SUMMARY_CARD || SHOW_LATEST_PERSONA_PREVIEW_CARD;
   const filteredModelOptions = useMemo(() => {
     const query = modelSearch.trim().toLowerCase();
     return availableModels.filter((model) => {
@@ -251,11 +242,24 @@ export function ExperimentSection() {
 
   function handleClearPlan() {
     setDraft(DEFAULT_DRAFT);
+    setModelSearch("");
+    setIsAddModelControlsOpen(false);
+    setIsModelPickerOpen(false);
     setStatus({
       tone: "warning",
       message:
         "The backend does not expose a clear experiment-plan endpoint yet. The form was reset locally; save again if you want to overwrite the persisted plan.",
     });
+  }
+
+  function closeModelControls() {
+    setIsAddModelControlsOpen(false);
+    setModelSearch("");
+    setIsModelPickerOpen(false);
+  }
+
+  function openModelControls() {
+    setIsAddModelControlsOpen(true);
   }
 
   function handleAddModel(model: string) {
@@ -281,7 +285,18 @@ export function ExperimentSection() {
   }
 
   function handleRerunsStep(delta: number) {
-    updateDraft("reruns_per_persona", Math.max(1, draft.reruns_per_persona + delta));
+    updateDraft(
+      "reruns_per_persona",
+      Math.max(getMinimumReruns(draft.experiment_mode), draft.reruns_per_persona + delta)
+    );
+  }
+
+  function handleExperimentModeChange(nextMode: ExperimentMode) {
+    setDraft((current) => ({
+      ...current,
+      experiment_mode: nextMode,
+      reruns_per_persona: normalizeReruns(nextMode, current.reruns_per_persona),
+    }));
   }
 
   async function handleSavePlan() {
@@ -387,8 +402,18 @@ export function ExperimentSection() {
   const isBusy = isCreatingStudy || isHydratingStudy || isSaving;
 
   return (
-    <SectionWrapper id="experiment" scrollable contentClassName="relative">
-      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_20rem] xl:grid-cols-[minmax(0,1.02fr)_22rem] 2xl:grid-cols-[minmax(0,1.03fr)_28rem]">
+    <SectionWrapper
+      id="experiment"
+      scrollable
+      contentClassName="relative scrollbar-hidden"
+    >
+      <div
+        className={cn(
+          "grid items-start gap-6",
+          showExperimentSidebar &&
+            "lg:grid-cols-[minmax(0,1fr)_20rem] xl:grid-cols-[minmax(0,1.02fr)_22rem] 2xl:grid-cols-[minmax(0,1.03fr)_28rem]"
+        )}
+      >
         <div className="min-w-0 space-y-6">
           <RevealOnScroll>
             <SectionHeader
@@ -397,13 +422,6 @@ export function ExperimentSection() {
               title="Define how this study should execute."
               description="Choose the scale, model set, and comparison strategy that will govern the later simulation. This chapter now saves into canonical backend study state and also houses persona preview as a pre-run grounding check."
             />
-
-            <div className="mt-5 grid gap-3 sm:grid-cols-2">
-              <ContinuityPanel compact label="Current Audience" value={audienceSummary} />
-              <ContinuityPanel compact label="Current Product" value={productSummary} />
-              <ContinuityPanel compact label="Current Market" value={marketSummary} />
-              <ContinuityPanel compact label="Current Survey" value={surveySummary} />
-            </div>
 
             <div className="mt-5 flex flex-wrap gap-3">
               <Button variant="secondary" onClick={handleClearPlan}>
@@ -417,7 +435,7 @@ export function ExperimentSection() {
                 {isLoadingCatalog ? "Refreshing Model Catalog..." : "Refresh Model Catalog"}
               </Button>
               <BadgeChip tone={hasSavedExperiment ? "cyan" : "gold"}>
-                {hasSavedExperiment ? "Saved in backend" : "Local draft only"}
+                {hasSavedExperiment ? "Saved in backend" : "Unsaved experiment"}
               </BadgeChip>
             </div>
           </RevealOnScroll>
@@ -430,121 +448,158 @@ export function ExperimentSection() {
                 </div>
 
                 <div className="mt-5 space-y-6">
-                  <Field
-                    label="Sample Size"
-                    hint="Set the planned response count for the experiment. This defines the intended execution scale."
-                  >
-                    <NumericControl
-                      value={draft.sample_size}
-                      onChange={(value) =>
-                        updateDraft("sample_size", Math.max(1, value))
-                      }
-                      onStep={handleSampleSizeStep}
-                      min={1}
-                    />
-                  </Field>
+                  <div className="grid items-start gap-6 lg:grid-cols-2">
+                    <Field
+                      label="Sample Size"
+                      hint="Set the planned response count for the experiment. This defines the intended execution scale."
+                    >
+                      <NumericControl
+                        value={draft.sample_size}
+                        onChange={(value) =>
+                          updateDraft("sample_size", Math.max(1, value))
+                        }
+                        onStep={handleSampleSizeStep}
+                        min={1}
+                      />
+                    </Field>
 
-                  <Field
-                    label="Select Model(s)"
-                    hint="Choose one or more model IDs. The backend now exposes a catalog endpoint with fallback starter models when live OpenRouter catalog access is unavailable."
-                  >
-                    <div className="rounded-[1.45rem] border border-white/8 bg-[rgba(255,255,255,0.03)] p-3">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <BadgeChip tone={catalogSource === "openrouter" ? "cyan" : "gold"}>
-                          {catalogSource === "openrouter"
-                            ? "Live OpenRouter catalog"
-                            : "Fallback starter catalog"}
-                        </BadgeChip>
-                        {catalogWarning ? <BadgeChip tone="gold">Catalog warning</BadgeChip> : null}
-                      </div>
+                    <Field
+                      label="Select Model(s)"
+                      hint="Choose one or more model IDs. The backend now exposes a catalog endpoint with fallback starter models when live OpenRouter catalog access is unavailable."
+                    >
+                      <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
+                        <div className="rounded-[1.45rem] border border-white/8 bg-[rgba(255,255,255,0.03)] p-4 sm:p-5">
+                          {draft.selected_models.length > 0 ? (
+                            <div className="flex flex-wrap gap-3">
+                              {draft.selected_models.map((model) => (
+                                <button
+                                  key={model}
+                                  type="button"
+                                  onClick={() => handleRemoveModel(model)}
+                                  className="inline-flex items-center gap-2 rounded-full border border-app-cyan/20 bg-[rgba(15,216,255,0.08)] px-5 py-3 text-sm text-app-cyan transition hover:border-app-cyan/35"
+                                >
+                                  <span>{model}</span>
+                                  <span className="text-app-text/70">×</span>
+                                </button>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="flex min-h-[7.75rem] items-center justify-center rounded-[1.2rem] border border-dashed border-white/10 bg-black/10 px-4 text-center text-sm leading-6 text-app-muted">
+                              No models selected yet.
+                            </div>
+                          )}
+                        </div>
 
-                      {catalogWarning ? (
-                        <p className="mt-3 text-sm leading-6 text-app-muted">
-                          {catalogWarning}
-                        </p>
-                      ) : null}
+                        {isAddModelControlsOpen ? (
+                          <div
+                            id="experiment-model-controls"
+                            className="rounded-[1.45rem] border border-white/8 bg-[rgba(255,255,255,0.03)] p-4 sm:p-5"
+                          >
+                            <div className="flex flex-wrap items-center justify-between gap-3">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <BadgeChip tone={catalogSource === "openrouter" ? "cyan" : "gold"}>
+                                  {catalogSource === "openrouter"
+                                    ? "Live OpenRouter catalog"
+                                    : "Fallback starter catalog"}
+                                </BadgeChip>
+                                {catalogWarning ? (
+                                  <BadgeChip tone="gold">Catalog warning</BadgeChip>
+                                ) : null}
+                              </div>
 
-                      <div className="mt-4 flex flex-wrap gap-2">
-                        {draft.selected_models.length > 0 ? (
-                          draft.selected_models.map((model) => (
-                            <button
-                              key={model}
-                              type="button"
-                              onClick={() => handleRemoveModel(model)}
-                              className="inline-flex items-center gap-2 rounded-full border border-app-cyan/20 bg-[rgba(15,216,255,0.08)] px-3 py-2 text-sm text-app-cyan transition hover:border-app-cyan/35"
-                            >
-                              <span>{model}</span>
-                              <span className="text-app-text/70">×</span>
-                            </button>
-                          ))
-                        ) : (
-                          <span className="px-1 text-sm text-app-muted">
-                            No models selected yet.
-                          </span>
-                        )}
-                      </div>
+                              <Button
+                                variant="secondary"
+                                onClick={closeModelControls}
+                                className="min-w-[6.5rem]"
+                              >
+                                Done
+                              </Button>
+                            </div>
 
-                      <div className="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
-                        <TextInput
-                          value={modelSearch}
-                          onChange={(value) => {
-                            setModelSearch(value);
-                            if (value.trim()) {
-                              setIsModelPickerOpen(true);
-                            }
-                          }}
-                          placeholder="Search or paste a model ID"
-                        />
-                        <Button
-                          variant="secondary"
-                          onClick={() => handleAddModel(modelSearch)}
-                          disabled={!modelSearch.trim()}
-                        >
-                          Add Model
-                        </Button>
-                      </div>
+                            {catalogWarning ? (
+                              <p className="mt-3 text-sm leading-6 text-app-muted">
+                                {catalogWarning}
+                              </p>
+                            ) : null}
 
-                      <div className="mt-3">
-                        <button
-                          type="button"
-                          onClick={() => setIsModelPickerOpen((current) => !current)}
-                          className="flex w-full items-center justify-between rounded-[1.2rem] border border-white/8 bg-white/[0.03] px-4 py-3 text-left text-sm text-app-text transition hover:border-app-cyan/25"
-                        >
-                          <span>
-                            {isModelPickerOpen
-                              ? "Hide model catalog options"
-                              : "Choose from available model catalog"}
-                          </span>
-                          <span className="text-app-muted">
-                            {isModelPickerOpen ? "−" : "+"}
-                          </span>
-                        </button>
+                            <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
+                              <TextInput
+                                value={modelSearch}
+                                onChange={(value) => {
+                                  setModelSearch(value);
+                                  if (value.trim()) {
+                                    setIsModelPickerOpen(true);
+                                  }
+                                }}
+                                placeholder="Search or paste a model ID"
+                              />
+                              <Button
+                                variant="secondary"
+                                onClick={() => handleAddModel(modelSearch)}
+                                disabled={!modelSearch.trim()}
+                              >
+                                Add Model
+                              </Button>
+                            </div>
 
-                        {isModelPickerOpen ? (
-                          <div className="fine-scrollbar mt-3 max-h-48 overflow-y-auto rounded-[1.2rem] border border-white/8 bg-black/15 p-3">
-                            <div className="flex flex-wrap gap-2">
-                              {filteredModelOptions.length > 0 ? (
-                                filteredModelOptions.map((model) => (
-                                  <button
-                                    key={model.id}
-                                    type="button"
-                                    onClick={() => handleAddModel(model.id)}
-                                    className="rounded-full border border-white/8 bg-white/[0.03] px-3 py-2 text-sm text-app-muted transition hover:border-app-cyan/25 hover:text-app-text"
-                                  >
-                                    {model.id}
-                                  </button>
-                                ))
-                              ) : (
-                                <span className="px-1 text-sm text-app-muted">
-                                  No additional models match the current search.
+                            <div className="mt-3">
+                              <button
+                                type="button"
+                                onClick={() => setIsModelPickerOpen((current) => !current)}
+                                className="flex w-full items-center justify-between rounded-[1.2rem] border border-white/8 bg-white/[0.03] px-4 py-3 text-left text-sm text-app-text transition hover:border-app-cyan/25"
+                              >
+                                <span>
+                                  {isModelPickerOpen
+                                    ? "Hide model catalog options"
+                                    : "Choose from available model catalog"}
                                 </span>
-                              )}
+                                <span className="text-app-muted">
+                                  {isModelPickerOpen ? "−" : "+"}
+                                </span>
+                              </button>
+
+                              {isModelPickerOpen ? (
+                                <div className="fine-scrollbar mt-3 max-h-48 overflow-y-auto rounded-[1.2rem] border border-white/8 bg-black/15 p-3">
+                                  <div className="flex flex-wrap gap-2">
+                                    {filteredModelOptions.length > 0 ? (
+                                      filteredModelOptions.map((model) => (
+                                        <button
+                                          key={model.id}
+                                          type="button"
+                                          onClick={() => handleAddModel(model.id)}
+                                          className="rounded-full border border-white/8 bg-white/[0.03] px-3 py-2 text-sm text-app-muted transition hover:border-app-cyan/25 hover:text-app-text"
+                                        >
+                                          {model.id}
+                                        </button>
+                                      ))
+                                    ) : (
+                                      <span className="px-1 text-sm text-app-muted">
+                                        No additional models match the current search.
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              ) : null}
                             </div>
                           </div>
-                        ) : null}
+                        ) : (
+                          <div className="rounded-[1.45rem] border border-white/8 bg-[rgba(255,255,255,0.03)] p-4 sm:p-5">
+                            <div className="flex min-h-[7.75rem] items-center justify-center rounded-[1.2rem] border border-white/6 bg-black/10 px-4 py-4">
+                              <Button
+                                variant="secondary"
+                                onClick={openModelControls}
+                                aria-expanded={isAddModelControlsOpen}
+                                aria-controls="experiment-model-controls"
+                                className="min-w-[10rem]"
+                              >
+                                Add Model
+                              </Button>
+                            </div>
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  </Field>
+                    </Field>
+                  </div>
 
                   <div>
                     <div className="mb-3 text-sm font-medium text-app-text">
@@ -557,7 +612,7 @@ export function ExperimentSection() {
                           <button
                             key={option.value}
                             type="button"
-                            onClick={() => updateDraft("experiment_mode", option.value)}
+                            onClick={() => handleExperimentModeChange(option.value)}
                             className={cn(
                               "rounded-[1.45rem] border p-5 text-left transition",
                               selected
@@ -580,28 +635,53 @@ export function ExperimentSection() {
                     </div>
                   </div>
 
-                  <Field
-                    label="Reruns Per Persona"
-                    hint="Higher reruns are most relevant for stability-oriented studies."
-                  >
-                    <NumericControl
-                      value={draft.reruns_per_persona}
-                      onChange={(value) =>
-                        updateDraft("reruns_per_persona", Math.max(1, value))
-                      }
-                      onStep={handleRerunsStep}
-                      min={1}
-                    />
-                  </Field>
+                  <div className="rounded-[1.45rem] border border-white/8 bg-[rgba(255,255,255,0.03)] p-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div>
+                        <div className="text-sm font-medium text-app-text">
+                          Reruns Per Persona
+                        </div>
+                        <p className="mt-2 text-sm leading-6 text-app-muted">
+                          Optional advanced setting. Default is{" "}
+                          {draft.experiment_mode === "stability" ? "2" : "1"} per persona.
+                          Open it only if you want to override the default run behavior.
+                        </p>
+                        <p className="mt-2 text-sm text-app-muted">
+                          Current setting: {draft.reruns_per_persona} per persona
+                        </p>
+                      </div>
 
-                  <Field label="Notes" hint="Optional execution notes for the run plan.">
-                    <TextAreaInput
-                      value={draft.notes}
-                      onChange={(value) => updateDraft("notes", value)}
-                      placeholder="Add optional notes about comparison intent, budget boundaries, or execution caveats."
-                      rows={4}
-                    />
-                  </Field>
+                      <button
+                        type="button"
+                        onClick={() => setIsRerunConfigOpen((current) => !current)}
+                        className="inline-flex min-w-[6.5rem] items-center justify-center rounded-full border border-white/8 bg-white/[0.03] px-4 py-2 text-sm text-app-text transition hover:border-app-cyan/25 hover:text-app-cyan"
+                      >
+                        {isRerunConfigOpen ? "Hide" : "Customize"}
+                      </button>
+                    </div>
+
+                    {isRerunConfigOpen ? (
+                      <div className="mt-4">
+                        <NumericControl
+                          value={draft.reruns_per_persona}
+                          onChange={(value) =>
+                            updateDraft(
+                              "reruns_per_persona",
+                              Math.max(
+                                getMinimumReruns(draft.experiment_mode),
+                                value
+                              )
+                            )
+                          }
+                          onStep={handleRerunsStep}
+                          min={getMinimumReruns(draft.experiment_mode)}
+                        />
+                        <p className="mt-3 text-sm leading-6 text-app-muted">
+                          Higher reruns are most relevant for stability-oriented studies.
+                        </p>
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
               </div>
             </GlassPanel>
@@ -634,7 +714,7 @@ export function ExperimentSection() {
                     {isSaving ? "Saving Experiment..." : "Save Experiment Plan"}
                   </Button>
                   <BadgeChip tone={hasSavedExperiment ? "cyan" : "gold"}>
-                    {hasSavedExperiment ? "Saved state" : "Not saved yet"}
+                    {hasSavedExperiment ? "Saved state" : "Unsaved experiment"}
                   </BadgeChip>
                   <BadgeChip tone={isDirty ? "gold" : "neutral"}>
                     {isDirty ? "Unsaved edits" : "No new local edits"}
@@ -704,189 +784,156 @@ export function ExperimentSection() {
           </div>
         </div>
 
-        <div className="min-w-0 lg:sticky lg:top-6 lg:w-full lg:max-w-[20rem] lg:justify-self-end xl:max-w-[22rem] 2xl:max-w-[28rem]">
-          <div className="space-y-5">
-            <GlassPanel className="p-5 sm:p-6">
-              <div className="rounded-[1.55rem] border border-white/5 bg-[linear-gradient(180deg,rgba(12,18,22,0.84),rgba(12,18,22,0.6))] p-5">
-                <div className="flex flex-wrap gap-2">
-                  <BadgeChip tone="cyan">Execution Summary</BadgeChip>
-                  <BadgeChip tone={hasSavedExperiment ? "cyan" : "gold"}>
-                    {hasSavedExperiment ? "Saved to backend" : "Draft only"}
-                  </BadgeChip>
-                </div>
+        {showExperimentSidebar ? (
+          <div className="min-w-0 lg:sticky lg:top-6 lg:w-full lg:max-w-[20rem] lg:justify-self-end xl:max-w-[22rem] 2xl:max-w-[28rem]">
+            <div className="space-y-5">
+              {SHOW_EXPERIMENT_SUMMARY_CARD ? (
+                <GlassPanel className="p-5 sm:p-6">
+                  <div className="rounded-[1.55rem] border border-white/5 bg-[linear-gradient(180deg,rgba(12,18,22,0.84),rgba(12,18,22,0.6))] p-5">
+                    <div className="flex flex-wrap gap-2">
+                      <BadgeChip tone="cyan">Execution Summary</BadgeChip>
+                      <BadgeChip tone={hasSavedExperiment ? "cyan" : "gold"}>
+                        {hasSavedExperiment ? "Saved to backend" : "Unsaved experiment"}
+                      </BadgeChip>
+                    </div>
 
-                <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                  <MetaCard label="Sample Size" value={String(draft.sample_size)} />
-                  <MetaCard
-                    label="Model Count"
-                    value={String(draft.selected_models.length)}
-                  />
-                  <MetaCard
-                    label="Experiment Mode"
-                    value={currentMode?.title ?? "Not set"}
-                  />
-                  <MetaCard
-                    label="Reruns"
-                    value={`${draft.reruns_per_persona} per persona`}
-                  />
-                </div>
-
-                <div className="mt-5">
-                  <div className="text-[0.72rem] uppercase tracking-[0.24em] text-app-muted">
-                    Selected Models
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {draft.selected_models.length > 0 ? (
-                      draft.selected_models.map((model) => (
-                        <BadgeChip key={model}>{model}</BadgeChip>
-                      ))
-                    ) : (
-                      <span className="text-sm text-app-muted">
-                        Add at least one model to define the execution plan.
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                <div className="mt-5 rounded-[1.35rem] border border-white/6 bg-white/[0.03] p-4">
-                  <div className="text-[0.72rem] uppercase tracking-[0.24em] text-app-muted">
-                    What this plan means
-                  </div>
-                  <p className="mt-3 text-sm leading-7 text-app-text">
-                    {buildExperimentNarrative(draft)}
-                  </p>
-                </div>
-              </div>
-            </GlassPanel>
-
-            <GlassPanel className="p-5 sm:p-6">
-              <div className="rounded-[1.55rem] border border-white/5 bg-[linear-gradient(180deg,rgba(12,18,22,0.84),rgba(12,18,22,0.6))] p-5">
-                <div className="text-[0.72rem] uppercase tracking-[0.24em] text-app-muted">
-                  Readiness
-                </div>
-                <div className="mt-4 space-y-3">
-                  <ReadinessRow
-                    label="Current setup stack"
-                    value={
-                      workflow?.ready_for_persona_preview
-                        ? "All setup chapters are saved, so persona preview can run against canonical study state."
-                        : "At least one earlier setup chapter is still unsaved."
-                    }
-                    tone={workflow?.ready_for_persona_preview ? "cyan" : "gold"}
-                  />
-                  <ReadinessRow
-                    label="Experiment stage"
-                    value={
-                      experimentStage?.status === "complete"
-                        ? "Experiment is saved in backend study state."
-                        : experimentStage?.hard_blockers?.length
-                          ? experimentStage.hard_blockers.join(" • ")
-                          : "Experiment can be saved once you finalize the configuration."
-                    }
-                    tone={experimentStage?.status === "complete" ? "cyan" : "gold"}
-                  />
-                  <ReadinessRow
-                    label="Model catalog"
-                    value={
-                      catalogSource === "openrouter"
-                        ? "Live OpenRouter catalog is available."
-                        : catalogWarning || "Using fallback starter models."
-                    }
-                    tone={catalogSource === "openrouter" ? "cyan" : "gold"}
-                  />
-                </div>
-              </div>
-            </GlassPanel>
-
-            <GlassPanel className="p-5 sm:p-6">
-              <div className="rounded-[1.55rem] border border-white/5 bg-[linear-gradient(180deg,rgba(12,18,22,0.84),rgba(12,18,22,0.6))] p-5">
-                <div className="flex flex-wrap gap-2">
-                  <BadgeChip tone="gold">Latest Persona Preview</BadgeChip>
-                  {latestPreview ? (
-                    <BadgeChip tone={previewWarnings.length > 0 ? "gold" : "cyan"}>
-                      {previewWarnings.length > 0 ? "Warnings present" : "Healthy preview"}
-                    </BadgeChip>
-                  ) : (
-                    <BadgeChip>No preview yet</BadgeChip>
-                  )}
-                </div>
-
-                {latestPreview ? (
-                  <>
                     <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                      <MetaCard label="Sample Size" value={String(draft.sample_size)} />
                       <MetaCard
-                        label="Preview Size"
-                        value={String(latestPreview.personas?.length ?? 0)}
+                        label="Model Count"
+                        value={String(draft.selected_models.length)}
                       />
                       <MetaCard
-                        label="Generation Mode"
-                        value={latestPreview.generation_mode ?? "Unknown"}
+                        label="Experiment Mode"
+                        value={currentMode?.title ?? "Not set"}
+                      />
+                      <MetaCard
+                        label="Reruns"
+                        value={`${draft.reruns_per_persona} per persona`}
                       />
                     </div>
 
-                    {previewWarnings.length > 0 ? (
-                      <div className="mt-5 rounded-[1.35rem] border border-app-gold/20 bg-[rgba(216,186,103,0.08)] p-4">
-                        <div className="text-[0.72rem] uppercase tracking-[0.24em] text-app-gold">
-                          Preview warnings
-                        </div>
-                        <ul className="mt-3 space-y-2 text-sm leading-6 text-app-muted">
-                          {previewWarnings.map((warning) => (
-                            <li key={warning} className="flex gap-2">
-                              <span className="mt-2 inline-flex h-2 w-2 rounded-full bg-app-gold" />
-                              <span>{warning}</span>
-                            </li>
-                          ))}
-                        </ul>
+                    <div className="mt-5">
+                      <div className="text-[0.72rem] uppercase tracking-[0.24em] text-app-muted">
+                        Selected Models
                       </div>
-                    ) : null}
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {draft.selected_models.length > 0 ? (
+                          draft.selected_models.map((model) => (
+                            <BadgeChip key={model}>{model}</BadgeChip>
+                          ))
+                        ) : (
+                          <span className="text-sm text-app-muted">
+                            Add at least one model to define the execution plan.
+                          </span>
+                        )}
+                      </div>
+                    </div>
 
-                    <div className="mt-5 space-y-3">
-                      {previewPersonas.length > 0 ? (
-                        previewPersonas.map((persona, index) => (
-                          <div
-                            key={String(persona.persona_id ?? index)}
-                            className="rounded-[1.35rem] border border-white/6 bg-white/[0.03] p-4"
-                          >
-                            <div className="flex flex-wrap items-center justify-between gap-3">
-                              <div>
-                                <div className="text-sm font-medium text-app-text">
-                                  {toOptionalString(persona.segment_label) ||
-                                    toOptionalString(persona.persona_id) ||
-                                    `Persona ${index + 1}`}
-                                </div>
-                                <div className="mt-1 text-sm text-app-muted">
-                                  {[
-                                    toOptionalString(persona.fit_tier),
-                                    toOptionalString(persona.generation_mode),
-                                  ]
-                                    .filter(Boolean)
-                                    .join(" • ") || "Grounded preview persona"}
-                                </div>
-                              </div>
-                              <BadgeChip>{`P${index + 1}`}</BadgeChip>
-                            </div>
+                    <div className="mt-5 rounded-[1.35rem] border border-white/6 bg-white/[0.03] p-4">
+                      <div className="text-[0.72rem] uppercase tracking-[0.24em] text-app-muted">
+                        What this plan means
+                      </div>
+                      <p className="mt-3 text-sm leading-7 text-app-text">
+                        {buildExperimentNarrative(draft)}
+                      </p>
+                    </div>
+                  </div>
+                </GlassPanel>
+              ) : null}
 
-                            <p className="mt-3 text-sm leading-6 text-app-muted">
-                              {buildPersonaSnippet(persona)}
-                            </p>
-                          </div>
-                        ))
+              {SHOW_LATEST_PERSONA_PREVIEW_CARD ? (
+                <GlassPanel className="p-5 sm:p-6">
+                  <div className="rounded-[1.55rem] border border-white/5 bg-[linear-gradient(180deg,rgba(12,18,22,0.84),rgba(12,18,22,0.6))] p-5">
+                    <div className="flex flex-wrap gap-2">
+                      <BadgeChip tone="gold">Latest Persona Preview</BadgeChip>
+                      {latestPreview ? (
+                        <BadgeChip tone={previewWarnings.length > 0 ? "gold" : "cyan"}>
+                          {previewWarnings.length > 0 ? "Warnings present" : "Healthy preview"}
+                        </BadgeChip>
                       ) : (
-                        <div className="rounded-[1.35rem] border border-dashed border-white/10 bg-white/[0.02] px-5 py-8 text-sm leading-6 text-app-muted">
-                          Preview metadata is saved, but no persona rows were returned.
-                        </div>
+                        <BadgeChip>No preview yet</BadgeChip>
                       )}
                     </div>
-                  </>
-                ) : (
-                  <div className="mt-5 rounded-[1.35rem] border border-dashed border-white/10 bg-white/[0.02] px-5 py-8 text-sm leading-6 text-app-muted">
-                    Save the experiment plan, then generate a persona preview to inspect grounding quality before building Simulation UI.
+
+                    {latestPreview ? (
+                      <>
+                        <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                          <MetaCard
+                            label="Preview Size"
+                            value={String(latestPreview.personas?.length ?? 0)}
+                          />
+                          <MetaCard
+                            label="Generation Mode"
+                            value={latestPreview.generation_mode ?? "Unknown"}
+                          />
+                        </div>
+
+                        {previewWarnings.length > 0 ? (
+                          <div className="mt-5 rounded-[1.35rem] border border-app-gold/20 bg-[rgba(216,186,103,0.08)] p-4">
+                            <div className="text-[0.72rem] uppercase tracking-[0.24em] text-app-gold">
+                              Preview warnings
+                            </div>
+                            <ul className="mt-3 space-y-2 text-sm leading-6 text-app-muted">
+                              {previewWarnings.map((warning) => (
+                                <li key={warning} className="flex gap-2">
+                                  <span className="mt-2 inline-flex h-2 w-2 rounded-full bg-app-gold" />
+                                  <span>{warning}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        ) : null}
+
+                        <div className="mt-5 space-y-3">
+                          {previewPersonas.length > 0 ? (
+                            previewPersonas.map((persona, index) => (
+                              <div
+                                key={String(persona.persona_id ?? index)}
+                                className="rounded-[1.35rem] border border-white/6 bg-white/[0.03] p-4"
+                              >
+                                <div className="flex flex-wrap items-center justify-between gap-3">
+                                  <div>
+                                    <div className="text-sm font-medium text-app-text">
+                                      {toOptionalString(persona.segment_label) ||
+                                        toOptionalString(persona.persona_id) ||
+                                        `Persona ${index + 1}`}
+                                    </div>
+                                    <div className="mt-1 text-sm text-app-muted">
+                                      {[
+                                        toOptionalString(persona.fit_tier),
+                                        toOptionalString(persona.generation_mode),
+                                      ]
+                                        .filter(Boolean)
+                                        .join(" • ") || "Grounded preview persona"}
+                                    </div>
+                                  </div>
+                                  <BadgeChip>{`P${index + 1}`}</BadgeChip>
+                                </div>
+
+                                <p className="mt-3 text-sm leading-6 text-app-muted">
+                                  {buildPersonaSnippet(persona)}
+                                </p>
+                              </div>
+                            ))
+                          ) : (
+                            <div className="rounded-[1.35rem] border border-dashed border-white/10 bg-white/[0.02] px-5 py-8 text-sm leading-6 text-app-muted">
+                              Preview metadata is saved, but no persona rows were returned.
+                            </div>
+                          )}
+                        </div>
+                      </>
+                    ) : (
+                      <div className="mt-5 rounded-[1.35rem] border border-dashed border-white/10 bg-white/[0.02] px-5 py-8 text-sm leading-6 text-app-muted">
+                        Save the experiment plan, then generate a persona preview to inspect grounding quality before building Simulation UI.
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-            </GlassPanel>
+                </GlassPanel>
+              ) : null}
+            </div>
           </div>
-        </div>
+        ) : null}
       </div>
     </SectionWrapper>
   );
@@ -909,6 +956,12 @@ function experimentPayloadToDraft(
   const selectedModels = Array.isArray(value?.selected_models)
     ? value?.selected_models.filter((model): model is string => typeof model === "string" && model.trim().length > 0)
     : [];
+  const experimentMode =
+    value?.experiment_mode === "split" ||
+    value?.experiment_mode === "mirror" ||
+    value?.experiment_mode === "stability"
+      ? value.experiment_mode
+      : DEFAULT_DRAFT.experiment_mode;
 
   return {
     sample_size:
@@ -917,17 +970,14 @@ function experimentPayloadToDraft(
         : DEFAULT_DRAFT.sample_size,
     selected_models:
       selectedModels.length > 0 ? selectedModels : DEFAULT_DRAFT.selected_models,
-    experiment_mode:
-      value?.experiment_mode === "split" ||
-      value?.experiment_mode === "mirror" ||
-      value?.experiment_mode === "stability"
-        ? value.experiment_mode
-        : DEFAULT_DRAFT.experiment_mode,
+    experiment_mode: experimentMode,
     reruns_per_persona:
-      typeof value?.reruns_per_persona === "number" && value.reruns_per_persona > 0
-        ? value.reruns_per_persona
-        : DEFAULT_DRAFT.reruns_per_persona,
-    notes: toOptionalString(value?.notes) ?? "",
+      normalizeReruns(
+        experimentMode,
+        typeof value?.reruns_per_persona === "number" && value.reruns_per_persona > 0
+          ? value.reruns_per_persona
+          : DEFAULT_DRAFT.reruns_per_persona
+      ),
   };
 }
 
@@ -939,7 +989,7 @@ function experimentDraftToPayload(draft: ExperimentDraft): ExperimentPayload {
     reruns_per_persona: draft.reruns_per_persona,
     mirror_personas_across_models: draft.experiment_mode === "mirror",
     split_across_models: draft.experiment_mode === "split",
-    notes: draft.notes.trim() || null,
+    notes: null,
   };
 }
 
@@ -1021,6 +1071,14 @@ function buildExperimentNarrative(draft: ExperimentDraft) {
   return `Stability Sample will repeat each persona ${draft.reruns_per_persona} time${draft.reruns_per_persona === 1 ? "" : "s"} using ${modelLead}, helping you inspect consistency and variability across repeated runs.`;
 }
 
+function getMinimumReruns(experimentMode: ExperimentMode) {
+  return experimentMode === "stability" ? 2 : 1;
+}
+
+function normalizeReruns(experimentMode: ExperimentMode, rerunsPerPersona: number) {
+  return Math.max(getMinimumReruns(experimentMode), rerunsPerPersona);
+}
+
 function summarizeList(values: string[], maxVisible: number) {
   const visible = values.slice(0, maxVisible);
   if (values.length <= maxVisible) {
@@ -1029,85 +1087,10 @@ function summarizeList(values: string[], maxVisible: number) {
   return `${visible.join(", ")}, and more`;
 }
 
-function buildAudienceAnchor(value?: Record<string, unknown> | null) {
-  if (!value) {
-    return "Audience not configured yet.";
-  }
-
-  const geography = [
-    toOptionalString(value.state),
-    toOptionalString(value.metro),
-    toOptionalString(value.zip_code),
-  ]
-    .filter(Boolean)
-    .join(" • ");
-
-  const ageMin = toOptionalNumber(value.age_min);
-  const ageMax = toOptionalNumber(value.age_max);
-  const ageRange =
-    ageMin !== null || ageMax !== null
-      ? `Ages ${ageMin ?? "any"}-${ageMax ?? "any"}`
-      : "All ages";
-
-  return [geography || "All geographies", ageRange].filter(Boolean).join(" • ");
-}
-
-function buildProductAnchor(value?: Record<string, unknown> | null) {
-  if (!value) {
-    return "Product not configured yet.";
-  }
-
-  return (
-    [
-      toOptionalString(value.product_name),
-      toOptionalString(value.product_type),
-      toOptionalString(value.price_range),
-    ]
-      .filter(Boolean)
-      .join(" • ") || "Product not configured yet."
-  );
-}
-
-function buildMarketAnchor(value?: Record<string, unknown> | null) {
-  if (!value) {
-    return "Market context not configured yet.";
-  }
-
-  const directCompetitors = Array.isArray(value.direct_competitors)
-    ? value.direct_competitors.length
-    : 0;
-  const substitutes = Array.isArray(value.substitutes) ? value.substitutes.length : 0;
-
-  return [
-    toOptionalString(value.category) || "Unspecified category",
-    `${directCompetitors} competitors`,
-    `${substitutes} substitutes`,
-  ].join(" • ");
-}
-
-function buildSurveyAnchor(
-  value?:
-    | {
-        status?: string;
-        source_filename?: string | null;
-        question_count?: number | null;
-      }
-    | null
-) {
-  if (!value || value.status !== "saved") {
-    return "Survey not uploaded yet.";
-  }
-
-  return [
-    value.source_filename || "Saved survey",
-    `${value.question_count ?? 0} questions`,
-  ].join(" • ");
-}
-
 function buildPersonaSnippet(persona: Record<string, unknown>) {
   const parts = [
-    toOptionalString(persona.age_band),
-    toOptionalString(persona.income_band),
+    toOptionalString(persona.age_bucket) || toOptionalString(persona.age_band),
+    toOptionalString(persona.income_bucket) || toOptionalString(persona.income_band),
     toOptionalString(persona.home_type),
     toOptionalString(persona.work_mode),
   ].filter(Boolean);
@@ -1125,41 +1108,6 @@ function toOptionalString(value: unknown) {
   }
   const trimmed = value.trim();
   return trimmed ? trimmed : null;
-}
-
-function toOptionalNumber(value: unknown) {
-  return typeof value === "number" ? value : null;
-}
-
-function ContinuityPanel({
-  label,
-  value,
-  compact = false,
-}: {
-  label: string;
-  value: string;
-  compact?: boolean;
-}) {
-  return (
-    <div
-      className={cn(
-        "rounded-[1.35rem] border border-white/8 bg-white/[0.03]",
-        compact ? "p-3.5" : "p-4"
-      )}
-    >
-      <div className="text-[0.72rem] uppercase tracking-[0.22em] text-app-muted">
-        {label}
-      </div>
-      <p
-        className={cn(
-          "mt-2 text-sm text-app-text",
-          compact ? "line-clamp-3 leading-5" : "leading-6"
-        )}
-      >
-        {value}
-      </p>
-    </div>
-  );
 }
 
 function NumericControl({
@@ -1207,25 +1155,6 @@ function MetaCard({ label, value }: { label: string; value: string }) {
         {label}
       </div>
       <div className="mt-2 text-sm leading-6 text-app-text">{value}</div>
-    </div>
-  );
-}
-
-function ReadinessRow({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: string;
-  tone: "cyan" | "gold";
-}) {
-  return (
-    <div className="rounded-[1.2rem] border border-white/6 bg-white/[0.03] p-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <BadgeChip tone={tone}>{label}</BadgeChip>
-      </div>
-      <p className="mt-3 text-sm leading-6 text-app-text">{value}</p>
     </div>
   );
 }

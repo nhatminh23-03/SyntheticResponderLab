@@ -115,7 +115,13 @@ def _openrouter_check(settings: AppSettings) -> HealthCheckResult:
 def _google_vision_check(settings: AppSettings) -> HealthCheckResult:
     if settings.google_cloud_api_key:
         return HealthCheckResult(status="ok")
-    if settings.google_cloud_service_account_json or settings.google_cloud_service_account_path:
+    has_service_account_path = bool(
+        settings.google_cloud_service_account_path
+        and str(settings.google_cloud_service_account_path) not in {"", "."}
+        and settings.google_cloud_service_account_path.exists()
+        and settings.google_cloud_service_account_path.is_file()
+    )
+    if settings.google_cloud_service_account_json or has_service_account_path:
         try:
             importlib.import_module("cryptography")
             return HealthCheckResult(status="ok")

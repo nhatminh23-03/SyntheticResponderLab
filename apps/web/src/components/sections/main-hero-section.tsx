@@ -1,9 +1,7 @@
 "use client";
 
-import { useState } from "react";
 import { motion } from "framer-motion";
 
-import { BadgeChip } from "@/components/ui/badge-chip";
 import { Button } from "@/components/ui/button";
 import { GlassPanel } from "@/components/ui/glass-panel";
 import { MetricPill } from "@/components/ui/metric-pill";
@@ -20,16 +18,12 @@ export function MainHeroSection() {
     isCreatingStudy,
     isHydratingStudy,
     studyBootstrapError,
-    studyId,
-    study,
   } = useStudy();
-  const [ctaMessage, setCtaMessage] = useState<string | null>(null);
 
   async function handleStartStudy() {
     const nextStudyId = await createOrLoadStudy();
 
     if (nextStudyId) {
-      setCtaMessage(`Study ready: ${nextStudyId}`);
       scrollToSection("study-mode");
     }
   }
@@ -38,7 +32,6 @@ export function MainHeroSection() {
     const nextStudyId = await createFreshStudy();
 
     if (nextStudyId) {
-      setCtaMessage(`Fresh study ready: ${nextStudyId}`);
       scrollToSection("study-mode");
     }
   }
@@ -51,10 +44,6 @@ export function MainHeroSection() {
     >
       <div className="grid min-h-[calc(100svh-var(--nav-height)-1rem)] items-center gap-8 lg:grid-cols-[minmax(0,0.98fr)_minmax(24rem,0.92fr)] xl:gap-10">
         <RevealOnScroll className="relative z-10 max-w-2xl">
-          <BadgeChip tone="gold" className="mb-4">
-            Verification Tier: Luminal
-          </BadgeChip>
-
           <div className="max-w-[42rem]">
             <h1 className="text-balance font-display text-[3.2rem] font-medium leading-[0.94] tracking-[-0.07em] text-app-text sm:text-[4rem] xl:text-[5rem]">
               Grounded{" "}
@@ -100,28 +89,11 @@ export function MainHeroSection() {
             </button>
           </div>
 
-          <div className="mt-4 min-h-6 text-sm text-app-muted">
-            {ctaMessage ? (
-              <span className="text-app-cyan">{ctaMessage}</span>
-            ) : isHydratingStudy ? (
-              <span>Preparing a persisted study workspace…</span>
-            ) : study?.study_id ? (
-              <span className="text-app-cyan">
-                Active study: {study.study_id}
-              </span>
-            ) : studyId ? (
-              <span className="text-app-cyan">Active study: {studyId}</span>
-            ) : studyBootstrapError ? (
-              <span className="text-app-gold">
-                {studyBootstrapError}
-              </span>
-            ) : (
-              <span>
-                This browser session starts with a fresh study workspace, then
-                keeps that study active as you move through setup.
-              </span>
-            )}
-          </div>
+          {studyBootstrapError ? (
+            <div className="mt-4 text-sm text-app-gold">
+              {studyBootstrapError}
+            </div>
+          ) : null}
 
           <div className="mt-6 grid max-w-2xl gap-3 sm:grid-cols-3">
             <MetricPill value="Grounded" label="persona basis" accent="gold" />
@@ -141,17 +113,18 @@ export function MainHeroSection() {
 function HeroSignalPanel() {
   return (
     <GlassPanel className="mx-auto w-full max-w-[38rem] p-4 sm:p-5">
-      <div className="relative isolate overflow-hidden rounded-[1.45rem] border border-white/5 bg-[linear-gradient(180deg,rgba(8,13,16,0.86),rgba(12,18,22,0.72))] px-5 py-5 sm:px-6 sm:py-6">
+      <div
+        className="relative isolate overflow-hidden rounded-[1.45rem] border px-5 py-5 sm:px-6 sm:py-6"
+        style={{
+          background: "var(--hero-signal-panel-bg)",
+          borderColor: "var(--hero-signal-panel-border)",
+        }}
+      >
         <div className="section-grid absolute inset-0 opacity-60" />
         <div className="absolute left-1/2 top-1/2 h-[17rem] w-[17rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle,rgba(15,216,255,0.2),transparent_62%)] blur-3xl" />
         <div className="absolute right-[12%] top-[18%] h-16 w-16 rounded-full bg-[radial-gradient(circle,rgba(216,186,103,0.26),transparent_72%)] blur-2xl" />
 
-        <div className="relative z-10 flex items-start justify-between gap-4">
-          <BadgeChip tone="cyan">Grounding Mesh</BadgeChip>
-          <BadgeChip tone="gold">Verifier Ready</BadgeChip>
-        </div>
-
-        <div className="relative z-10 mt-6 flex min-h-[16.5rem] items-center justify-center sm:min-h-[19rem]">
+        <div className="relative z-10 flex min-h-[16rem] items-center justify-center sm:min-h-[18.5rem]">
           <motion.div
             className="absolute h-[16rem] w-[16rem] rounded-full border border-app-cyan/12"
             animate={{ rotate: 360 }}
@@ -169,36 +142,53 @@ function HeroSignalPanel() {
           />
           <motion.div
             className="absolute h-28 w-28 rounded-[1.35rem] bg-[radial-gradient(circle_at_30%_30%,rgba(255,255,255,0.18),rgba(118,228,255,0.14),rgba(15,216,255,0.08)_60%,transparent_80%)] shadow-[0_0_50px_rgba(15,216,255,0.18)] backdrop-blur-xl"
-            animate={{ scale: [1, 1.03, 1] }}
-            transition={{ duration: 4.5, repeat: Number.POSITIVE_INFINITY, ease: "easeInOut" }}
-          >
-            <div className="flex h-full items-center justify-center">
-              <div className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-app-cyan/25 bg-white/5">
-                <div className="absolute h-5 w-5 rounded-full bg-app-cyan/65 blur-sm" />
-                <div className="relative h-4 w-4 rounded-full bg-app-cyan" />
+              animate={{ scale: [1, 1.03, 1] }}
+              transition={{ duration: 4.5, repeat: Number.POSITIVE_INFINITY, ease: "easeInOut" }}
+            >
+              <div className="flex h-full items-center justify-center">
+                <div
+                  className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-app-cyan/25"
+                  style={{ background: "var(--hero-signal-node-bg)" }}
+                >
+                  <div className="absolute h-5 w-5 rounded-full bg-app-cyan/65 blur-sm" />
+                  <div className="relative h-4 w-4 rounded-full bg-app-cyan" />
+                </div>
               </div>
-            </div>
-          </motion.div>
+            </motion.div>
           <div className="absolute left-[16%] top-[17%] h-2.5 w-2.5 rounded-full bg-app-gold shadow-[0_0_18px_rgba(216,186,103,0.8)]" />
           <div className="absolute right-[18%] top-[34%] h-2 w-2 rounded-full bg-app-cyan shadow-[0_0_16px_rgba(15,216,255,0.8)]" />
           <div className="absolute bottom-[18%] left-[22%] h-2 w-2 rounded-full bg-white/70 shadow-[0_0_16px_rgba(255,255,255,0.35)]" />
         </div>
 
-        <div className="relative z-10 mt-1 grid gap-3 sm:grid-cols-2">
-          <div className="rounded-2xl border border-white/6 bg-white/[0.03] p-4">
-            <div className="text-[0.68rem] uppercase tracking-[0.24em] text-app-muted">
+        <div className="relative z-10 mt-2 grid gap-3 sm:grid-cols-2">
+          <div
+            className="rounded-[1.35rem] border px-5 py-4"
+            style={{
+              background: "var(--hero-signal-card-bg)",
+              borderColor: "var(--hero-signal-card-border)",
+              boxShadow: "var(--hero-signal-card-shadow)",
+            }}
+          >
+            <div className="text-[0.64rem] uppercase tracking-[0.24em] text-app-muted/90">
               Persona basis
             </div>
-            <div className="mt-2 text-sm font-semibold text-app-text">
-              Demographics, affordability, geography, product, market
+            <div className="mt-2 text-[0.98rem] font-semibold leading-7 text-app-text">
+              Demographics, affordability, geography, product, and market context.
             </div>
           </div>
-          <div className="rounded-2xl border border-white/6 bg-white/[0.03] p-4">
-            <div className="text-[0.68rem] uppercase tracking-[0.24em] text-app-muted">
+          <div
+            className="rounded-[1.35rem] border px-5 py-4"
+            style={{
+              background: "var(--hero-signal-card-bg)",
+              borderColor: "var(--hero-signal-card-border)",
+              boxShadow: "var(--hero-signal-card-shadow)",
+            }}
+          >
+            <div className="text-[0.64rem] uppercase tracking-[0.24em] text-app-muted/90">
               Trust posture
             </div>
-            <div className="mt-2 text-sm font-semibold text-app-text">
-              Realism framing, validation, stability, transparency
+            <div className="mt-2 text-[0.98rem] font-semibold leading-7 text-app-text">
+              Realism framing, validation, stability, and transparency checks.
             </div>
           </div>
         </div>
