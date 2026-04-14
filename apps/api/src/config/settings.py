@@ -4,8 +4,39 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Optional
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+API_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = Path(__file__).resolve().parents[4]
+
+
+def _resolve_runtime_path(path: Path, *, base_dir: Path) -> Path:
+    if path.is_absolute():
+        return path.resolve()
+    return (base_dir / path).resolve()
+
+
+def _looks_like_legacy_root(path: Path) -> bool:
+    return path.exists() and path.is_dir() and (path / "backend").exists()
+
+
+def _resolve_legacy_root(path: Path) -> Path:
+    primary = _resolve_runtime_path(path, base_dir=API_ROOT)
+    if _looks_like_legacy_root(primary):
+        return primary
+
+    fallback_candidates = (
+        REPO_ROOT / "NeoSmart-Hackathon-App",
+        REPO_ROOT.parent / "NeoSmart-Hackathon-App",
+    )
+    for candidate in fallback_candidates:
+        resolved = candidate.resolve()
+        if _looks_like_legacy_root(resolved):
+            return resolved
+
+    return primary
 
 
 class AppSettings(BaseSettings):
@@ -34,6 +65,12 @@ class AppSettings(BaseSettings):
         env_file=".env",
         case_sensitive=False,
     )
+
+    @model_validator(mode="after")
+    def resolve_paths(self) -> "AppSettings":
+        self.artifacts_root = _resolve_runtime_path(self.artifacts_root, base_dir=API_ROOT)
+        self.legacy_app_root = _resolve_legacy_root(self.legacy_app_root)
+        return self
 
     @property
     def cors_allow_origin_list(self) -> list[str]:
