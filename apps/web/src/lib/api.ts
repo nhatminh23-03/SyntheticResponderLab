@@ -693,6 +693,27 @@ export type InterviewInsightsPayload = {
   grounding_passes_threshold?: boolean | null;
 };
 
+export type InterviewChatMessage = {
+  role: "user" | "assistant";
+  content: string;
+};
+
+export type InterviewChatPayload = {
+  persona_id: string;
+  prompt: string;
+  messages?: InterviewChatMessage[];
+  transcript_source?: "model_a" | "model_b";
+  model?: string;
+};
+
+export type InterviewChatResponse = {
+  persona_id: string;
+  transcript_source: "model_a" | "model_b";
+  model: string | null;
+  source_run_id: string;
+  reply: string;
+};
+
 export type GetStudyResponse = {
   data?: {
     study?: CanonicalStudy;
@@ -1694,4 +1715,36 @@ export async function getInterviewInsights(
     data?: { interview_insights?: InterviewInsightsPayload };
   };
   return result.data?.interview_insights ?? { available: false };
+}
+
+export async function sendInterviewChatMessage(
+  studyId: string,
+  payload: InterviewChatPayload
+): Promise<InterviewChatResponse> {
+  const apiBaseUrl = getApiBaseUrl();
+  const response = await fetch(
+    `${apiBaseUrl}/api/v1/studies/${studyId}/interview/chat`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      await readApiErrorMessage(
+        response,
+        `Interview chat failed with status ${response.status}`
+      )
+    );
+  }
+
+  const result = (await response.json()) as {
+    data?: { interview_chat?: InterviewChatResponse };
+  };
+  if (!result.data?.interview_chat) {
+    throw new Error("Interview chat returned an empty response.");
+  }
+  return result.data.interview_chat;
 }

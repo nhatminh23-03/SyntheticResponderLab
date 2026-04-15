@@ -33,6 +33,7 @@ type SectionRegistryContextValue = {
 };
 
 const SectionRegistryContext = createContext<SectionRegistryContextValue | null>(null);
+const SECTION_SCROLL_END_TOLERANCE = 40;
 
 export function SectionRegistryProvider({ children }: PropsWithChildren) {
   const [activeSectionId, setActiveSectionId] = useState<WorkflowSectionId>("main");
@@ -108,8 +109,8 @@ export function SectionRegistryProvider({ children }: PropsWithChildren) {
     }
 
     return (
-      container.scrollTop + container.clientHeight >=
-      container.scrollHeight - 2
+      container.scrollHeight - (container.scrollTop + container.clientHeight) <=
+      SECTION_SCROLL_END_TOLERANCE
     );
   }, []);
 
@@ -153,7 +154,10 @@ export function SectionRegistryProvider({ children }: PropsWithChildren) {
       return false;
     }
 
-    return container.scrollTop + container.clientHeight < container.scrollHeight - 2;
+    return (
+      container.scrollHeight - (container.scrollTop + container.clientHeight) >
+      SECTION_SCROLL_END_TOLERANCE
+    );
   }, []);
 
   useEffect(() => {
@@ -282,8 +286,9 @@ export function SectionRegistryProvider({ children }: PropsWithChildren) {
 
       if (scrollContainer) {
         const canScrollDown =
-          scrollContainer.scrollTop + scrollContainer.clientHeight <
-          scrollContainer.scrollHeight - 2;
+          scrollContainer.scrollHeight -
+            (scrollContainer.scrollTop + scrollContainer.clientHeight) >
+          SECTION_SCROLL_END_TOLERANCE;
         const canScrollUp = scrollContainer.scrollTop > 2;
 
         if ((direction > 0 && canScrollDown) || (direction < 0 && canScrollUp)) {
