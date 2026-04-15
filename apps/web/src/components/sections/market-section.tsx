@@ -65,10 +65,10 @@ const NEO_MARKET_DEFAULT_SEEDS: Array<
 > = [
   {
     name: "Studio Shed",
-    product_type: "Premium prefabricated backyard studio",
+    product_type: "Premium modular backyard studio",
     price_range: "$25,000-$45,000+",
     key_features: ["Multiple layouts", "High-end finishes", "Design-forward exterior"],
-    strengths: ["Strong design appeal", "Recognizable category benchmark"],
+    strengths: ["Strong design appeal", "Well-known option in this category"],
     weaknesses: ["Higher cost", "Can feel premium beyond budget fit"],
   },
   {
@@ -98,7 +98,7 @@ export function MarketSection() {
   const [workflow, setWorkflow] = useState<WorkflowReadiness | null>(null);
   const [status, setStatus] = useState<MarketStatusState>({
     tone: "neutral",
-    message: "Market context is local until you save it.",
+    message: "No market details saved yet. Save when you're ready.",
   });
   const [isSaving, setIsSaving] = useState(false);
   const [expandedCompetitorIds, setExpandedCompetitorIds] = useState<string[]>([]);
@@ -117,7 +117,7 @@ export function MarketSection() {
           setExpandedCompetitorIds([]);
           setStatus({
             tone: "neutral",
-            message: "Market context is local until you save it.",
+            message: "No market details saved yet. Save when you're ready.",
           });
         }
         return;
@@ -152,10 +152,10 @@ export function MarketSection() {
         setStatus({
           tone: hasSaved ? "success" : "neutral",
           message: hasSaved
-            ? "Saved competitor and market context loaded from the current study."
+            ? "Loaded your saved market details."
             : seedSource === "neo_default"
-              ? "Showing Neo market defaults as a local preview. Save to persist them."
-              : "Market context is local until you save it.",
+              ? "Neo market defaults loaded. Save if you want to keep them."
+              : "No market details saved yet. Save when you're ready.",
         });
       }
     }
@@ -234,7 +234,7 @@ export function MarketSection() {
     setStatus({
       tone: "warning",
       message:
-        "The backend does not expose a dedicated market clear endpoint yet. This reset is local until you save a new market frame.",
+        "Market details were reset locally. Save new details if you want to replace what is currently saved.",
     });
   }
 
@@ -246,7 +246,7 @@ export function MarketSection() {
     );
     setStatus({
       tone: "neutral",
-      message: "Neo market defaults loaded locally. Save to persist them.",
+      message: "Neo demo defaults loaded. Review and save if you want to keep them.",
     });
   }
 
@@ -263,7 +263,7 @@ export function MarketSection() {
     setIsSaving(true);
     setStatus({
       tone: "neutral",
-      message: "Saving competitor and market context...",
+      message: "Saving market details...",
     });
 
     try {
@@ -280,7 +280,7 @@ export function MarketSection() {
       setWorkflow(result.workflow ?? null);
       setStatus({
         tone: "success",
-        message: "Competitor and market context saved successfully.",
+        message: "Market details saved.",
       });
       scrollToSection("survey");
     } catch (error) {
@@ -289,7 +289,7 @@ export function MarketSection() {
         message:
           error instanceof Error
             ? error.message
-            : "Unable to save the market context right now.",
+            : "Unable to save market details right now.",
       });
     } finally {
       setIsSaving(false);
@@ -308,38 +308,38 @@ export function MarketSection() {
             <SectionHeader
               index={4}
               eyebrow="Competitor & Market Context"
-              title="Define the comparison frame respondents carry into the study."
-              description="This chapter captures category expectations, likely alternatives, and the objections or price anchors respondents will use when they evaluate the product."
+              title="What else will people compare this product to?"
+              description="Set the market context respondents will use when judging your product, including alternatives, expectations, and common concerns."
             />
           </RevealOnScroll>
 
           <RevealOnScroll delay={0.04}>
             <div className="flex flex-wrap gap-3">
               <Button variant="secondary" onClick={handleResetLocal}>
-                Clear Saved Competitor &amp; Market Context
+                Reset Market Details
               </Button>
               {studyMode === "neo_smart" ? (
                 <Button variant="secondary" onClick={handleResetToNeoDefaults}>
-                  Reset to Neo Defaults
+                  Load Neo Demo Defaults
                 </Button>
               ) : null}
               <BadgeChip tone={hasSavedMarket ? "cyan" : "gold"}>
-                {hasSavedMarket ? "Saved market frame" : "Unsaved market"}
+                {hasSavedMarket ? "Market saved" : "Market not saved"}
               </BadgeChip>
             </div>
           </RevealOnScroll>
 
           <div className="grid gap-5">
               <MarketGroupCard
-                title="Market Framing"
-                description="Define what feels normal in the category and what respondents will compare against."
+                title="Market Snapshot"
+                description="Set category context so respondents understand typical options and expectations."
               >
                 <div className="grid gap-4 sm:grid-cols-2">
                   <Field label="Category">
                     <TextInput
                       value={draft.category}
                       onChange={(value) => updateDraft("category", value)}
-                      placeholder="Backyard prefab studio / permit-light accessory structure"
+                      placeholder="Backyard modular studio"
                     />
                   </Field>
                   <Field label="Typical Price Band">
@@ -353,7 +353,7 @@ export function MarketSection() {
 
                 <Field
                   label="Substitutes"
-                  hint="Add alternatives respondents may mentally compare against."
+                  hint="Add options people might compare against."
                 >
                   <TokenInput
                     value={draft.substitutes}
@@ -364,7 +364,7 @@ export function MarketSection() {
 
                 <Field
                   label="Common Expected Features"
-                  hint="These become the baseline expectations respondents may carry into the study."
+                  hint="What people usually expect in this category."
                 >
                   <TokenInput
                     value={draft.common_expected_features}
@@ -375,7 +375,7 @@ export function MarketSection() {
 
                 <Field
                   label="Common Objections"
-                  hint="Use objections that feel category-wide, not just product-specific."
+                  hint="Common concerns people raise before buying."
                 >
                   <TokenInput
                     value={draft.common_objections}
@@ -387,12 +387,12 @@ export function MarketSection() {
 
               <MarketGroupCard
                 title="Direct Competitors"
-                description="Optional competitor detail helps sharpen how respondents benchmark the product, but the section still works with substitutes alone."
+                description="Optional competitor details for richer comparisons."
               >
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="flex flex-wrap gap-2">
                     <BadgeChip tone="cyan">{`${visibleCompetitors.length} competitor${visibleCompetitors.length === 1 ? "" : "s"}`}</BadgeChip>
-                    <BadgeChip>Expandable comparison cards</BadgeChip>
+                    <BadgeChip>Expandable cards</BadgeChip>
                   </div>
                   <Button variant="secondary" onClick={handleAddCompetitor}>
                     Add Competitor
@@ -401,7 +401,7 @@ export function MarketSection() {
 
                 {draft.direct_competitors.length === 0 ? (
                   <div className="rounded-[1.4rem] border border-dashed border-app-border [background:var(--control-bg)] px-5 py-8 text-sm leading-6 text-app-muted">
-                    No direct competitors added yet. This chapter can still work with substitutes, expectations, and objections alone.
+                    No competitors added yet. You can still continue with substitutes and objections.
                   </div>
                 ) : (
                   <div className="space-y-4">
@@ -428,13 +428,13 @@ export function MarketSection() {
 
               <MarketGroupCard
                 title="Notes"
-                description="Capture any framing guidance, scope boundaries, or competitor caveats."
+                description="Optional notes for market assumptions or caveats."
               >
                 <Field label="Notes">
                   <TextAreaInput
                     value={draft.notes}
                     onChange={(value) => updateDraft("notes", value)}
-                    placeholder="Add any market framing notes, category caveats, or comparison guidance for the study."
+                    placeholder="Optional notes about market assumptions, limits, or comparison guidance."
                     rows={5}
                   />
                 </Field>
@@ -462,15 +462,15 @@ export function MarketSection() {
                     onClick={handleSaveMarket}
                     disabled={isSaving || isCreatingStudy || isHydratingStudy}
                   >
-                    {isSaving ? "Saving Market..." : "Save Competitor & Market Context"}
+                    {isSaving ? "Saving Market..." : "Save Market Details"}
                   </Button>
                   <BadgeChip tone={isDirty ? "gold" : "cyan"}>
-                    {isDirty ? "Unsaved changes" : "Saved state"}
+                    {isDirty ? "Unsaved edits" : "All changes saved"}
                   </BadgeChip>
                   <BadgeChip>
                     {workflow?.ready_for_persona_preview
-                      ? "Core setup aligned"
-                      : "More setup still required"}
+                      ? "Setup on track"
+                      : "More setup needed"}
                   </BadgeChip>
                 </div>
               </div>
@@ -497,7 +497,7 @@ function createCompetitorDraft(
 
 function createNeoMarketDefaults(): MarketDraft {
   return {
-    category: "Backyard prefab studio / permit-light accessory structure",
+    category: "Backyard modular studio",
     typical_price_band: "$20,000-$35,000 (varies by install scope and options)",
     substitutes: [
       "Traditional shed",
@@ -531,7 +531,7 @@ function createNeoMarketDefaults(): MarketDraft {
     direct_competitors: NEO_MARKET_DEFAULT_SEEDS.map((competitor) =>
       createCompetitorDraft(competitor)
     ),
-    notes: "Preset market frame for Neo Smart Living demo mode.",
+    notes: "Demo preset for Neo Smart Living market context.",
   };
 }
 
@@ -718,8 +718,8 @@ function CompetitorEditorCard({
           </div>
           <div className="mt-2 text-sm text-app-muted">
             {[
-              competitor.product_type.trim() || "Product type not defined",
-              competitor.price_range.trim() || "Price not defined",
+              competitor.product_type.trim() || "Product type not added",
+              competitor.price_range.trim() || "Price range not added",
             ].join(" • ")}
           </div>
         </button>
@@ -752,7 +752,7 @@ function CompetitorEditorCard({
                 onChange={(value) =>
                   onChange(competitor.client_id, "product_type", value)
                 }
-                placeholder="Premium prefabricated backyard studio"
+                placeholder="Premium modular backyard studio"
               />
             </Field>
             <Field label="Price Range">

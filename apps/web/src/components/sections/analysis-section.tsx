@@ -30,7 +30,7 @@ type StatusState = {
 
 const EMPTY_STATUS: StatusState = {
   tone: "neutral",
-  message: "Analysis will load from the latest saved run once a study result is available.",
+  message: "Analysis loads after a run is completed and saved.",
 };
 
 export function AnalysisSection() {
@@ -84,7 +84,7 @@ export function AnalysisSection() {
             ? {
                 tone: "success",
                 message:
-                  "Analysis is loaded from the latest saved run. Trust framing remains heuristic and should guide, not replace, validation.",
+                  "Analysis is loaded from the latest run. Confidence and agreement labels are directional heuristics, not final proof.",
               }
             : {
                 tone: "warning",
@@ -145,15 +145,15 @@ export function AnalysisSection() {
             <SectionHeader
               index={8}
               eyebrow="Analysis"
-              title="Inspect what happened in the run and how much trust to place in it."
-              description="This chapter turns the run into an evidence-backed analysis workspace: compact summary first, trust framing second, and question-by-question exploration as the core surface."
+              title="Read what happened in the run and how trustworthy each signal is."
+              description="Start with summary cards, then inspect question-level evidence before carrying signals into Insights."
             />
           </RevealOnScroll>
 
           <RevealOnScroll delay={0.04}>
             <div className="rounded-[1.45rem] border [border-color:var(--status-warning-border)] [background:var(--status-warning-bg)] px-5 py-4 text-sm leading-6 text-app-gold">
               {analysis?.transparency_note ??
-                "Transparency note: confidence and agreement labels are rule-based heuristics for demo trust framing."}
+                "Transparency note: confidence and agreement labels are rule-based summaries to speed interpretation."}
             </div>
           </RevealOnScroll>
 
@@ -170,7 +170,7 @@ export function AnalysisSection() {
                 </div>
                 <p className="mt-4 max-w-2xl text-sm leading-7 text-app-muted">
                   {analysis?.message ??
-                    "No saved run is available yet. Complete Run Simulation first, then return here to inspect summary patterns, trust framing, and question-level evidence."}
+                    "No saved run is available yet. Complete Run Simulation first, then return here for summary patterns, trust framing, and question-level evidence."}
                 </p>
                 <div className="mt-5">
                   <Button variant="secondary" onClick={() => scrollToSection("run-simulation")}>
@@ -184,7 +184,7 @@ export function AnalysisSection() {
               <RevealOnScroll delay={0.08}>
                 <details className="rounded-[1.55rem] border border-app-border [background:var(--status-neutral-bg)] p-5">
                   <summary className="cursor-pointer list-none text-sm font-medium text-app-text">
-                    Context & Workflow
+                    Context & Study Inputs
                   </summary>
                   <div className="mt-4 grid gap-3 sm:grid-cols-2">
                     <ContextSummaryCard
@@ -203,8 +203,8 @@ export function AnalysisSection() {
                       label="Workflow"
                       value={
                         study?.derived?.workflow?.ready_for_persona_preview
-                          ? "Setup stack was fully saved before run."
-                          : "Study was run without the full setup stack."
+                          ? "All setup sections were saved before this run."
+                          : "Run completed with partial setup; interpret outputs more cautiously."
                       }
                     />
                     <ContextSummaryCard
@@ -222,23 +222,23 @@ export function AnalysisSection() {
               <RevealOnScroll delay={0.1}>
                 <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
                   <SummaryKpiCard
-                    label="Total Records"
+                    label="Responses Analyzed"
                     value={String(analysis.summary?.total_records ?? 0)}
                   />
                   <SummaryKpiCard
-                    label="Unique Respondents"
+                    label="Unique Personas"
                     value={String(analysis.summary?.unique_respondents ?? 0)}
                   />
                   <SummaryKpiCard
-                    label="Questions"
+                    label="Questions Covered"
                     value={String(analysis.summary?.question_count ?? 0)}
                   />
                   <SummaryKpiCard
-                    label="Models Used"
+                    label="Models Compared"
                     value={String(analysis.summary?.models_present?.length ?? 0)}
                   />
                   <SummaryKpiCard
-                    label="Segment Summary"
+                    label="Segment Coverage"
                     value={analysis.summary?.active_segment_summary ?? "No segment labels"}
                   />
                 </div>
@@ -251,7 +251,7 @@ export function AnalysisSection() {
                     tone={benchmark?.available ? "cyan" : "gold"}
                     body={
                       benchmark?.available
-                        ? `Consistency result: ${benchmark.stability_summary}. Most repeated top use case: ${benchmark.top_use_case_consensus ?? "n/a"}. Most repeated top barrier: ${benchmark.top_barrier_consensus ?? "n/a"}.`
+                        ? `Consistency snapshot: ${benchmark.stability_summary}. Top repeated use case: ${benchmark.top_use_case_consensus ?? "n/a"}. Top repeated barrier: ${benchmark.top_barrier_consensus ?? "n/a"}.`
                         : benchmark?.message ?? "Benchmark snapshot is unavailable."
                     }
                   >
@@ -295,7 +295,7 @@ export function AnalysisSection() {
                   >
                     <p className="mt-3 text-sm leading-6 text-app-muted">
                       {questionExplorer?.trust?.explanation ??
-                        "Trust framing appears here once a question is selected."}
+                        "Confidence updates after you select a question and filters."}
                     </p>
                   </TrustBandCard>
 
@@ -305,7 +305,7 @@ export function AnalysisSection() {
                     body={questionExplorer?.trust?.agreement_label ?? "Partial agreement"}
                   >
                     <p className="mt-3 text-sm leading-6 text-app-muted">
-                      Agreement is a heuristic read of how aligned selected models are under the active filters.
+                      Agreement is a heuristic read of how aligned models are under current filters.
                     </p>
                   </TrustBandCard>
                 </div>
@@ -316,7 +316,7 @@ export function AnalysisSection() {
                   <div className="rounded-[1.55rem] border border-app-border [background:var(--theme-panel-gradient)] p-5">
                     <div className="flex flex-wrap items-center gap-3">
                       <BadgeChip tone="cyan">Question Explorer</BadgeChip>
-                      <BadgeChip>{`${analysis.filters?.filtered_record_count ?? 0} records after filter`}</BadgeChip>
+                      <BadgeChip>{`${analysis.filters?.filtered_record_count ?? 0} records match filters`}</BadgeChip>
                     </div>
 
                     <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(13rem,0.8fr)_minmax(13rem,0.8fr)]">
@@ -391,7 +391,7 @@ export function AnalysisSection() {
 
                       <div className="rounded-[1.35rem] border border-app-border [background:var(--status-neutral-bg)] p-4">
                         <div className="text-[0.72rem] uppercase tracking-[0.24em] text-app-muted">
-                          Question trust note
+                          Question Trust Note
                         </div>
                         <p className="mt-3 text-sm leading-7 text-app-text">
                           {questionExplorer?.trust?.explanation ??
@@ -441,26 +441,26 @@ export function AnalysisSection() {
                   <GlassPanel className="p-5 sm:p-6">
                     <div className="rounded-[1.55rem] border border-app-border [background:var(--theme-panel-gradient)] p-5">
                       <div className="flex flex-wrap items-center gap-3">
-                        <BadgeChip tone="gold">Evidence Notes</BadgeChip>
+                        <BadgeChip tone="gold">Run Notes</BadgeChip>
                       </div>
 
                       <div className="mt-5 space-y-3">
                         {runWarnings.length > 0 ? (
                           <EvidenceList
-                            title="Run warnings"
+                            title="Run notes"
                             items={runWarnings}
                             tone="gold"
                           />
                         ) : null}
                         {surveyWarnings.length > 0 ? (
                           <EvidenceList
-                            title="Survey parser notes"
+                            title="Survey parsing notes"
                             items={surveyWarnings}
                             tone="neutral"
                           />
                         ) : null}
                         {runWarnings.length === 0 && surveyWarnings.length === 0 ? (
-                          <EmptyState message="No run warnings or parser notes were attached to the latest result." />
+                          <EmptyState message="No run notes or survey parsing notes were attached to the latest result." />
                         ) : null}
                       </div>
                     </div>
@@ -478,7 +478,7 @@ export function AnalysisSection() {
                           <BadgeChip>{`${recordsTotal} records`}</BadgeChip>
                         </div>
                         <p className="mt-3 text-sm leading-6 text-app-muted">
-                          This stays secondary to the question explorer. Use it as raw evidence, then move into Insights for interpretation.
+                          Use this as raw evidence from the latest run result. For interpretation and decisions, continue to Insights.
                         </p>
                       </div>
                       <PagerControls
@@ -559,7 +559,7 @@ export function AnalysisSection() {
                   <BadgeChip tone="gold">Interpretation Frame</BadgeChip>
                 </div>
                 <p className="mt-4 text-sm leading-7 text-app-text">
-                  Use this chapter to move from run output toward interpretation: start with the current question, inspect trust framing, review the raw evidence, and only then carry the signal into Insights.
+                  Use this chapter to move from run output to interpretation: inspect the current question, check trust framing, review evidence, then carry signal into Insights.
                 </p>
               </div>
             </GlassPanel>
@@ -934,7 +934,7 @@ function buildRealismSummary(summary?: Record<string, unknown> | null) {
   if (!summary) {
     return "No realism summary is available.";
   }
-  return `Realism score: ${String(summary.realism_score_0_to_100 ?? summary.realism_score ?? "n/a")}. Weighted TV: ${String(summary.weighted_tv_distance ?? "n/a")}. Weighted JS: ${String(summary.weighted_js_divergence ?? "n/a")}. Questions scored: ${String(summary.questions_scored ?? 0)}.`;
+  return `Realism score: ${String(summary.realism_score_0_to_100 ?? summary.realism_score ?? "n/a")} out of 100 across ${String(summary.questions_scored ?? 0)} questions. Distribution distance metrics: TV ${String(summary.weighted_tv_distance ?? "n/a")}, JS ${String(summary.weighted_js_divergence ?? "n/a")}.`;
 }
 
 function confidenceTone(label?: string | null): "cyan" | "gold" | "neutral" {

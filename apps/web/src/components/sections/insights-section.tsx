@@ -37,7 +37,7 @@ type StatusState = {
 const EMPTY_STATUS: StatusState = {
   tone: "neutral",
   message:
-    "Insights will load from the latest saved run once a simulation result is available.",
+    "Insights load after a run is completed and saved.",
 };
 
 export function InsightsSection() {
@@ -71,7 +71,7 @@ export function InsightsSection() {
             ? {
                 tone: "success",
                 message:
-                  "Executive insights are loaded from the latest saved run. Treat them as exploratory decision support, not final proof.",
+                  "Executive insights are loaded from the latest run. Treat them as directional decision support, not final proof.",
               }
             : {
                 tone: "warning",
@@ -157,15 +157,15 @@ export function InsightsSection() {
             <SectionHeader
               index={9}
               eyebrow="Insights"
-              title="Turn the run into the clearest executive takeaways."
-              description="This chapter is the decision layer above Analysis: the biggest signals first, the segment and positioning story second, and clear trust framing throughout."
+              title="Turn the run into clear executive takeaways."
+              description="This is the decision layer above Analysis: lead with top signals, then review segment and positioning story with explicit trust framing."
             />
           </RevealOnScroll>
 
           <RevealOnScroll delay={0.04}>
             <div className="rounded-[1.45rem] border [border-color:var(--status-warning-border)] [background:var(--status-warning-bg)] px-5 py-4 text-sm leading-6 text-app-gold">
               {insights?.transparency_note ??
-                "Transparency note: findings, confidence labels, and agreement labels are deterministic rule-based summaries."}
+                "Transparency note: findings, confidence labels, and agreement labels are deterministic rule-based summaries for fast interpretation."}
             </div>
           </RevealOnScroll>
 
@@ -182,7 +182,7 @@ export function InsightsSection() {
                 </div>
                 <p className="mt-4 max-w-2xl text-sm leading-7 text-app-muted">
                   {insights?.message ??
-                    "No saved run is available yet. Complete Run Simulation first, then come here for the executive summary and recommendation layer."}
+                    "No saved run is available yet. Complete Run Simulation first, then come here for executive summary and recommendations."}
                 </p>
                 <div className="mt-5">
                   <Button variant="secondary" onClick={() => scrollToSection("run-simulation")}>
@@ -196,7 +196,7 @@ export function InsightsSection() {
               <RevealOnScroll delay={0.08}>
                 <details className="rounded-[1.55rem] border border-app-border [background:var(--status-neutral-bg)] p-5">
                   <summary className="cursor-pointer list-none text-sm font-medium text-app-text">
-                    Context & Workflow
+                    Context & Study Inputs
                   </summary>
                   <div className="mt-4 grid gap-3 sm:grid-cols-2">
                     <ContextSummaryCard
@@ -217,8 +217,8 @@ export function InsightsSection() {
                       label="Workflow"
                       value={
                         study?.derived?.workflow?.ready_for_persona_preview
-                          ? "Setup stack was fully saved before run."
-                          : "The run should still be interpreted as exploratory."
+                          ? "All setup sections were saved before this run."
+                          : "Run completed with partial setup, so interpretation should stay exploratory."
                       }
                     />
                     <ContextSummaryCard label="Audience" value={contextSummary.audience} />
@@ -245,7 +245,7 @@ export function InsightsSection() {
                         value={summary?.top_use_case?.label ?? "N/A"}
                         detail={
                           useCaseShareRows[0]?.valueLabel
-                            ? `${useCaseShareRows[0].valueLabel} share`
+                            ? `${useCaseShareRows[0].valueLabel} share in this run`
                             : "Use-case signal unavailable"
                         }
                       />
@@ -257,7 +257,7 @@ export function InsightsSection() {
                             ? String(summary.average_interest)
                             : "N/A"
                         }
-                        detail="Directional signal from the run"
+                        detail="Directional score from the latest run"
                       />
                       <HeroInsightCard
                         label="Strongest Segment"
@@ -269,7 +269,7 @@ export function InsightsSection() {
                         value={summary?.model_difference?.status ?? "N/A"}
                         detail={
                           summary?.model_difference?.differing_questions
-                            ? `${summary.model_difference.differing_questions} question(s) differ`
+                            ? `${summary.model_difference.differing_questions} question(s) show meaningful spread`
                             : "No strong divergence called out"
                         }
                       />
@@ -291,7 +291,7 @@ export function InsightsSection() {
               <RevealOnScroll delay={0.12} amount={0.05}>
                 <div className="space-y-4">
                   <div className="flex flex-wrap items-center gap-3">
-                    <BadgeChip tone="cyan">Key Takeaways With Visual Proof</BadgeChip>
+                    <BadgeChip tone="cyan">Key Takeaways With Visual Support</BadgeChip>
                     <BadgeChip>{`${displayedTopFindings.length} curated findings`}</BadgeChip>
                     {barrierRankingRows.length > 0 ? (
                       <BadgeChip>{`${barrierRankingRows.length} barrier items`}</BadgeChip>
@@ -311,7 +311,7 @@ export function InsightsSection() {
               <RevealOnScroll delay={0.14} amount={0.08}>
                 <div className="space-y-4">
                   <div className="flex flex-wrap items-center gap-3">
-                    <BadgeChip tone="gold">Segment & Positioning Story</BadgeChip>
+                    <BadgeChip tone="gold">Segment and Positioning Story</BadgeChip>
                   </div>
 
                   <GlassPanel className="p-5 sm:p-6">
@@ -323,7 +323,7 @@ export function InsightsSection() {
                         ) : null}
                       </div>
                       <p className="mt-4 max-w-3xl text-sm leading-7 text-app-muted">
-                        Read the segment landscape at full width: where signals intensify, where they flatten, and which questions separate segments the most.
+                        Read the segment landscape at full width: where signals intensify, where they flatten, and which questions separate segments most.
                       </p>
                       <div className="mt-6">
                         <HeatmapGrid
@@ -363,13 +363,13 @@ export function InsightsSection() {
                           label="Strongest Segment"
                           value={insights.segment_story?.strongest_segment ?? "N/A"}
                           tone="cyan"
-                          detail="The segment with the strongest overall directional signal in this run."
+                          detail="Segment with the strongest overall directional signal in this run."
                         />
                         <SegmentStorySpotlight
                           label="Weakest Segment"
                           value={insights.segment_story?.weakest_segment ?? "N/A"}
                           tone="gold"
-                          detail="The segment showing the weakest purchase-oriented pattern."
+                          detail="Segment with the weakest purchase-oriented pattern in this run."
                         />
                         <SegmentStorySpotlight
                           label="Story Shape"
@@ -440,7 +440,7 @@ export function InsightsSection() {
                         ))}
                       </div>
                       <div className="mt-5 rounded-[1.25rem] border [border-color:var(--status-warning-border)] [background:var(--status-warning-bg)] p-4 text-sm leading-7 text-app-gold">
-                        Treat these outputs as decision support for the next research move, not as validated market truth. Important claims should be checked with real respondents.
+                        Treat these outputs as directional guidance for next research moves, not validated market truth. Check important claims with real respondents.
                       </div>
                     </div>
                   </GlassPanel>
@@ -448,16 +448,16 @@ export function InsightsSection() {
                   <GlassPanel className="p-5 sm:p-6">
                     <div className="rounded-[1.55rem] border border-app-border [background:var(--theme-panel-gradient)] p-5">
                       <div className="flex flex-wrap gap-2">
-                        <BadgeChip tone="gold">Trust Framing</BadgeChip>
+                        <BadgeChip tone="gold">Trust Notes</BadgeChip>
                       </div>
                       <div className="mt-5 space-y-3">
                         <NarrativeNote>
                           {insights.context_notes?.run_warnings?.[0] ??
-                            "Run warnings were not attached to the latest result."}
+                            "No run notes were attached to the latest result."}
                         </NarrativeNote>
                         <NarrativeNote>
                           {insights.context_notes?.survey_parse_warnings?.[0] ??
-                            "Survey parser notes are not currently changing the executive summary, but should still be reviewed."}
+                            "No survey parsing notes were attached to this run."}
                         </NarrativeNote>
                         <NarrativeNote>
                           {summary?.model_difference?.note ??
@@ -474,7 +474,7 @@ export function InsightsSection() {
                   <div className="rounded-[1.55rem] border border-app-border [background:var(--theme-panel-gradient)] p-5">
                     <LadderChart
                       title="Interest Ladder"
-                      subtitle="Movement from feasibility into purchase likelihood."
+                      subtitle="Movement from feasibility toward purchase likelihood."
                       steps={interestSteps}
                       badges={
                         interestSteps.length > 0
@@ -600,7 +600,7 @@ function FindingChart({
     return (
       <GroupedBarChart
         title={finding.title}
-        subtitle="Exact appeal and purchase values remain visible."
+        subtitle="Read exact appeal and purchase values alongside the pattern."
         rows={chartModel.rows}
         headerless
         emptyMessage="No message-performance comparison is available yet."
@@ -623,7 +623,7 @@ function FindingChart({
   return (
     <HorizontalBarChart
       title={finding.title}
-      subtitle="Read the ranking and the exact values together."
+      subtitle="Read ranking and exact values together."
       rows={chartModel.rows}
       headerless
       emptyMessage="No visual proof is available for this takeaway yet."

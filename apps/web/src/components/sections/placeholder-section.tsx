@@ -61,7 +61,7 @@ export function PlaceholderSection({
                 </div>
                 <div className="rounded-2xl border border-app-border [background:var(--status-neutral-bg)] p-4">
                   <div className="text-[0.68rem] uppercase tracking-[0.22em] text-app-muted">
-                    Backend fit
+                    Data fit
                   </div>
                   <div className="mt-2 text-base font-semibold text-app-text">
                     Thin-slice API available

@@ -23,33 +23,33 @@ const studyModeCards: Array<{
   bullets: string[];
   accent: "cyan" | "gold";
 }> = [
-  {
-    value: "neo_smart",
-    eyebrow: "Guided Demo",
-    title: "Neo Smart Living Demo",
-    description:
-      "Use the Neo Smart framing, sharper defaults, and more curated context for the premium guided demo experience.",
-    bullets: [
-      "Pre-framed around the Neo Smart Living story",
-      "Best for a polished walkthrough",
-      "Trust framing stays close to the demo narrative",
-    ],
-    accent: "gold",
-  },
-  {
-    value: "general",
-    eyebrow: "Flexible Mode",
-    title: "General Custom Study",
-    description:
-      "Start from a cleaner open canvas for custom research projects, broader use cases, and reusable workflow setup.",
-    bullets: [
-      "Neutral setup path for general research",
-      "Best for reusable studies beyond the demo brand",
-      "Keeps the same grounded trust-first engine",
-    ],
-    accent: "cyan",
-  },
-];
+    {
+      value: "neo_smart",
+      eyebrow: "Guided Demo",
+      title: "Neo Smart Living Demo",
+      description:
+        "Use a guided setup with Neo Smart defaults and prefilled context for a polished demo.",
+      bullets: [
+        "Best for a fast guided walkthrough",
+        "Starts with Neo Smart context and survey defaults",
+        "Great for demo-ready storytelling",
+      ],
+      accent: "gold",
+    },
+    {
+      value: "general",
+      eyebrow: "Custom Study",
+      title: "General Custom Study",
+      description:
+        "Start from a blank setup so you can tailor each step to your own project.",
+      bullets: [
+        "Best for non-Neo use cases",
+        "No prefilled demo assumptions",
+        "Same simulation engine with full flexibility",
+      ],
+      accent: "cyan",
+    },
+  ];
 
 export function StudyModeSection() {
   const {
@@ -133,11 +133,9 @@ export function StudyModeSection() {
       if (shouldAutoLoadNeoSurvey) {
         try {
           await loadNeoSurveyPreset(resolvedStudyId);
-        } catch (error) {
+        } catch {
           neoSurveyPresetWarning =
-            error instanceof Error
-              ? error.message
-              : "The Neo survey preset could not be loaded automatically.";
+            "Please load it manually in the Survey step.";
         }
       }
 
@@ -154,16 +152,16 @@ export function StudyModeSection() {
         isSwitchingModes ? [] : preservedSavedSections
       );
       const workspaceMessage = isSwitchingModes
-        ? " A fresh study workspace was created for the new mode so the downstream setup starts clean."
+        ? " Started a new study for this mode so you can continue with a clean setup."
         : "";
       const neoSurveyMessage =
         nextMode === "neo_smart"
           ? shouldAutoLoadNeoSurvey
             ? neoSurveyPresetWarning
-              ? ` Neo mode is saved, but the bundled survey preset still needs manual attention: ${neoSurveyPresetWarning}`
-              : " The bundled Neo survey preset was loaded automatically."
-            : " Neo defaults remain available across the guided setup path."
-          : " Downstream setup sections now start empty until you fill and save them.";
+              ? ` Demo mode is saved, but the demo survey did not auto-load. ${neoSurveyPresetWarning}`
+              : " Demo survey loaded automatically."
+            : " Demo defaults are ready across the guided setup steps."
+          : " Next steps are ready for your custom inputs.";
       setStatusMessage(`${baseMessage}${workspaceMessage}${neoSurveyMessage}`);
     } catch (error) {
       setErrorMessage(
@@ -189,17 +187,17 @@ export function StudyModeSection() {
           <SectionHeader
             index={1}
             eyebrow="Study Setup"
-            title="Choose the mode that shapes the rest of the workflow."
-            description="This is the next chapter after the hero: decide whether this study should follow the curated Neo Smart demo path or a more flexible general research path, then carry that decision through the one-page setup flow."
+            title="Choose how you want to start this study."
+            description="Pick the path that fits your demo. Guided Demo loads Neo Smart defaults. Custom Study starts blank so you can build your own setup."
           />
 
           <div className="mt-6 space-y-4">
             <div className="flex flex-wrap gap-3">
-              <BadgeChip tone="gold">Step 01 of 06</BadgeChip>
-              <BadgeChip tone="cyan">Backend save enabled</BadgeChip>
+              <BadgeChip tone="gold">Step 1 of 6</BadgeChip>
+              <BadgeChip tone="cyan">Saves to study</BadgeChip>
             </div>
 
-            
+
 
             <div className="min-h-10 text-sm">
               {errorMessage ? (
@@ -208,7 +206,7 @@ export function StudyModeSection() {
                 <span className="text-app-cyan">{statusMessage}</span>
               ) : (
                 <span className="text-app-muted">
-                  Pick a mode to decide whether the next sections should start guided or blank.
+                  Pick a mode to start with either a guided demo setup or a blank custom setup.
                 </span>
               )}
             </div>
@@ -218,7 +216,7 @@ export function StudyModeSection() {
               onClick={() => scrollToSection("audience")}
               disabled={!selectedMode}
             >
-              Continue to Audience
+              Continue to Audience Setup
               <ArrowRightIcon />
             </Button>
           </div>
@@ -303,10 +301,10 @@ export function StudyModeSection() {
                       <div className="mt-auto flex items-center justify-between gap-4 pt-5">
                         <div className="text-[0.72rem] uppercase tracking-[0.24em] text-app-muted">
                           {isBusy
-                            ? "Saving selection..."
+                            ? "Saving mode..."
                             : isSelected
-                              ? "Saved in backend"
-                              : "Select mode"}
+                              ? "Saved"
+                              : "Choose mode"}
                         </div>
                         <div
                           className={cn(
@@ -319,7 +317,7 @@ export function StudyModeSection() {
                           <span
                             className={cn(
                               "inline-block h-2 w-2 rounded-full",
-                              isSelected ? "bg-app-cyan" : "bg-white/20"
+                              isSelected ? "bg-app-cyan" : "[background:var(--status-neutral-border)]"
                             )}
                           />
                           {isSelected ? "Active" : "Available"}

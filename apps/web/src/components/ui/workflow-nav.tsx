@@ -84,9 +84,9 @@ export function WorkflowNav() {
             type="button"
             disabled
             className="hidden rounded-full border px-4 py-1.5 text-[0.62rem] uppercase tracking-[0.22em] [border-color:var(--nav-premium-chip-border)] [background:var(--nav-premium-chip-bg)] [color:var(--chip-gold-text)] [box-shadow:var(--nav-premium-chip-shadow)] xl:flex"
-            title="Interview extension is not implemented yet."
+            title="Interview mode is planned for a future update."
           >
-            Interview
+            Interview Soon
           </button>
         </div>
       </div>

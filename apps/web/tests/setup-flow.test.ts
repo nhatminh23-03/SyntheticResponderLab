@@ -31,10 +31,10 @@ test("resolveSetupSeedSource returns neo defaults only when section is unsaved i
 test("buildStudyModeStatusMessage explains preserved downstream sections", () => {
   assert.equal(
     buildStudyModeStatusMessage("general", ["Audience", "Product"]),
-    "General Custom Study saved. Existing saved setup sections were preserved: Audience, Product."
+    "General Custom Study saved. Kept your saved inputs in: Audience, Product."
   );
   assert.equal(
     buildStudyModeStatusMessage("neo_smart", []),
-    "Neo Smart Living Demo saved. Continue into Audience setup."
+    "Neo Smart Living Demo saved. Next step: Audience setup."
   );
 });

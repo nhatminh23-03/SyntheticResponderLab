@@ -54,10 +54,9 @@ export function MainHeroSection() {
             </h1>
 
             <p className="mt-5 max-w-xl text-base leading-7 text-app-muted md:text-[1.05rem]">
-              Build grounded synthetic personas, run AI-powered survey
-              simulations, and verify realism with trust signals designed for
-              research teams that need confidence, traceability, and calm
-              precision.
+              Simulate survey responses with realistic AI personas before you
+              run live research. Define your audience, product, market, and
+              survey, then explore likely insights with confidence.
             </p>
           </div>
 
@@ -66,14 +65,14 @@ export function MainHeroSection() {
               onClick={handleStartStudy}
               disabled={isCreatingStudy || isHydratingStudy}
             >
-              {isCreatingStudy || isHydratingStudy ? "Preparing Study..." : "Start Study"}
+              {isCreatingStudy || isHydratingStudy ? "Preparing Setup..." : "Start Setup"}
               <ArrowRightIcon />
             </Button>
             <Button
               variant="secondary"
               onClick={() => scrollToSection("study-mode")}
             >
-              View Workflow
+              See Workflow
               <ArrowRightIcon />
             </Button>
           </div>
@@ -85,7 +84,7 @@ export function MainHeroSection() {
               disabled={isCreatingStudy || isHydratingStudy}
               className="text-sm text-app-muted transition hover:text-app-cyan disabled:cursor-not-allowed disabled:opacity-60"
             >
-              Start Fresh Study
+              Start New Study
             </button>
           </div>
 
@@ -96,9 +95,9 @@ export function MainHeroSection() {
           ) : null}
 
           <div className="mt-6 grid max-w-2xl gap-3 sm:grid-cols-3">
-            <MetricPill value="Grounded" label="persona basis" accent="gold" />
-            <MetricPill value="Thin Slice" label="api connected" />
-            <MetricPill value="Trust-first" label="workflow framing" />
+            <MetricPill value="Realistic" label="grounded personas" accent="gold" />
+            <MetricPill value="Connected" label="live data" />
+            <MetricPill value="Guided" label="step-by-step flow" />
           </div>
         </RevealOnScroll>
 
@@ -157,19 +156,19 @@ function HeroSignalPanel() {
               background: "var(--hero-core-gradient)",
               boxShadow: "var(--hero-core-shadow)",
             }}
-              animate={{ scale: [1, 1.03, 1] }}
-              transition={{ duration: 4.5, repeat: Number.POSITIVE_INFINITY, ease: "easeInOut" }}
-            >
-              <div className="flex h-full items-center justify-center">
-                <div
-                  className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-app-cyan/25"
-                  style={{ background: "var(--hero-signal-node-bg)" }}
-                >
-                  <div className="absolute h-5 w-5 rounded-full bg-app-cyan/65 blur-sm" />
-                  <div className="relative h-4 w-4 rounded-full bg-app-cyan" />
-                </div>
+            animate={{ scale: [1, 1.03, 1] }}
+            transition={{ duration: 4.5, repeat: Number.POSITIVE_INFINITY, ease: "easeInOut" }}
+          >
+            <div className="flex h-full items-center justify-center">
+              <div
+                className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-app-cyan/25"
+                style={{ background: "var(--hero-signal-node-bg)" }}
+              >
+                <div className="absolute h-5 w-5 rounded-full bg-app-cyan/65 blur-sm" />
+                <div className="relative h-4 w-4 rounded-full bg-app-cyan" />
               </div>
-            </motion.div>
+            </div>
+          </motion.div>
           <div
             className="absolute left-[16%] top-[17%] h-2.5 w-2.5 rounded-full bg-app-gold"
             style={{ boxShadow: "var(--hero-dot-gold-shadow)" }}
@@ -194,10 +193,10 @@ function HeroSignalPanel() {
             }}
           >
             <div className="text-[0.64rem] uppercase tracking-[0.24em] text-app-muted/90">
-              Persona basis
+              What We Model
             </div>
             <div className="mt-2 text-[0.98rem] font-semibold leading-7 text-app-text">
-              Demographics, affordability, geography, product, and market context.
+              Audience, budget, location, product details, and market context.
             </div>
           </div>
           <div
@@ -209,10 +208,10 @@ function HeroSignalPanel() {
             }}
           >
             <div className="text-[0.64rem] uppercase tracking-[0.24em] text-app-muted/90">
-              Trust posture
+              Quality Checks
             </div>
             <div className="mt-2 text-[0.98rem] font-semibold leading-7 text-app-text">
-              Realism framing, validation, stability, and transparency checks.
+              Consistency, realism, and transparency checks before insights.
             </div>
           </div>
         </div>

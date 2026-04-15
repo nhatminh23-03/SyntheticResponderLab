@@ -71,11 +71,11 @@ const EMPTY_PRODUCT_DRAFT: ProductDraft = {
 
 const NEO_PRODUCT_DEFAULTS: ProductDraft = {
   business_name: "Neo Smart Living",
-  industry: "Factory-built modular backyard structures",
+  industry: "Backyard modular studios",
   product_name: "Tahoe Mini",
-  product_type: "Permit-light modular backyard studio",
+  product_type: "Fast-install modular backyard studio",
   product_description:
-    "Tahoe Mini is a compact ~117 sq ft factory-built backyard unit delivered as flat-pack panels and typically installed in about one day. It is positioned as a non-habitable accessory structure, with no plumbing and no kitchen.",
+    "Tahoe Mini is a compact ~117 sq ft backyard unit delivered as flat-pack panels and usually installed in about a day. It is positioned as a non-habitable accessory structure, with no plumbing and no kitchen.",
   target_customer: "Homeowners with usable backyard/property space",
   price_range: "$23,000 delivered and installed",
   primary_goal: "Validate demand, barriers, and strongest positioning for Tahoe Mini.",
@@ -114,7 +114,7 @@ const NEO_PRODUCT_DEFAULTS: ProductDraft = {
   product_image_labels: ["Prefabricated building", "Modular structure", "Glass door"],
   product_image_objects: [],
   product_image_colors: [],
-  notes: "Preset from Neo Smart Living challenge docs for demo mode.",
+  notes: "Demo preset based on Neo Smart Living materials.",
 };
 
 export function ProductSection() {
@@ -132,7 +132,7 @@ export function ProductSection() {
   const [studyMode, setStudyMode] = useState<string | null>(null);
   const [status, setStatus] = useState<ProductStatusState>({
     tone: "neutral",
-    message: "Product context is local until you save it.",
+    message: "No product details saved yet. Save when you're ready.",
   });
   const [isSaving, setIsSaving] = useState(false);
   const [urlInput, setUrlInput] = useState("");
@@ -166,7 +166,7 @@ export function ProductSection() {
           setVisualSummary(null);
           setStatus({
             tone: "neutral",
-            message: "Product context is local until you save it.",
+            message: "No product details saved yet. Save when you're ready.",
           });
         }
         return;
@@ -204,10 +204,10 @@ export function ProductSection() {
           tone: seedSource === "saved" ? "success" : "neutral",
           message:
             seedSource === "saved"
-              ? "Saved product context loaded from the current study."
+              ? "Loaded your saved product details."
               : seedSource === "neo_default"
-                ? "Neo defaults loaded locally. Review them and save to persist canonical product state."
-                : "Product context is local until you save it.",
+                ? "Neo demo defaults loaded. Review and save if you want to keep them."
+                : "No product details saved yet. Save when you're ready.",
         });
       }
     }
@@ -284,7 +284,7 @@ export function ProductSection() {
     setIsSaving(true);
     setStatus({
       tone: "neutral",
-      message: "Saving business and product context...",
+      message: "Saving product details...",
     });
 
     try {
@@ -299,7 +299,7 @@ export function ProductSection() {
       setSavedSnapshot(JSON.stringify(draftPayload));
       setStatus({
         tone: "success",
-        message: "Business & Product Context saved successfully.",
+        message: "Product details saved.",
       });
       scrollToSection("market");
     } catch (error) {
@@ -308,7 +308,7 @@ export function ProductSection() {
         message:
           error instanceof Error
             ? error.message
-            : "Unable to save the product context right now.",
+            : "Unable to save product details right now.",
       });
     } finally {
       setIsSaving(false);
@@ -320,7 +320,7 @@ export function ProductSection() {
     setStatus({
       tone: "warning",
       message:
-        "The form has been reset locally. The backend does not yet support clearing saved product context because a saved product requires at least a name or description.",
+        "Product details were reset locally. Save new details if you want to replace what is currently saved.",
     });
   }
 
@@ -328,7 +328,7 @@ export function ProductSection() {
     setDraft(NEO_PRODUCT_DEFAULTS);
     setStatus({
       tone: "neutral",
-      message: "Neo defaults loaded locally. Review and save to persist them.",
+      message: "Neo demo defaults loaded. Review and save if you want to keep them.",
     });
   }
 
@@ -336,7 +336,7 @@ export function ProductSection() {
     if (!urlInput.trim()) {
       setStatus({
         tone: "error",
-        message: "Enter a product page URL before running autofill.",
+        message: "Add a product page URL first.",
       });
       return;
     }
@@ -344,7 +344,7 @@ export function ProductSection() {
     setIsRunningUrlAutofill(true);
     setStatus({
       tone: "neutral",
-      message: "Running product URL autofill...",
+      message: "Generating draft details from URL...",
     });
 
     try {
@@ -359,8 +359,7 @@ export function ProductSection() {
       setUrlAutofillPreview(result.enrichment?.proposed_product_patch ?? null);
       setStatus({
         tone: "success",
-        message:
-          "Autofill preview generated. Review it carefully before applying it to your draft.",
+        message: "Autofill draft is ready. Review it and apply what you want.",
       });
     } catch (error) {
       setStatus({
@@ -368,7 +367,7 @@ export function ProductSection() {
         message:
           error instanceof Error
             ? error.message
-            : "Unable to run product URL autofill right now.",
+            : "Unable to generate details from URL right now.",
       });
     } finally {
       setIsRunningUrlAutofill(false);
@@ -383,8 +382,7 @@ export function ProductSection() {
     setDraft((current) => mergeProductPatchIntoDraft(current, urlAutofillPreview));
     setStatus({
       tone: "success",
-      message:
-        "URL autofill preview applied to the draft. Save when you are ready to persist it.",
+      message: "Autofill details added to your draft. Save when you're ready.",
     });
   }
 
@@ -392,7 +390,7 @@ export function ProductSection() {
     if (!uploadedImageFile) {
       setStatus({
         tone: "error",
-        message: "Upload a product image before starting analysis.",
+        message: "Upload a product image first.",
       });
       return;
     }
@@ -415,8 +413,7 @@ export function ProductSection() {
       setLatestImageAnalysis(result.enrichment);
       setStatus({
         tone: "success",
-        message:
-          "Image analysis complete. Review the extracted signals before applying them to context.",
+        message: "Image analysis is ready. Review the details before applying them.",
       });
     } catch (error) {
       setStatus({
@@ -435,7 +432,7 @@ export function ProductSection() {
     if (!imageSignals) {
       setStatus({
         tone: "error",
-        message: "Analyze an image before generating a visual summary.",
+        message: "Run image analysis before generating a visual summary.",
       });
       return;
     }
@@ -443,8 +440,7 @@ export function ProductSection() {
     setVisualSummary(generateVisualSummaryFromSignals(imageSignals));
     setStatus({
       tone: "neutral",
-      message:
-        "Visual summary generated from the extracted signals. Review it as a guide, not as source truth.",
+      message: "Visual summary generated. Use it as a draft and refine as needed.",
     });
   }
 
@@ -456,8 +452,7 @@ export function ProductSection() {
     setDraft((current) => mergeProductPatchIntoDraft(current, imagePatch));
     setStatus({
       tone: "success",
-      message:
-        "Visual details applied to the draft. Save the product context to persist them.",
+      message: "Visual details added to your draft. Save to keep them.",
     });
   }
 
@@ -473,19 +468,19 @@ export function ProductSection() {
             <SectionHeader
               index={3}
               eyebrow="Business & Product Context"
-              title="Define what respondents are reacting to."
-              description="This chapter frames the object of reaction: the business, the product, the customer promise, and the visual cues that make the product feel concrete instead of abstract."
+              title="What are people reacting to?"
+              description="Describe your product, who it is for, and why it matters. This gives respondents the context they need to give useful feedback."
             />
           </RevealOnScroll>
 
           <RevealOnScroll delay={0.04}>
             <div className="flex flex-wrap gap-3">
               <Button variant="secondary" onClick={handleClearSavedContext}>
-                Clear Saved Business & Product Context
+                Reset Product Details
               </Button>
               {studyMode === "neo_smart" ? (
                 <Button variant="secondary" onClick={handleResetToNeoDefaults}>
-                  Reset to Neo Defaults
+                  Load Neo Demo Defaults
                 </Button>
               ) : null}
             </div>
@@ -495,15 +490,12 @@ export function ProductSection() {
             <GlassPanel className="p-4 sm:p-5">
               <div className="rounded-[1.45rem] border border-app-border [background:var(--theme-panel-gradient)] p-5">
                 <div className="flex flex-wrap items-center gap-3">
-                  <BadgeChip tone="cyan">URL Autofill</BadgeChip>
-                  <BadgeChip>
-                    Review before applying
-                  </BadgeChip>
+                    <BadgeChip tone="cyan">Website Autofill</BadgeChip>
+                    <BadgeChip>Review before applying</BadgeChip>
                 </div>
                 <p className="mt-4 max-w-2xl text-sm leading-6 text-app-muted">
-                  Paste a product page URL to generate a proposed product context.
-                  The result is AI-assisted from scraped page content and should
-                  always be reviewed before saving.
+                    Paste a product page URL to draft product details automatically.
+                    Review everything before applying it to your draft.
                 </p>
 
                 <div className="mt-5 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
@@ -513,7 +505,7 @@ export function ProductSection() {
                     placeholder="https://example.com/product"
                   />
                   <Button onClick={handleRunUrlAutofill} disabled={isRunningUrlAutofill}>
-                    {isRunningUrlAutofill ? "Generating..." : "Auto-fill from URL"}
+                    {isRunningUrlAutofill ? "Generating..." : "Autofill from URL"}
                   </Button>
                 </div>
 
@@ -538,7 +530,7 @@ export function ProductSection() {
                         value={
                           urlAutofillPreview.business_name ||
                           urlAutofillPreview.industry ||
-                          "No business metadata returned"
+                          "No business details found"
                         }
                       />
                       <PreviewField
@@ -546,14 +538,14 @@ export function ProductSection() {
                         value={
                           urlAutofillPreview.product_name ||
                           urlAutofillPreview.product_type ||
-                          "No product identity returned"
+                          "No product name or type found"
                         }
                       />
                       <PreviewField
                         label="Customer"
                         value={
                           urlAutofillPreview.target_customer ||
-                          "No target customer returned"
+                          "No target audience found"
                         }
                       />
                       <PreviewField
@@ -561,7 +553,7 @@ export function ProductSection() {
                         value={
                           [urlAutofillPreview.price_range, urlAutofillPreview.primary_goal]
                             .filter(Boolean)
-                            .join(" • ") || "No positioning fields returned"
+                            .join(" • ") || "No pricing or goal details found"
                         }
                       />
                     </div>
@@ -574,7 +566,7 @@ export function ProductSection() {
           <div className="grid gap-5">
               <ProductGroupCard
                 title="Business"
-                description="Context that grounds the business behind the product."
+                description="Basic company context behind this product."
               >
                 <div className="grid gap-4 sm:grid-cols-2">
                   <Field label="Business Name">
@@ -588,7 +580,7 @@ export function ProductSection() {
                     <TextInput
                       value={draft.industry}
                       onChange={(value) => updateDraft("industry", value)}
-                      placeholder="Factory-built modular backyard structures"
+                      placeholder="Backyard modular studios"
                     />
                   </Field>
                 </div>
@@ -596,7 +588,7 @@ export function ProductSection() {
 
               <ProductGroupCard
                 title="Product"
-                description="The core object respondents will evaluate."
+                description="The main product respondents will evaluate."
               >
                 <div className="grid gap-4 sm:grid-cols-2">
                   <Field label="Product Name">
@@ -610,7 +602,7 @@ export function ProductSection() {
                     <TextInput
                       value={draft.product_type}
                       onChange={(value) => updateDraft("product_type", value)}
-                      placeholder="Permit-light modular backyard studio"
+                      placeholder="Fast-install modular backyard studio"
                     />
                   </Field>
                 </div>
@@ -618,7 +610,7 @@ export function ProductSection() {
                   <TextAreaInput
                     value={draft.product_description}
                     onChange={(value) => updateDraft("product_description", value)}
-                    placeholder="Describe what the product is, what it includes, and what makes it distinctive."
+                    placeholder="Describe what it is, what is included, and why people choose it."
                     rows={6}
                   />
                 </Field>
@@ -626,7 +618,7 @@ export function ProductSection() {
 
               <ProductGroupCard
                 title="Customer & Positioning"
-                description="Who the product is for and how it is positioned."
+                description="Who this is for and how you position it."
               >
                 <div className="grid gap-4">
                   <Field label="Target Customer">
@@ -648,7 +640,7 @@ export function ProductSection() {
                       <TextInput
                         value={draft.primary_goal}
                         onChange={(value) => updateDraft("primary_goal", value)}
-                        placeholder="Validate demand, barriers, and strongest positioning"
+                        placeholder="Understand demand, concerns, and strongest positioning"
                       />
                     </Field>
                   </div>
@@ -657,7 +649,7 @@ export function ProductSection() {
 
               <ProductGroupCard
                 title="Key Lists"
-                description="Capture the recurring ideas respondents are likely to react to."
+                description="Capture the points respondents are most likely to react to."
               >
                 <div className="grid gap-5">
                   <Field label="Key Features">
@@ -667,29 +659,29 @@ export function ProductSection() {
                       placeholder="Add a feature"
                     />
                   </Field>
-                  <Field label="Main Use Cases">
+                  <Field label="Top Use Cases">
                     <TokenInput
                       value={draft.main_use_cases}
                       onChange={(value) => updateDraft("main_use_cases", value)}
                       placeholder="Add a use case"
                     />
                   </Field>
-                  <Field label="Main Pain Points Solved">
+                  <Field label="Problems Solved">
                     <TokenInput
                       value={draft.main_pain_points_solved}
                       onChange={(value) =>
                         updateDraft("main_pain_points_solved", value)
                       }
-                      placeholder="Add a pain point solved"
+                      placeholder="Add a problem you solve"
                     />
                   </Field>
-                  <Field label="Main Barriers or Concerns">
+                  <Field label="Likely Concerns">
                     <TokenInput
                       value={draft.main_barriers_or_concerns}
                       onChange={(value) =>
                         updateDraft("main_barriers_or_concerns", value)
                       }
-                      placeholder="Add a barrier or concern"
+                      placeholder="Add a likely concern"
                     />
                   </Field>
                 </div>
@@ -700,20 +692,20 @@ export function ProductSection() {
                   <div className="flex flex-wrap items-center gap-3">
                     <BadgeChip tone="gold">Visual Details</BadgeChip>
                     <BadgeChip>Optional</BadgeChip>
-                    <BadgeChip tone="cyan">Uses Google Vision</BadgeChip>
+                    <BadgeChip tone="cyan">AI image analysis</BadgeChip>
                     {imageAppliedToSaved ? (
                       <BadgeChip tone="cyan">Applied to Context</BadgeChip>
                     ) : imageAppliedToDraft ? (
                       <BadgeChip tone="cyan">Applied to Draft</BadgeChip>
                     ) : latestImageAnalysis ? (
-                      <BadgeChip>Not yet applied</BadgeChip>
+                      <BadgeChip>Ready to apply</BadgeChip>
                     ) : null}
                   </div>
 
                   <p className="mt-4 max-w-2xl text-sm leading-6 text-app-muted">
-                    Optional image enrichment. Upload a product image to extract
-                    labels, objects, colors, and detected text using Google
-                    Vision. Review the output before applying it to your draft.
+                    Optional. Upload a product image to extract labels, objects,
+                    colors, and text. Review everything before applying it to
+                    your draft.
                   </p>
 
                   {(draft.product_image_labels.length > 0 ||
@@ -770,9 +762,8 @@ export function ProductSection() {
                             />
                           ) : (
                             <div className="flex h-full min-h-56 items-center justify-center px-6 text-center text-sm text-app-muted">
-                              Previously analyzed image data is available, but the
-                              backend does not yet expose asset retrieval for image
-                              preview reloads.
+                              Previous analysis is available below. Upload the
+                              image again if you want to preview it here.
                             </div>
                           )}
                         </div>
@@ -825,7 +816,7 @@ export function ProductSection() {
                             </div>
                           ) : (
                             <div className="rounded-2xl border border-app-border [background:var(--status-neutral-bg)] p-4 text-sm text-app-muted">
-                              Analyze the uploaded image to extract raw visual signals.
+                              Run image analysis to extract visual details.
                             </div>
                           )}
                         </div>
@@ -837,14 +828,14 @@ export function ProductSection() {
                           onClick={handleGenerateVisualSummary}
                           disabled={!imageSignals}
                         >
-                          Generate Visual Summary
+                          Draft Visual Summary
                         </Button>
                         <Button
                           variant="secondary"
                           onClick={handleApplyVisualDetailsToDraft}
                           disabled={!imagePatch}
                         >
-                          Apply Visual Details to Context
+                          Apply Visual Details to Draft
                         </Button>
                       </div>
 
@@ -865,13 +856,13 @@ export function ProductSection() {
 
               <ProductGroupCard
                 title="Notes"
-                description="Optional guidance, caveats, or framing for the study."
+                description="Optional notes, caveats, or special context for this study."
               >
                 <Field label="Notes">
                   <TextAreaInput
                     value={draft.notes}
                     onChange={(value) => updateDraft("notes", value)}
-                    placeholder="Add any product framing notes, exclusions, or researcher context."
+                    placeholder="Optional notes about assumptions, exclusions, or edge cases."
                     rows={5}
                   />
                 </Field>
@@ -899,10 +890,10 @@ export function ProductSection() {
                     onClick={handleSaveProduct}
                     disabled={isSaving || isCreatingStudy || isHydratingStudy}
                   >
-                    {isSaving ? "Saving Product..." : "Save Business & Product Context"}
+                    {isSaving ? "Saving Product..." : "Save Product Details"}
                   </Button>
                   <BadgeChip tone={isDirty ? "gold" : "cyan"}>
-                    {isDirty ? "Unsaved changes" : "Saved state"}
+                    {isDirty ? "Unsaved edits" : "All changes saved"}
                   </BadgeChip>
                 </div>
               </div>

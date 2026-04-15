@@ -66,7 +66,7 @@ export function SurveySection() {
   const [uploadPhase, setUploadPhase] = useState<UploadPhase>("idle");
   const [status, setStatus] = useState<SurveyStatusState>({
     tone: "neutral",
-    message: "Choose a survey instrument, then upload it to validate the schema the simulation will use.",
+    message: "Upload a survey file to prepare it for simulation.",
   });
   const [isUploading, setIsUploading] = useState(false);
   const [isLoadingNeoPreset, setIsLoadingNeoPreset] = useState(false);
@@ -85,8 +85,7 @@ export function SurveySection() {
           setSavedSurvey(null);
           setStatus({
             tone: "neutral",
-            message:
-              "Choose a survey instrument, then upload it to validate the schema the simulation will use.",
+            message: "Upload a survey file to prepare it for simulation.",
           });
         }
         return;
@@ -119,8 +118,8 @@ export function SurveySection() {
             survey?.status === "saved"
               ? buildSavedSurveyMessage(survey.parse_warnings ?? [])
               : study.study_mode.value === "neo_smart"
-                ? "Neo Smart mode is active. Load the bundled Tahoe Mini survey or upload a different instrument."
-                : "No survey is saved yet. Upload the exact instrument you want synthetic respondents to answer.",
+                ? "Neo demo mode is active. Load the Tahoe Mini survey or upload your own file."
+                : "No survey saved yet. Upload the survey you want respondents to answer.",
         });
       }
     }
@@ -163,8 +162,7 @@ export function SurveySection() {
     setUploadPhase("selected");
     setStatus({
       tone: "neutral",
-      message:
-        "File selected locally. Upload it when you are ready to validate and save the normalized survey schema.",
+      message: "File selected. Upload when you're ready.",
     });
   }
 
@@ -187,7 +185,7 @@ export function SurveySection() {
     setUploadPhase("uploading");
     setStatus({
       tone: "neutral",
-      message: "Uploading and validating the survey instrument...",
+      message: "Uploading and preparing your survey...",
     });
 
     try {
@@ -229,7 +227,7 @@ export function SurveySection() {
         message:
           error instanceof Error
             ? error.message
-            : "Unable to upload and parse the survey right now.",
+            : "Unable to upload and prepare the survey right now.",
       });
     } finally {
       setIsUploading(false);
@@ -241,8 +239,7 @@ export function SurveySection() {
     setUploadPhase("idle");
     setStatus({
       tone: "warning",
-      message:
-        "The backend does not expose a clear-survey endpoint yet. Local file selection was cleared, but any saved survey remains in backend study state.",
+      message: "Local file selection cleared. Saved survey data is unchanged.",
     });
   }
 
@@ -250,7 +247,7 @@ export function SurveySection() {
     setIsLoadingNeoPreset(true);
     setStatus({
       tone: "neutral",
-      message: "Loading the bundled Neo survey preset from the backend...",
+      message: "Loading Neo demo survey...",
     });
 
     try {
@@ -283,8 +280,8 @@ export function SurveySection() {
         tone: classifyWarningTone(warnings),
         message:
           warnings.length > 0
-            ? "Neo survey preset loaded with parser notes. Review the normalized schema below."
-            : "Neo survey preset loaded and saved successfully.",
+            ? "Neo survey loaded with notes. Review the survey preview below."
+            : "Neo survey loaded and saved.",
       });
       setSelectedFile(null);
       setShowAllQuestions(false);
@@ -295,7 +292,7 @@ export function SurveySection() {
         message:
           error instanceof Error
             ? error.message
-            : "Unable to load the Neo survey preset right now.",
+            : "Unable to load the Neo demo survey right now.",
       });
     } finally {
       setIsLoadingNeoPreset(false);
@@ -309,8 +306,8 @@ export function SurveySection() {
           <SectionHeader
             index={5}
             eyebrow="Survey Upload"
-            title="Validate the exact survey instrument the system will use downstream."
-            description="Upload the source survey, let the parser translate it into the normalized internal schema, and review what the simulation will actually ask synthetic respondents."
+            title="Upload the survey respondents should answer."
+            description="Upload your survey file, review how it was interpreted, and confirm the final question set before simulation."
           />
         </RevealOnScroll>
 
@@ -349,7 +346,7 @@ export function SurveySection() {
                     Upload &amp; Validate
                   </div>
                   <p className="mt-2 max-w-2xl text-sm leading-6 text-app-muted">
-                    Give the system the exact file you want parsed. The upload endpoint stores the source asset and saves the normalized schema in one backend step.
+                    Upload the survey file you want to test. We save the source file and a structured survey preview together.
                   </p>
                 </div>
                 <BadgeChip tone={uploadPhaseToBadgeTone(uploadPhase)}>
@@ -382,7 +379,7 @@ export function SurveySection() {
                   Drag and drop a survey file
                 </div>
                 <p className="mt-3 max-w-md text-sm leading-6 text-app-muted">
-                  Markdown, DOCX, and PDF are accepted. Markdown is best for reliable parsing; PDF is supported but may produce review-worthy warnings.
+                  Markdown, DOCX, and PDF are supported. Markdown usually parses most cleanly. PDF may need extra review.
                 </p>
                 <div className="mt-4 flex flex-wrap justify-center gap-2">
                   {ACCEPTED_SURVEY_EXTENSIONS.map((extension) => (
@@ -419,7 +416,7 @@ export function SurveySection() {
                     <div className="mt-2 text-sm text-app-text">
                       {selectedFile
                         ? selectedFile.name
-                        : "No local file selected yet."}
+                        : "No file selected."}
                     </div>
                   </div>
                   {selectedFile ? (
@@ -439,7 +436,7 @@ export function SurveySection() {
                       isHydratingStudy
                     }
                   >
-                    {isUploading ? "Uploading & Parsing..." : "Upload & Parse Survey"}
+                    {isUploading ? "Uploading..." : "Upload Survey"}
                   </Button>
                   <Button
                     variant="secondary"
@@ -465,7 +462,7 @@ export function SurveySection() {
                     </div>
                     <p className="mt-2 text-sm leading-6 text-app-muted">
                       {isParserReviewOpen
-                        ? "Upload status and parser interpretation are visible below."
+                          ? "Upload status and parser notes are shown below."
                         : "Hidden by default to keep the survey preview focused."}
                     </p>
                   </div>
@@ -512,9 +509,9 @@ export function SurveySection() {
 
               <div className="mt-5 border-t border-app-border pt-5">
                 <div className="flex flex-wrap gap-2">
-                  <BadgeChip tone="cyan">Normalized Survey Schema</BadgeChip>
+                  <BadgeChip tone="cyan">Survey Structure Preview</BadgeChip>
                   <BadgeChip tone={savedSurvey ? "cyan" : "gold"}>
-                    {savedSurvey ? "Saved to backend" : "No saved survey"}
+                    {savedSurvey ? "Saved" : "Not saved"}
                   </BadgeChip>
                 </div>
               </div>
@@ -578,7 +575,7 @@ export function SurveySection() {
                 <div className="mt-4 text-sm text-app-muted">
                   {savedSurvey?.question_count
                     ? `Showing ${previewQuestions.length} of ${savedSurvey.question_count} questions`
-                    : "Upload a survey to preview the normalized schema."}
+                    : "Upload a survey to preview your question structure."}
                 </div>
 
                 <div className="mt-4 space-y-3">
@@ -596,7 +593,7 @@ export function SurveySection() {
                   onClick={() => setShowAllQuestions((current) => !current)}
                   disabled={!surveyQuestions.length}
                 >
-                  {showAllQuestions ? "Show Fewer Questions" : "View Full Survey Details"}
+                  {showAllQuestions ? "Show Fewer Questions" : "Show All Questions"}
                 </Button>
               </div>
             </div>
@@ -618,14 +615,14 @@ function classifyWarningTone(warnings: string[]) {
 
 function buildSavedSurveyMessage(warnings: string[]) {
   if (warnings.length === 0) {
-    return "Survey uploaded, parsed, and saved successfully.";
+    return "Survey uploaded, prepared, and saved.";
   }
 
   const parserNotesOnly = warnings.every(isParserNote);
 
   return parserNotesOnly
-    ? "Survey parsed successfully. The parser added interpretation notes, but the normalized schema is saved and ready for review."
-    : "Survey parsed and saved with warnings. Review the normalized schema before moving on.";
+    ? "Survey saved with parser notes. Review the question preview below."
+    : "Survey saved with warnings. Please review the question preview before moving on.";
 }
 
 function buildWarningSummaryLabel(warnings: string[]) {
@@ -698,17 +695,17 @@ function ParseStatusCard({
         <BadgeChip>
           {hasSurvey
             ? `${warnings.length} parser note${warnings.length === 1 ? "" : "s"}`
-            : "No schema yet"}
+            : "No survey preview yet"}
         </BadgeChip>
       </div>
       <p className="mt-3 text-sm leading-6 text-app-muted">
         {!hasSurvey
-          ? "Upload a survey file to generate the normalized schema and parser notes."
+          ? "Upload a survey file to generate a structured preview and parser notes."
           : warnings.length === 0
-          ? "The parser returned a clean normalized schema with no warnings."
+          ? "Your survey parsed cleanly with no warnings."
           : tone === "success"
-            ? "The parser added lightweight interpretation notes, which is normal for many survey formats."
-            : "The parser succeeded, but there are warnings you should review before moving forward."}
+            ? "The parser added a few interpretation notes, which is common for many survey formats."
+            : "Your survey is saved, but there are warnings to review before moving forward."}
       </p>
     </div>
   );
@@ -724,11 +721,11 @@ function WarningInterpretationCard({
   return (
     <div className="rounded-[1.35rem] border border-app-border [background:var(--status-neutral-bg)] p-4">
       <div className="text-[0.72rem] uppercase tracking-[0.24em] text-app-muted">
-        Parser interpretation
+        Parser notes
       </div>
       {!hasSurvey ? (
         <p className="mt-3 text-sm leading-6 text-app-muted">
-          Once a survey is uploaded, parser warnings and inference notes will appear here.
+          Once a survey is uploaded, parser notes and warnings will appear here.
         </p>
       ) : warnings.length > 0 ? (
         <ul className="mt-3 space-y-2 text-sm leading-6 text-app-text">
@@ -776,7 +773,7 @@ function QuestionFormPreview({ questions }: { questions: SurveyQuestionPayload[]
   if (questions.length === 0) {
     return (
       <div className="rounded-[1.35rem] border border-dashed border-app-border [background:var(--control-bg)] px-5 py-8 text-sm leading-6 text-app-muted">
-        Upload a survey to preview normalized questions here.
+        Upload a survey to preview questions here.
       </div>
     );
   }
@@ -812,7 +809,7 @@ function QuestionTablePreview({ questions }: { questions: SurveyQuestionPayload[
   if (questions.length === 0) {
     return (
       <div className="rounded-[1.35rem] border border-dashed border-app-border [background:var(--control-bg)] px-5 py-8 text-sm leading-6 text-app-muted">
-        Upload a survey to preview normalized table rows here.
+        Upload a survey to preview table rows here.
       </div>
     );
   }
@@ -822,7 +819,7 @@ function QuestionTablePreview({ questions }: { questions: SurveyQuestionPayload[
       <div className="grid grid-cols-[6.5rem_7.5rem_minmax(0,1fr)_6.5rem] gap-3 border-b border-app-border px-4 py-3 text-[0.68rem] uppercase tracking-[0.22em] text-app-muted">
         <div>ID</div>
         <div>Type</div>
-        <div>Prompt</div>
+        <div>Question</div>
         <div>Options</div>
       </div>
       {questions.map((question) => (
@@ -893,14 +890,14 @@ function renderQuestionResponseShape(question: SurveyQuestionPayload) {
   if (question.question_type === "numeric") {
     return (
       <div className="rounded-xl border border-app-border [background:var(--control-bg)] px-4 py-3 text-sm text-app-muted">
-        Numeric response
+        Number input
       </div>
     );
   }
 
   return (
     <div className="rounded-xl border border-app-border [background:var(--control-bg)] px-4 py-3 text-sm text-app-muted">
-      Open-text response
+      Open text input
     </div>
   );
 }
@@ -910,7 +907,7 @@ function humanizeQuestionType(questionType: SurveyQuestionPayload["question_type
     case "single_choice":
       return "Single choice";
     case "multi_choice":
-      return "Multi choice";
+      return "Multiple choice";
     case "open_text":
       return "Open text";
     default:
