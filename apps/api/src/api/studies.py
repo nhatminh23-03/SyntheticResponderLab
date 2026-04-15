@@ -11,7 +11,6 @@ from src.config.settings import AppSettings
 from src.schemas.study import (
     PersonaPreviewRequest,
     ProductUrlAutofillRequest,
-    SimulationRunRequest,
     StabilityCheckRequest,
     StudyCreateRequest,
     StudyModeUpdateRequest,
@@ -26,7 +25,6 @@ from src.services.study_service import (
     get_insights_view,
     get_study_or_404,
     get_models,
-    get_prompt_preview,
     get_workflow,
     handle_neo_survey_preset,
     handle_product_image_analysis,
@@ -40,6 +38,15 @@ from src.services.study_service import (
     serialize_study,
     start_simulation_run,
     start_stability_check,
+)
+from src.services.interview_service import (
+    get_interview_synthesis,
+    save_interview_synthesis_config,
+    start_interview_run,
+    get_latest_interview_run,
+    get_research_brief,
+    save_research_brief,
+    get_interview_insights,
 )
 
 
@@ -338,39 +345,15 @@ def persona_preview_endpoint(
     return response_envelope(request, result)
 
 
-@router.get("/api/v1/studies/{study_id}/prompt-preview")
-def prompt_preview_endpoint(
-    study_id: str,
-    request: Request,
-    persona_index: int = Query(default=0, ge=0),
-    db: Session = Depends(get_db_session),
-    settings: AppSettings = Depends(get_settings),
-):
-    study = get_study_or_404(db, study_id)
-    result = get_prompt_preview(
-        db,
-        settings,
-        study,
-        persona_index=persona_index,
-    )
-    return response_envelope(request, result)
-
-
 @router.post("/api/v1/studies/{study_id}/simulation-runs")
 def start_simulation_run_endpoint(
     study_id: str,
     request: Request,
-    payload: Optional[SimulationRunRequest] = Body(default=None),
     db: Session = Depends(get_db_session),
     settings: AppSettings = Depends(get_settings),
 ):
     study = get_study_or_404(db, study_id)
-    result = start_simulation_run(
-        db,
-        settings,
-        study,
-        prompt_user_template_override=payload.prompt_user_template if payload else None,
-    )
+    result = start_simulation_run(db, settings, study)
     return response_envelope(request, result)
 
 
@@ -423,3 +406,91 @@ def latest_stability_check_endpoint(
     study = get_study_or_404(db, study_id)
     result = get_latest_stability_check(db, study)
     return response_envelope(request, {"stability_check": result})
+
+
+# ---------------------------------------------------------------------------
+# Interview endpoints
+# ---------------------------------------------------------------------------
+
+@router.get("/api/v1/studies/{study_id}/interview/synthesis")
+def get_interview_synthesis_endpoint(
+    study_id: str,
+    request: Request,
+    db: Session = Depends(get_db_session),
+    settings: AppSettings = Depends(get_settings),
+):
+    study = get_study_or_404(db, study_id)
+    result = get_interview_synthesis(db, study)
+    return response_envelope(request, {"interview_synthesis": result})
+
+
+@router.patch("/api/v1/studies/{study_id}/interview/synthesis")
+def patch_interview_synthesis_endpoint(
+    study_id: str,
+    request: Request,
+    payload: Dict[str, Any] = Body(...),
+    db: Session = Depends(get_db_session),
+    settings: AppSettings = Depends(get_settings),
+):
+    study = get_study_or_404(db, study_id)
+    result = save_interview_synthesis_config(db, study, payload)
+    return response_envelope(request, {"interview_synthesis": result})
+
+
+@router.post("/api/v1/studies/{study_id}/interview/runs")
+def start_interview_run_endpoint(
+    study_id: str,
+    request: Request,
+    payload: Optional[Dict[str, Any]] = Body(default=None),
+    db: Session = Depends(get_db_session),
+    settings: AppSettings = Depends(get_settings),
+):
+    study = get_study_or_404(db, study_id)
+    result = start_interview_run(db, settings, study, payload or {})
+    return response_envelope(request, {"interview_run": result})
+
+
+@router.get("/api/v1/studies/{study_id}/interview/runs/latest")
+def latest_interview_run_endpoint(
+    study_id: str,
+    request: Request,
+    db: Session = Depends(get_db_session),
+):
+    study = get_study_or_404(db, study_id)
+    result = get_latest_interview_run(db, study)
+    return response_envelope(request, {"interview_run": result})
+
+
+@router.get("/api/v1/studies/{study_id}/interview/brief")
+def get_research_brief_endpoint(
+    study_id: str,
+    request: Request,
+    db: Session = Depends(get_db_session),
+):
+    study = get_study_or_404(db, study_id)
+    result = get_research_brief(db, study)
+    return response_envelope(request, {"research_brief": result})
+
+
+@router.patch("/api/v1/studies/{study_id}/interview/brief")
+def patch_research_brief_endpoint(
+    study_id: str,
+    request: Request,
+    payload: Dict[str, Any] = Body(...),
+    db: Session = Depends(get_db_session),
+):
+    study = get_study_or_404(db, study_id)
+    result = save_research_brief(db, study, payload)
+    return response_envelope(request, {"research_brief": result})
+
+
+@router.get("/api/v1/studies/{study_id}/interview/insights")
+def interview_insights_endpoint(
+    study_id: str,
+    request: Request,
+    db: Session = Depends(get_db_session),
+    settings: AppSettings = Depends(get_settings),
+):
+    study = get_study_or_404(db, study_id)
+    result = get_interview_insights(db, settings, study)
+    return response_envelope(request, {"interview_insights": result})

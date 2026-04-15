@@ -10,6 +10,9 @@ import { useTheme } from "@/providers/theme-provider";
 export function WorkflowNav() {
   const { activeSectionId, navigationLocked, scrollToSection } = useSectionRegistry();
   const { isReady, theme, toggleTheme } = useTheme();
+  const navSections = workflowSections.filter(
+    (section) => !("showInNav" in section) || section.showInNav !== false
+  );
 
   return (
     <header className="sticky top-0 z-50 border-b [background:var(--nav-bg)] [border-color:var(--nav-border)] backdrop-blur-2xl">
@@ -31,7 +34,7 @@ export function WorkflowNav() {
         </button>
 
         <nav className="fine-scrollbar flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
-          {workflowSections.map((section) => {
+          {navSections.map((section) => {
             const isActive = activeSectionId === section.id;
 
             return (

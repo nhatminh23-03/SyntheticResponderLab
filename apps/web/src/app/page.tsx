@@ -2,9 +2,12 @@ import { AnalysisSection } from "@/components/sections/analysis-section";
 import { AudienceSection } from "@/components/sections/audience-section";
 import { ExperimentSection } from "@/components/sections/experiment-section";
 import { InsightsSection } from "@/components/sections/insights-section";
+import { InterviewInsightsSection } from "@/components/sections/interview-insights-section";
+import { InterviewSynthesisSection } from "@/components/sections/interview-synthesis-section";
 import { MainHeroSection } from "@/components/sections/main-hero-section";
 import { MarketSection } from "@/components/sections/market-section";
 import { ProductSection } from "@/components/sections/product-section";
+import { ResearchBriefSection } from "@/components/sections/research-brief-section";
 import { RunSimulationSection } from "@/components/sections/run-simulation-section";
 import { StudyModeSection } from "@/components/sections/study-mode-section";
 import { SurveySection } from "@/components/sections/survey-section";
@@ -25,6 +28,9 @@ export default function HomePage() {
         <RunSimulationSection />
         <AnalysisSection />
         <InsightsSection />
+        <InterviewSynthesisSection />
+        <ResearchBriefSection />
+        <InterviewInsightsSection />
       </AppShell>
     </AppProviders>
   );

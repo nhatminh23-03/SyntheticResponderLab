@@ -9,6 +9,9 @@ export const workflowSections = [
   { id: "run-simulation", label: "Run" },
   { id: "analysis", label: "Analysis" },
   { id: "insights", label: "Insights" },
+  { id: "interview-synthesis", label: "Interview Synthesis", showInNav: false },
+  { id: "research-brief", label: "Research Brief", showInNav: false },
+  { id: "interview-insights", label: "Interview Insights", showInNav: false },
 ] as const;
 
 export type WorkflowSectionId = (typeof workflowSections)[number]["id"];
