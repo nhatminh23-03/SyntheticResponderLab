@@ -418,6 +418,21 @@ def test_start_simulation_run_endpoint_returns_saved_job(client, monkeypatch):
     assert latest_payload["simulation_run"]["result"]["total_generated_responses"] == 80
 
 
+def test_start_simulation_run_endpoint_requires_openrouter_and_saves_failed_job(client):
+    study_id = _create_ready_to_run_study(client)
+
+    response = client.post(f"/api/v1/studies/{study_id}/simulation-runs")
+
+    assert response.status_code == 503
+    assert "OPENROUTER_API_KEY is required" in response.json()["error"]["message"]
+
+    latest_response = client.get(f"/api/v1/studies/{study_id}/simulation-runs/latest")
+    assert latest_response.status_code == 200
+    latest_payload = latest_response.json()["data"]["simulation_run"]
+    assert latest_payload["status"] == "failed"
+    assert "OPENROUTER_API_KEY is required" in latest_payload["error"]["message"]
+
+
 def test_clear_latest_simulation_run_endpoint_removes_saved_jobs(client, monkeypatch):
     study_id = _create_ready_to_run_study(client)
 
@@ -515,6 +530,15 @@ def test_analysis_endpoint_returns_summary_and_question_explorer(client, monkeyp
             "question_count": 2,
             "generation_mode": "mock",
             "warnings": [],
+            "run_debug_summary": {
+                "primary_live_path": True,
+                "total_answers": 4,
+                "truly_live_answers": 4,
+                "fallback_answers": 0,
+                "provider_error_count": 0,
+                "malformed_json_count": 0,
+                "ml_persona_completion_enabled": True,
+            },
             "survey_parse_warnings": ["Expanded matrix question example"],
             "personas": [
                 {"persona_id": "PERS_001", "segment_label": "Remote Professionals", "fit_tier": "strong"},
@@ -579,9 +603,36 @@ def test_analysis_endpoint_returns_summary_and_question_explorer(client, monkeyp
     assert payload["filters"]["selected_question_id"] == "Q1"
     assert payload["question_explorer"]["question_id"] == "Q1"
     assert payload["benchmark_snapshot"]["available"] is True
+    assert payload["run_debug_summary"]["truly_live_answers"] == 4
     assert payload["realism_scorecard"]["available"] is True
     assert payload["open_text"]["available"] is True
     assert payload["records_preview"]["total"] == 4
+
+
+def test_prompt_preview_endpoint_returns_first_persona_prompt(client, monkeypatch):
+    study_id = _create_ready_to_run_study(client)
+
+    monkeypatch.setattr(
+        "src.api.studies.get_prompt_preview",
+        lambda *args, **kwargs: {
+            "prompt_preview": {
+                "persona_index": 0,
+                "persona_id": "PERS_001",
+                "persona_label": "Remote Professionals",
+                "survey_title": "Neo Smart Living Demo Survey",
+                "system_instruction": "System text",
+                "user_instruction": "User text",
+                "combined_prompt": "System\nSystem text\n\nUser\nUser text",
+            }
+        },
+    )
+
+    response = client.get(f"/api/v1/studies/{study_id}/prompt-preview")
+    assert response.status_code == 200
+    payload = response.json()["data"]["prompt_preview"]
+    assert payload["persona_index"] == 0
+    assert payload["persona_id"] == "PERS_001"
+    assert "System\nSystem text" in payload["combined_prompt"]
 
 
 def test_insights_endpoint_returns_executive_summary_and_charts(client, monkeypatch):

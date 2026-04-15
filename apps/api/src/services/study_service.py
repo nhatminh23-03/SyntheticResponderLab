@@ -37,6 +37,7 @@ from src.persistence.storage import persist_asset_bytes
 from src.schemas.study import (
     CanonicalStudy,
     PersonaPreviewResult,
+    PromptPreviewResult,
     ProductEnrichmentSummary,
     ProductEnrichments,
     ProductState,
@@ -505,6 +506,70 @@ def create_persona_preview(
         "persona_preview": preview_payload.model_dump(mode="json") if preview_payload else None,
         "workflow": study_view.derived.workflow.model_dump(mode="json"),
     }
+
+
+def get_prompt_preview(
+    session: Session,
+    settings: AppSettings,
+    study: Study,
+    *,
+    persona_index: int = 0,
+) -> Dict[str, Any]:
+    if persona_index < 0:
+        raise ValidationApiError("persona_index must be greater than or equal to 0.")
+
+    sections = _get_sections(session, study)
+    audience_payload = sections["audience"].value_json
+    survey_payload = sections["survey"].value_json
+    latest_preview = _latest_persona_preview(session, study)
+
+    if latest_preview is None or not latest_preview.personas:
+        raise ConflictApiError("Generate a persona preview first before requesting prompt preview.")
+    if not survey_payload:
+        raise ConflictApiError("Survey must be saved before prompt preview is available.")
+
+    sorted_personas = sorted(latest_preview.personas, key=lambda item: item.row_index)
+    if persona_index >= len(sorted_personas):
+        raise ValidationApiError(
+            f"persona_index must be between 0 and {max(len(sorted_personas) - 1, 0)}."
+        )
+
+    schemas = load_module("backend.schemas", settings.legacy_app_root)
+    prompt_builder = load_module("backend.simulation.prompt_builder", settings.legacy_app_root)
+
+    persona_payload = sorted_personas[persona_index].persona_json or {}
+    persona = schemas.PersonaProfile(**persona_payload)
+    audience = schemas.AudienceFilter(**audience_payload) if audience_payload else None
+    survey_schema = schemas.SurveySchema(**survey_payload)
+    business_product_context = (
+        schemas.BusinessProductContext(**sections["product"].value_json)
+        if sections["product"].status == "saved" and sections["product"].value_json
+        else None
+    )
+    market_context = (
+        schemas.MarketContext(**sections["market"].value_json)
+        if sections["market"].status == "saved" and sections["market"].value_json
+        else None
+    )
+
+    preview = prompt_builder.build_openrouter_prompt_preview(
+        persona=persona,
+        survey_schema=survey_schema,
+        business_product_context=business_product_context,
+        market_context=market_context,
+        audience_filter=audience,
+    )
+
+    prompt_preview = PromptPreviewResult(
+        persona_index=persona_index,
+        persona_id=persona.persona_id,
+        persona_label=persona.segment_label or persona.persona_id,
+        survey_title=survey_schema.survey_title,
+        system_instruction=preview["system_instruction"],
+        user_instruction=preview["user_instruction"],
+        combined_prompt=preview["combined_prompt"],
+    )
+    return {"prompt_preview": prompt_preview.model_dump(mode="json")}
 
 
 def start_simulation_run(

@@ -80,6 +80,16 @@ class PersonaPreviewResult(BaseModel):
     completed_at: Optional[datetime] = None
 
 
+class PromptPreviewResult(BaseModel):
+    persona_index: int
+    persona_id: Optional[str] = None
+    persona_label: Optional[str] = None
+    survey_title: Optional[str] = None
+    system_instruction: str
+    user_instruction: str
+    combined_prompt: str
+
+
 class StudyOwner(BaseModel):
     owner_user_id: Optional[str] = None
     owner_org_id: Optional[str] = None

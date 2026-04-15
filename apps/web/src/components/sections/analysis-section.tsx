@@ -128,6 +128,7 @@ export function AnalysisSection() {
   const benchmark = analysis?.benchmark_snapshot;
   const realism = analysis?.realism_scorecard;
   const run = analysis?.run;
+  const runDebugSummary = analysis?.run_debug_summary;
   const runWarnings = analysis?.context_notes?.run_warnings ?? [];
   const surveyWarnings = analysis?.context_notes?.survey_parse_warnings ?? [];
   const openTextSamples = analysis?.open_text?.samples ?? [];
@@ -529,6 +530,25 @@ export function AnalysisSection() {
                         : "Unavailable"
                     }
                   />
+                  <SidebarRow
+                    label="Live answers"
+                    value={
+                      runDebugSummary?.truly_live_answers !== undefined &&
+                      runDebugSummary?.total_answers !== undefined
+                        ? `${runDebugSummary.truly_live_answers}/${runDebugSummary.total_answers}`
+                        : "Unavailable"
+                    }
+                  />
+                  <SidebarRow
+                    label="ML completion"
+                    value={
+                      runDebugSummary?.ml_persona_completion_enabled !== undefined
+                        ? runDebugSummary.ml_persona_completion_enabled
+                          ? "Enabled"
+                          : "Disabled"
+                        : "Unavailable"
+                    }
+                  />
                 </div>
               </div>
             </GlassPanel>
@@ -914,7 +934,7 @@ function buildRealismSummary(summary?: Record<string, unknown> | null) {
   if (!summary) {
     return "No realism summary is available.";
   }
-  return `Realism score: ${String(summary.realism_score_0_to_100 ?? "n/a")}. Distribution gap: ${String(summary.weighted_tv_distance ?? "n/a")}. Questions scored: ${String(summary.questions_scored ?? 0)}.`;
+  return `Realism score: ${String(summary.realism_score_0_to_100 ?? summary.realism_score ?? "n/a")}. Weighted TV: ${String(summary.weighted_tv_distance ?? "n/a")}. Weighted JS: ${String(summary.weighted_js_divergence ?? "n/a")}. Questions scored: ${String(summary.questions_scored ?? 0)}.`;
 }
 
 function confidenceTone(label?: string | null): "cyan" | "gold" | "neutral" {

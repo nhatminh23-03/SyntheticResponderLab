@@ -191,6 +191,16 @@ export type PersonaPreviewPayload = {
   completed_at?: string | null;
 };
 
+export type PromptPreviewPayload = {
+  persona_index: number;
+  persona_id?: string | null;
+  persona_label?: string | null;
+  survey_title?: string | null;
+  system_instruction: string;
+  user_instruction: string;
+  combined_prompt: string;
+};
+
 export type SimulationRunConditions = {
   context_influence?: {
     enabled?: boolean;
@@ -210,6 +220,17 @@ export type SimulationRunConditions = {
   };
   generation_mode?: string;
   selected_models?: string[];
+};
+
+export type SimulationRunDebugSummary = {
+  primary_live_path?: boolean;
+  total_answers?: number;
+  truly_live_answers?: number;
+  fallback_answers?: number;
+  provider_error_count?: number;
+  malformed_json_count?: number;
+  live_answer_rate?: number | null;
+  ml_persona_completion_enabled?: boolean;
 };
 
 export type SimulationRunResultPayload = {
@@ -232,6 +253,7 @@ export type SimulationRunResultPayload = {
   prior_notes?: Array<Record<string, unknown>>;
   warnings?: string[];
   generation_debug?: Record<string, unknown> | null;
+  run_debug_summary?: SimulationRunDebugSummary | null;
   run_conditions?: SimulationRunConditions | null;
   personas?: Array<Record<string, unknown>>;
   response_record_preview?: Array<Record<string, unknown>>;
@@ -312,6 +334,7 @@ export type AnalysisPayload = {
     selected_segment?: string;
     filtered_record_count?: number;
   };
+  run_debug_summary?: SimulationRunDebugSummary | null;
   benchmark_snapshot?: {
     available?: boolean;
     message?: string;
@@ -688,6 +711,12 @@ export type PersonaPreviewResponse = {
   data?: {
     persona_preview?: PersonaPreviewPayload | null;
     workflow?: WorkflowReadiness;
+  };
+};
+
+export type PromptPreviewResponse = {
+  data?: {
+    prompt_preview?: PromptPreviewPayload | null;
   };
 };
 
@@ -1109,6 +1138,25 @@ export async function generatePersonaPreview(
     personaPreview: result.data?.persona_preview ?? null,
     workflow: result.data?.workflow ?? null,
   };
+}
+
+export async function getPromptPreview(studyId: string, personaIndex = 0) {
+  const apiBaseUrl = getApiBaseUrl();
+  const response = await fetch(
+    `${apiBaseUrl}/api/v1/studies/${studyId}/prompt-preview?persona_index=${encodeURIComponent(String(personaIndex))}`
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      await readApiErrorMessage(
+        response,
+        `Prompt preview failed with status ${response.status}`
+      )
+    );
+  }
+
+  const result = (await response.json()) as PromptPreviewResponse;
+  return result.data?.prompt_preview ?? null;
 }
 
 export async function startSimulationRun(studyId: string) {

@@ -240,8 +240,11 @@ def execute_simulation_run(
         except Exception:
             openrouter_available = False
 
-    generation_mode = "openrouter_live" if openrouter_available else "mock"
-    provider_model_name = experiment.selected_models[0] if experiment.selected_models else "openai/gpt-4o-mini"
+    if not openrouter_available:
+        raise ProviderUnavailableApiError("OPENROUTER_API_KEY is required for live OpenRouter survey generation.")
+
+    generation_mode = "openrouter_live"
+    provider_model_name = experiment.selected_models[0] if len(experiment.selected_models) == 1 else None
     run_id = f"RUN_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
 
     config = schemas.SimulationRunConfig(
@@ -249,7 +252,7 @@ def execute_simulation_run(
         survey_title=survey_schema.survey_title,
         survey_question_count=len(survey_schema.questions),
         sample_size=experiment.sample_size,
-        selected_models=experiment.selected_models or [provider_model_name],
+        selected_models=experiment.selected_models or ["openai/gpt-4o-mini"],
         experiment_mode=experiment.experiment_mode,
         reruns_per_persona=experiment.reruns_per_persona,
         status="pending",
@@ -276,7 +279,7 @@ def execute_simulation_run(
                 "OPENROUTER_BASE_URL": settings.openrouter_base_url,
             }
         ):
-            records = run_manager.generate_mock_response_records(
+            records = run_manager.generate_response_records(
                 config=config,
                 survey_schema=survey_schema,
                 audience_filter=audience,
@@ -284,26 +287,54 @@ def execute_simulation_run(
                 business_product_context=business_product_context,
                 market_context=market_context,
                 generation_mode=generation_mode,
-                openrouter_model_name=provider_model_name,
+                openrouter_model_name=None,
+                allow_mock_fallback=True,
             )
-            result = run_manager.run_mock_simulation(
+            result = run_manager.run_simulation(
                 config=config,
                 generation_mode=generation_mode,
                 provider_model_name=provider_model_name,
+                records=records,
             )
             generation_debug = dict(run_manager.get_last_live_generation_debug())
     except Exception as exc:
         raise LegacyModuleApiError(f"Simulation execution failed: {exc}") from exc
 
     warnings: List[str] = []
-    if generation_mode != "openrouter_live":
-        warnings.append("OpenRouter live path unavailable; used mock response generation.")
+    fallback_count = int(generation_debug.get("questions_fallback_to_mock", 0) or 0)
+    parsed_count = int(generation_debug.get("questions_parsed_from_live", 0) or 0)
+    request_errors = int(generation_debug.get("request_errors", 0) or 0)
+    provider_error_count = int(generation_debug.get("provider_error_count", 0) or 0)
+    malformed_json_count = int(generation_debug.get("malformed_json_count", 0) or 0)
+    if provider_error_count > 0:
+        warnings.append(
+            f"OpenRouter returned {provider_error_count} provider-level error(s); temporary deterministic fallback filled the missing answers."
+        )
+    if malformed_json_count > 0:
+        warnings.append(
+            f"OpenRouter returned malformed JSON for {malformed_json_count} respondent request(s); temporary fallback filled the missing answers."
+        )
+    if request_errors > 0 and provider_error_count == 0 and malformed_json_count == 0:
+        warnings.append(
+            "OpenRouter live generation hit provider or parsing errors; temporary deterministic fallback filled the missing answers."
+        )
+    if fallback_count > 0:
+        warnings.append(
+            f"Temporary migration fallback was used for {fallback_count} question(s); {parsed_count} question(s) were parsed from live model output."
+        )
+    if fallback_count > 0 and parsed_count == 0:
+        warnings.append("This run completed with temporary deterministic fallback for every saved answer because no usable live answers were parsed.")
     if persona_generation_mode == "heuristic_fallback":
         warnings.append("Grounded priors unavailable; personas used heuristic fallback.")
     if geography_context and not geography_context.get("puma"):
         warnings.append("Geography context was partial; geo-aware priors may have fallen back to global tables.")
     if not geography_context and audience_payload.get("zip_code"):
         warnings.append("ZIP was provided, but geography context could not be resolved; geo-aware priors stayed global.")
+    run_debug_summary = _build_run_debug_summary(
+        generation_debug=generation_debug,
+        personas=personas,
+        prior_notes=prior_notes,
+    )
 
     return {
         "run_id": result.run_id,
@@ -317,7 +348,7 @@ def execute_simulation_run(
         "notes": result.notes,
         "created_at": result.created_at,
         "generation_mode": generation_mode,
-        "provider_model_name": provider_model_name if generation_mode == "openrouter_live" else None,
+        "provider_model_name": provider_model_name,
         "persona_generation_mode": persona_generation_mode,
         "grounded_priors_available": grounded_priors_available,
         "cex_affordability_available": affordability_priors_available,
@@ -325,6 +356,7 @@ def execute_simulation_run(
         "prior_notes": prior_notes,
         "warnings": warnings,
         "generation_debug": generation_debug,
+        "run_debug_summary": run_debug_summary,
         "run_conditions": {
             "context_influence": {
                 "enabled": True,
@@ -394,6 +426,7 @@ def execute_stability_check(
     run_manager = load_module("backend.simulation.run_manager", settings.legacy_app_root)
     persona_generator = load_module("backend.simulation.persona_generator", settings.legacy_app_root)
     stability = load_module("backend.analysis.stability", settings.legacy_app_root)
+    llm_client = load_module("backend.simulation.llm_client", settings.legacy_app_root)
 
     audience = schemas.AudienceFilter(**audience_payload)
     survey_schema = schemas.SurveySchema(**survey_payload)
@@ -408,6 +441,20 @@ def execute_stability_check(
         grounded_priors_available = bool(persona_generator.grounded_priors_available())
     except Exception:
         grounded_priors_available = False
+
+    with temporary_env(
+        {
+            "OPENROUTER_API_KEY": settings.openrouter_api_key,
+            "OPENROUTER_BASE_URL": settings.openrouter_base_url,
+        }
+    ):
+        try:
+            openrouter_available = bool(llm_client.openrouter_api_key_available())
+        except Exception:
+            openrouter_available = False
+
+    if not openrouter_available:
+        raise ProviderUnavailableApiError("OPENROUTER_API_KEY is required for live OpenRouter stability checks.")
 
     run_summaries: List[dict] = []
     warnings: List[str] = [
@@ -442,17 +489,33 @@ def execute_stability_check(
         )
 
         try:
-            records = run_manager.generate_mock_response_records(
-                config=config,
-                survey_schema=survey_schema,
-                audience_filter=audience,
-                persona_profiles=personas,
-                business_product_context=business_product_context,
-                market_context=market_context,
-            )
+            with temporary_env(
+                {
+                    "OPENROUTER_API_KEY": settings.openrouter_api_key,
+                    "OPENROUTER_BASE_URL": settings.openrouter_base_url,
+                }
+            ):
+                records = run_manager.generate_response_records(
+                    config=config,
+                    survey_schema=survey_schema,
+                    audience_filter=audience,
+                    persona_profiles=personas,
+                    business_product_context=business_product_context,
+                    market_context=market_context,
+                    generation_mode="openrouter_live",
+                    openrouter_model_name=None,
+                    allow_mock_fallback=True,
+                )
+                generation_debug = dict(run_manager.get_last_live_generation_debug())
             run_summaries.append(
                 stability.summarize_run_outputs(records=records, personas=personas)
             )
+            request_errors = int(generation_debug.get("request_errors", 0) or 0)
+            fallback_count = int(generation_debug.get("questions_fallback_to_mock", 0) or 0)
+            if request_errors > 0 or fallback_count > 0:
+                warnings.append(
+                    f"Stability rerun {rerun_index} used temporary deterministic fallback for {fallback_count} question(s) after {request_errors} live request error(s)."
+                )
         except Exception as exc:
             raise LegacyModuleApiError(f"Stability check failed: {exc}") from exc
 
@@ -609,6 +672,7 @@ def build_analysis_view(
             "selected_segment": selected_segment,
             "filtered_record_count": int(len(filtered_df)),
         },
+        "run_debug_summary": latest_run_payload.get("run_debug_summary"),
         "benchmark_snapshot": benchmark_snapshot,
         "realism_scorecard": realism_scorecard,
         "question_explorer": {
@@ -762,6 +826,48 @@ def build_insights_view(
             "survey_parse_warnings": list(latest_run_payload.get("survey_parse_warnings") or []),
         },
     }
+
+
+def _build_run_debug_summary(
+    *,
+    generation_debug: dict[str, Any],
+    personas: list[Any],
+    prior_notes: list[dict[str, Any]],
+) -> dict[str, Any]:
+    total_answers = int(generation_debug.get("questions_total", 0) or 0)
+    live_answers = int(
+        generation_debug.get("truly_live_answers", generation_debug.get("questions_parsed_from_live", 0)) or 0
+    )
+    fallback_answers = int(generation_debug.get("questions_fallback_to_mock", 0) or 0)
+    provider_error_count = int(generation_debug.get("provider_error_count", 0) or 0)
+    malformed_json_count = int(generation_debug.get("malformed_json_count", 0) or 0)
+
+    return {
+        "primary_live_path": generation_debug.get("generation_mode") == "openrouter_live",
+        "total_answers": total_answers,
+        "truly_live_answers": live_answers,
+        "fallback_answers": fallback_answers,
+        "provider_error_count": provider_error_count,
+        "malformed_json_count": malformed_json_count,
+        "live_answer_rate": round((live_answers / total_answers), 3) if total_answers > 0 else None,
+        "ml_persona_completion_enabled": _ml_completion_enabled(personas=personas, prior_notes=prior_notes),
+    }
+
+
+def _ml_completion_enabled(*, personas: list[Any], prior_notes: list[dict[str, Any]]) -> bool:
+    for persona in personas:
+        if isinstance(persona, dict) and persona.get("ml_inference"):
+            return True
+        if getattr(persona, "ml_inference", None):
+            return True
+
+    for note in prior_notes:
+        if str(note.get("prior_table_name") or "") != "ml_persona_completion":
+            continue
+        notes_text = str(note.get("notes") or "").lower()
+        if "applied" in notes_text:
+            return True
+    return False
 
 
 def _build_question_options(df: pd.DataFrame) -> list[dict[str, Any]]:

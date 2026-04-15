@@ -25,6 +25,7 @@ from src.services.study_service import (
     get_insights_view,
     get_study_or_404,
     get_models,
+    get_prompt_preview,
     get_workflow,
     handle_neo_survey_preset,
     handle_product_image_analysis,
@@ -332,6 +333,24 @@ def persona_preview_endpoint(
         use_geography_filtered_priors=payload.use_geography_filtered_priors,
         use_cex_affordability_priors=payload.use_cex_affordability_priors,
         seed=payload.seed,
+    )
+    return response_envelope(request, result)
+
+
+@router.get("/api/v1/studies/{study_id}/prompt-preview")
+def prompt_preview_endpoint(
+    study_id: str,
+    request: Request,
+    persona_index: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db_session),
+    settings: AppSettings = Depends(get_settings),
+):
+    study = get_study_or_404(db, study_id)
+    result = get_prompt_preview(
+        db,
+        settings,
+        study,
+        persona_index=persona_index,
     )
     return response_envelope(request, result)
 
