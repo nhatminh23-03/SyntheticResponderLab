@@ -1,0 +1,8 @@
+repos:
+  - repo: local
+    hooks:
+      - id: check-staged-secrets
+        name: Check staged files for obvious secrets
+        entry: scripts/check-staged-secrets.sh
+        language: script
+        pass_filenames: false

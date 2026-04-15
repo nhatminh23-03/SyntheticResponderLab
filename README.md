@@ -172,9 +172,19 @@ npm run build
 - Do **not** commit generated artifacts under `apps/api/artifacts/`.
 - Do **not** commit `node_modules/` or virtual environments.
 - The root `.gitignore` in this repo is set up to ignore those.
+- Local credential-like JSON files are also ignored now, including common service-account filename patterns.
 
 One important security note:
 - if you previously stored a real provider key in a local `.env`, rotate that key before publishing the repository if there is any chance it was ever exposed
+
+Optional local commit guard:
+
+```bash
+pip install pre-commit
+pre-commit install
+```
+
+This repo now includes a lightweight staged-secret check that blocks obvious private keys and Google service-account JSON from being committed.
 
 ## Legacy Reference App
 
