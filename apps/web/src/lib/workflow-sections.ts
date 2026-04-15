@@ -1,6 +1,6 @@
 export const workflowSections = [
   { id: "main", label: "Main" },
-  { id: "study-mode", label: "Study Mode" },
+  { id: "study-mode", label: "Set Up" },
   { id: "audience", label: "Audience" },
   { id: "product", label: "Product" },
   { id: "market", label: "Market" },
@@ -9,9 +9,9 @@ export const workflowSections = [
   { id: "run-simulation", label: "Run" },
   { id: "analysis", label: "Analysis" },
   { id: "insights", label: "Insights" },
-  { id: "interview-synthesis", label: "Interview Synthesis", showInNav: false },
-  { id: "research-brief", label: "Research Brief", showInNav: false },
-  { id: "interview-insights", label: "Interview Insights", showInNav: false },
+  { id: "interview-synthesis", label: "Interview" },
+  { id: "research-brief", label: "Research Brief" },
+  { id: "interview-insights", label: "Interview Insights" },
 ] as const;
 
 export type WorkflowSectionId = (typeof workflowSections)[number]["id"];
