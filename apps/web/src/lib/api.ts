@@ -191,6 +191,16 @@ export type PersonaPreviewPayload = {
   completed_at?: string | null;
 };
 
+export type PromptPreviewPayload = {
+  persona_index: number;
+  persona_id?: string | null;
+  persona_label?: string | null;
+  survey_title?: string | null;
+  system_instruction: string;
+  user_instruction: string;
+  combined_prompt: string;
+};
+
 export type SimulationRunConditions = {
   context_influence?: {
     enabled?: boolean;
@@ -210,6 +220,17 @@ export type SimulationRunConditions = {
   };
   generation_mode?: string;
   selected_models?: string[];
+};
+
+export type SimulationRunDebugSummary = {
+  primary_live_path?: boolean;
+  total_answers?: number;
+  truly_live_answers?: number;
+  fallback_answers?: number;
+  provider_error_count?: number;
+  malformed_json_count?: number;
+  live_answer_rate?: number | null;
+  ml_persona_completion_enabled?: boolean;
 };
 
 export type SimulationRunResultPayload = {
@@ -232,6 +253,7 @@ export type SimulationRunResultPayload = {
   prior_notes?: Array<Record<string, unknown>>;
   warnings?: string[];
   generation_debug?: Record<string, unknown> | null;
+  run_debug_summary?: SimulationRunDebugSummary | null;
   run_conditions?: SimulationRunConditions | null;
   personas?: Array<Record<string, unknown>>;
   response_record_preview?: Array<Record<string, unknown>>;
@@ -312,6 +334,7 @@ export type AnalysisPayload = {
     selected_segment?: string;
     filtered_record_count?: number;
   };
+  run_debug_summary?: SimulationRunDebugSummary | null;
   benchmark_snapshot?: {
     available?: boolean;
     message?: string;
@@ -809,6 +832,12 @@ export type PersonaPreviewResponse = {
   };
 };
 
+export type PromptPreviewResponse = {
+  data?: {
+    prompt_preview?: PromptPreviewPayload | null;
+  };
+};
+
 export type ModelCatalogResponse = {
   data?: {
     source?: "openrouter" | "fallback";
@@ -1229,6 +1258,25 @@ export async function generatePersonaPreview(
   };
 }
 
+export async function getPromptPreview(studyId: string, personaIndex = 0) {
+  const apiBaseUrl = getApiBaseUrl();
+  const response = await fetch(
+    `${apiBaseUrl}/api/v1/studies/${studyId}/prompt-preview?persona_index=${encodeURIComponent(String(personaIndex))}`
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      await readApiErrorMessage(
+        response,
+        `Prompt preview failed with status ${response.status}`
+      )
+    );
+  }
+
+  const result = (await response.json()) as PromptPreviewResponse;
+  return result.data?.prompt_preview ?? null;
+}
+
 export async function startSimulationRun(studyId: string) {
   const apiBaseUrl = getApiBaseUrl();
 
@@ -1443,13 +1491,31 @@ export async function getInterviewSynthesis(studyId: string): Promise<InterviewS
     { method: "GET", headers: { Accept: "application/json" }, cache: "no-store" }
   );
   if (!response.ok) {
-    throw new Error(await readApiErrorMessage(response, `Interview synthesis load failed with status ${response.status}`));
+    throw new Error(
+      await readApiErrorMessage(
+        response,
+        `Interview synthesis load failed with status ${response.status}`
+      )
+    );
   }
-  const result = (await response.json()) as { data?: { interview_synthesis?: InterviewSynthesisState } };
-  return result.data?.interview_synthesis ?? { status: "not_started", value: null, saved_at: null, updated_at: null, latest_run: null };
+  const result = (await response.json()) as {
+    data?: { interview_synthesis?: InterviewSynthesisState };
+  };
+  return (
+    result.data?.interview_synthesis ?? {
+      status: "not_started",
+      value: null,
+      saved_at: null,
+      updated_at: null,
+      latest_run: null,
+    }
+  );
 }
 
-export async function saveInterviewSynthesisConfig(studyId: string, payload: InterviewSynthesisConfig) {
+export async function saveInterviewSynthesisConfig(
+  studyId: string,
+  payload: InterviewSynthesisConfig
+) {
   const apiBaseUrl = getApiBaseUrl();
   const response = await fetch(
     `${apiBaseUrl}/api/v1/studies/${studyId}/interview/synthesis`,
@@ -1460,9 +1526,16 @@ export async function saveInterviewSynthesisConfig(studyId: string, payload: Int
     }
   );
   if (!response.ok) {
-    throw new Error(await readApiErrorMessage(response, `Interview synthesis save failed with status ${response.status}`));
+    throw new Error(
+      await readApiErrorMessage(
+        response,
+        `Interview synthesis save failed with status ${response.status}`
+      )
+    );
   }
-  const result = (await response.json()) as { data?: { interview_synthesis?: Omit<InterviewSynthesisState, "latest_run"> } };
+  const result = (await response.json()) as {
+    data?: { interview_synthesis?: Omit<InterviewSynthesisState, "latest_run"> };
+  };
   return result.data?.interview_synthesis ?? null;
 }
 
@@ -1480,22 +1553,38 @@ export async function startInterviewRun(
     }
   );
   if (!response.ok) {
-    throw new Error(await readApiErrorMessage(response, `Interview run failed with status ${response.status}`));
+    throw new Error(
+      await readApiErrorMessage(
+        response,
+        `Interview run failed with status ${response.status}`
+      )
+    );
   }
-  const result = (await response.json()) as { data?: { interview_run?: InterviewRunPayload } };
+  const result = (await response.json()) as {
+    data?: { interview_run?: InterviewRunPayload };
+  };
   return result.data?.interview_run ?? null;
 }
 
-export async function getLatestInterviewRun(studyId: string): Promise<InterviewRunPayload | null> {
+export async function getLatestInterviewRun(
+  studyId: string
+): Promise<InterviewRunPayload | null> {
   const apiBaseUrl = getApiBaseUrl();
   const response = await fetch(
     `${apiBaseUrl}/api/v1/studies/${studyId}/interview/runs/latest`,
     { method: "GET", headers: { Accept: "application/json" }, cache: "no-store" }
   );
   if (!response.ok) {
-    throw new Error(await readApiErrorMessage(response, `Interview run load failed with status ${response.status}`));
+    throw new Error(
+      await readApiErrorMessage(
+        response,
+        `Interview run load failed with status ${response.status}`
+      )
+    );
   }
-  const result = (await response.json()) as { data?: { interview_run?: InterviewRunPayload | null } };
+  const result = (await response.json()) as {
+    data?: { interview_run?: InterviewRunPayload | null };
+  };
   return result.data?.interview_run ?? null;
 }
 
@@ -1506,13 +1595,30 @@ export async function getResearchBrief(studyId: string): Promise<ResearchBriefSt
     { method: "GET", headers: { Accept: "application/json" }, cache: "no-store" }
   );
   if (!response.ok) {
-    throw new Error(await readApiErrorMessage(response, `Research brief load failed with status ${response.status}`));
+    throw new Error(
+      await readApiErrorMessage(
+        response,
+        `Research brief load failed with status ${response.status}`
+      )
+    );
   }
-  const result = (await response.json()) as { data?: { research_brief?: ResearchBriefState } };
-  return result.data?.research_brief ?? { status: "not_started", value: null, saved_at: null, updated_at: null };
+  const result = (await response.json()) as {
+    data?: { research_brief?: ResearchBriefState };
+  };
+  return (
+    result.data?.research_brief ?? {
+      status: "not_started",
+      value: null,
+      saved_at: null,
+      updated_at: null,
+    }
+  );
 }
 
-export async function saveResearchBrief(studyId: string, payload: Partial<ResearchBriefValue>) {
+export async function saveResearchBrief(
+  studyId: string,
+  payload: Partial<ResearchBriefValue>
+) {
   const apiBaseUrl = getApiBaseUrl();
   const response = await fetch(
     `${apiBaseUrl}/api/v1/studies/${studyId}/interview/brief`,
@@ -1523,21 +1629,37 @@ export async function saveResearchBrief(studyId: string, payload: Partial<Resear
     }
   );
   if (!response.ok) {
-    throw new Error(await readApiErrorMessage(response, `Research brief save failed with status ${response.status}`));
+    throw new Error(
+      await readApiErrorMessage(
+        response,
+        `Research brief save failed with status ${response.status}`
+      )
+    );
   }
-  const result = (await response.json()) as { data?: { research_brief?: ResearchBriefState } };
+  const result = (await response.json()) as {
+    data?: { research_brief?: ResearchBriefState };
+  };
   return result.data?.research_brief ?? null;
 }
 
-export async function getInterviewInsights(studyId: string): Promise<InterviewInsightsPayload> {
+export async function getInterviewInsights(
+  studyId: string
+): Promise<InterviewInsightsPayload> {
   const apiBaseUrl = getApiBaseUrl();
   const response = await fetch(
     `${apiBaseUrl}/api/v1/studies/${studyId}/interview/insights`,
     { method: "GET", headers: { Accept: "application/json" }, cache: "no-store" }
   );
   if (!response.ok) {
-    throw new Error(await readApiErrorMessage(response, `Interview insights load failed with status ${response.status}`));
+    throw new Error(
+      await readApiErrorMessage(
+        response,
+        `Interview insights load failed with status ${response.status}`
+      )
+    );
   }
-  const result = (await response.json()) as { data?: { interview_insights?: InterviewInsightsPayload } };
+  const result = (await response.json()) as {
+    data?: { interview_insights?: InterviewInsightsPayload };
+  };
   return result.data?.interview_insights ?? { available: false };
 }

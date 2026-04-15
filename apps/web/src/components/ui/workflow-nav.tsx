@@ -1,38 +1,36 @@
 "use client";
 
-import { useMemo } from "react";
+import { motion } from "framer-motion";
 
-import { navGroups } from "@/lib/workflow-sections";
+import { workflowSections } from "@/lib/workflow-sections";
+import { cn } from "@/lib/utils";
 import { useSectionRegistry } from "@/providers/section-registry-provider";
-import { NavGroupDropdown } from "@/components/ui/nav-group-dropdown";
+import { useTheme } from "@/providers/theme-provider";
 
 export function WorkflowNav() {
   const { activeSectionId, navigationLocked, scrollToSection } = useSectionRegistry();
-
-  const activeGroupIds = useMemo(() => {
-    const set = new Set<string>();
-    for (const group of navGroups) {
-      if (group.items.some((item) => item.id === activeSectionId)) {
-        set.add(group.id);
-      }
-    }
-    return set;
-  }, [activeSectionId]);
+  const { isReady, theme, toggleTheme } = useTheme();
+  const interviewSectionIds = [
+    "interview-synthesis",
+    "research-brief",
+    "interview-insights",
+  ] as const;
+  const isInterviewActive = interviewSectionIds.includes(
+    activeSectionId as (typeof interviewSectionIds)[number]
+  );
 
   return (
-    <header className="sticky top-0 z-50 border-b border-white/[0.06] bg-[rgba(10,15,19,0.78)] backdrop-blur-2xl">
+    <header className="sticky top-0 z-50 border-b [background:var(--nav-bg)] [border-color:var(--nav-border)] backdrop-blur-2xl">
       <div className="mx-auto flex h-[var(--nav-height)] w-full max-w-[92rem] items-center gap-4 px-4 md:px-6 lg:px-10">
         <button
           type="button"
           onClick={() => scrollToSection("main")}
-          className="flex min-w-0 shrink-0 items-center gap-3 text-left"
+          className="flex min-w-[14rem] shrink-0 items-center text-left sm:min-w-[18rem] xl:min-w-[22rem]"
         >
-          <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-[rgba(216,186,103,0.12)] font-display text-sm font-extrabold tracking-[0.18em] text-app-gold">
-            GL
-          </span>
-          <div className="min-w-0 max-w-[13rem] md:max-w-[16rem] xl:max-w-[20rem]">
-            <div className="truncate font-display text-xs font-semibold uppercase tracking-[0.18em] text-app-cyan md:text-sm">
-              Grounded Synthetic Respondent Lab
+          <div className="min-w-0">
+            <div className="font-display text-[0.74rem] font-semibold uppercase tracking-[0.12em] text-app-cyan sm:text-[0.8rem] xl:text-[0.84rem]">
+              <span className="sm:hidden">Grounded Synthetic Lab</span>
+              <span className="hidden sm:inline">Grounded Synthetic Respondent Lab</span>
             </div>
             <div className="hidden text-[0.68rem] tracking-[0.16em] text-app-muted lg:block">
               Premium grounded research workflow
@@ -40,19 +38,115 @@ export function WorkflowNav() {
           </div>
         </button>
 
-        <nav className="flex min-w-0 flex-1 items-center gap-1">
-          {navGroups.map((group) => (
-            <NavGroupDropdown
-              key={group.id}
-              group={group}
-              isAnyChildActive={activeGroupIds.has(group.id)}
-              navigationLocked={navigationLocked}
-              activeSectionId={activeSectionId}
-              onItemSelect={scrollToSection}
-            />
-          ))}
+        <nav className="fine-scrollbar flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
+          {workflowSections.map((section) => {
+            const isActive = activeSectionId === section.id;
+
+            return (
+              <button
+                key={section.id}
+                type="button"
+                onClick={() => scrollToSection(section.id)}
+                disabled={navigationLocked}
+                className={cn(
+                  "relative shrink-0 rounded-full px-3 py-2 text-sm tracking-[0.01em] transition-colors",
+                  navigationLocked && "cursor-not-allowed opacity-55",
+                  isActive
+                    ? "text-app-text"
+                    : "text-app-muted hover:text-app-cyan"
+                )}
+              >
+                {section.label}
+                {isActive ? (
+                  <motion.span
+                    layoutId="workflow-nav-indicator"
+                    className="absolute inset-x-3 bottom-0 h-px bg-app-cyan shadow-[0_0_18px_rgba(15,216,255,0.42)]"
+                  />
+                ) : null}
+              </button>
+            );
+          })}
         </nav>
+
+        <div className="flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            onClick={toggleTheme}
+            className="inline-flex items-center gap-2 rounded-full border px-3 py-2 text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-app-text transition hover:text-app-cyan [background:var(--button-secondary-bg)] [border-color:var(--button-secondary-border)]"
+            aria-label={
+              isReady
+                ? `Switch to ${theme === "dark" ? "light" : "dark"} mode`
+                : "Toggle color theme"
+            }
+            title={
+              isReady
+                ? `Switch to ${theme === "dark" ? "light" : "dark"} mode`
+                : "Toggle color theme"
+            }
+          >
+            <ThemeGlyph theme={theme} />
+            <span className="hidden sm:inline">{isReady ? theme : "Theme"}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => scrollToSection("interview-synthesis")}
+            disabled={navigationLocked}
+            className={cn(
+              "hidden rounded-full border px-4 py-1.5 text-[0.62rem] uppercase tracking-[0.22em] shadow-[0_0_24px_rgba(216,186,103,0.12)] transition xl:flex",
+              navigationLocked && "cursor-not-allowed opacity-55",
+              isInterviewActive
+                ? "border-app-gold/45 bg-[rgba(216,186,103,0.18)] text-app-gold"
+                : "border-app-gold/30 bg-[rgba(216,186,103,0.14)] text-app-gold hover:border-app-gold/45 hover:bg-[rgba(216,186,103,0.18)]"
+            )}
+            title="Jump to the interview workflow"
+          >
+            Interview
+          </button>
+        </div>
       </div>
     </header>
+  );
+}
+
+function ThemeGlyph({ theme }: { theme: "dark" | "light" }) {
+  if (theme === "light") {
+    return (
+      <svg
+        className="h-4 w-4"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        <circle cx="12" cy="12" r="4.5" />
+        <path d="M12 2.75v2.2" />
+        <path d="M12 19.05v2.2" />
+        <path d="m4.93 4.93 1.56 1.56" />
+        <path d="m17.51 17.51 1.56 1.56" />
+        <path d="M2.75 12h2.2" />
+        <path d="M19.05 12h2.2" />
+        <path d="m4.93 19.07 1.56-1.56" />
+        <path d="m17.51 6.49 1.56-1.56" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg
+      className="h-4 w-4"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M21 12.8A8.8 8.8 0 1 1 11.2 3a6.8 6.8 0 0 0 9.8 9.8Z" />
+    </svg>
   );
 }

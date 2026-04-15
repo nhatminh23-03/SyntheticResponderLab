@@ -21,7 +21,7 @@ export function BadgeChip({
         tone === "gold" &&
           "bg-[rgba(216,186,103,0.12)] text-app-gold shadow-[0_0_18px_rgba(216,186,103,0.14)]",
         tone === "neutral" &&
-          "bg-white/5 text-app-muted ring-1 ring-inset ring-white/10",
+          "text-app-muted [background:var(--badge-neutral-bg)] [box-shadow:inset_0_0_0_1px_var(--badge-neutral-border)]",
         className
       )}
     >

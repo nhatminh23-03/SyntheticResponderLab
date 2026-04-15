@@ -57,3 +57,8 @@ NeoSmart-Hackathon-App/.streamlit/
 .coverage
 coverage/
 htmlcov/
+
+# Presentation brainstorming files
+*.pptx
+~$*.pptx
+make_presentation.py

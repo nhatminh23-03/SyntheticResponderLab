@@ -14,7 +14,6 @@ import {
   startStabilityCheck,
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { isReadyToRun } from "@/lib/study-utils";
 import { useStudy } from "@/providers/study-provider";
 import { useSectionRegistry } from "@/providers/section-registry-provider";
 import { BadgeChip } from "@/components/ui/badge-chip";
@@ -160,6 +159,7 @@ export function RunSimulationSection() {
     () => latestRun?.result?.run_conditions ?? buildPredictedRunConditions(study),
     [latestRun?.result?.run_conditions, study]
   );
+  const runDebugSummary = latestRun?.result?.run_debug_summary ?? null;
   const latestRunWarnings = latestRun?.result?.warnings ?? [];
   const latestParseWarnings = latestRun?.result?.survey_parse_warnings ?? [];
   const allPersonas = latestRun?.result?.personas ?? [];
@@ -525,6 +525,29 @@ export function RunSimulationSection() {
                       />
                     </div>
 
+                    {runDebugSummary ? (
+                      <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                        <MetaCard
+                          label="Truly live answers"
+                          value={String(runDebugSummary.truly_live_answers ?? 0)}
+                        />
+                        <MetaCard
+                          label="Fallback answers"
+                          value={String(runDebugSummary.fallback_answers ?? 0)}
+                        />
+                        <MetaCard
+                          label="Provider errors"
+                          value={String(runDebugSummary.provider_error_count ?? 0)}
+                        />
+                        <MetaCard
+                          label="ML persona completion"
+                          value={
+                            runDebugSummary.ml_persona_completion_enabled ? "Enabled" : "Disabled"
+                          }
+                        />
+                      </div>
+                    ) : null}
+
                     {latestRunWarnings.length > 0 || latestParseWarnings.length > 0 ? (
                       <div className="mt-5 grid gap-4 xl:grid-cols-2">
                         {latestRunWarnings.length > 0 ? (
@@ -853,6 +876,13 @@ function buildReadinessBanner(study: any): StatusState {
   };
 }
 
+function isReadyToRun(study: any) {
+  return (
+    study?.audience?.status === "saved" &&
+    study?.survey?.status === "saved" &&
+    study?.experiment?.status === "saved"
+  );
+}
 
 function buildPredictedRunConditions(study: any): SimulationRunConditions {
   const latestPreview = study?.derived?.latest_persona_preview;

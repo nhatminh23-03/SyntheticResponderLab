@@ -10,7 +10,13 @@ export function MetricPill({
   accent = "cyan",
 }: MetricPillProps) {
   return (
-    <div className="rounded-2xl border border-white/6 bg-white/[0.03] px-4 py-3 backdrop-blur-md">
+    <div
+      className="rounded-2xl border px-4 py-3 backdrop-blur-md"
+      style={{
+        background: "var(--metric-pill-bg)",
+        borderColor: "var(--metric-pill-border)",
+      }}
+    >
       <div
         className={
           accent === "gold"
