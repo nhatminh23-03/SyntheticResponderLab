@@ -3,6 +3,10 @@
 .vscode/
 .idea/
 
+# Service account keys
+**/*service-account*.json
+apps/api/cra-applying-sql-24f08e40d0ae.json
+
 # Env files and secrets
 .env
 .env.local

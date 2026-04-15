@@ -3,6 +3,7 @@
 import { PropsWithChildren } from "react";
 
 import { ChapterNextArrow } from "@/components/ui/chapter-next-arrow";
+import { RunSimulationFab } from "@/components/ui/run-simulation-fab";
 import { WorkflowNav } from "@/components/ui/workflow-nav";
 
 export function AppShell({ children }: PropsWithChildren) {
@@ -17,7 +18,10 @@ export function AppShell({ children }: PropsWithChildren) {
       <WorkflowNav />
 
       <div className="relative">{children}</div>
-      <ChapterNextArrow />
+      <div className="pointer-events-none fixed inset-x-0 bottom-5 z-40 flex items-center justify-center gap-4 px-6">
+        <RunSimulationFab />
+        <ChapterNextArrow />
+      </div>
     </div>
   );
 }

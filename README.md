@@ -130,6 +130,13 @@ Important variables:
 - `LEGACY_APP_ROOT`
 - `CORS_ALLOW_ORIGINS`
 
+The backend now resolves relative paths from `apps/api/`. For local development, these values work:
+
+```env
+ARTIFACTS_ROOT=./artifacts
+LEGACY_APP_ROOT=../../NeoSmart-Hackathon-App
+```
+
 Optional provider credentials:
 - `OPENROUTER_API_KEY`
 - `OPENROUTER_BASE_URL`

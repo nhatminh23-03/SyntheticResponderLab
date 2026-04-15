@@ -14,6 +14,7 @@ import {
   startStabilityCheck,
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { isReadyToRun } from "@/lib/study-utils";
 import { useStudy } from "@/providers/study-provider";
 import { useSectionRegistry } from "@/providers/section-registry-provider";
 import { BadgeChip } from "@/components/ui/badge-chip";
@@ -852,13 +853,6 @@ function buildReadinessBanner(study: any): StatusState {
   };
 }
 
-function isReadyToRun(study: any) {
-  return (
-    study?.audience?.status === "saved" &&
-    study?.survey?.status === "saved" &&
-    study?.experiment?.status === "saved"
-  );
-}
 
 function buildPredictedRunConditions(study: any): SimulationRunConditions {
   const latestPreview = study?.derived?.latest_persona_preview;

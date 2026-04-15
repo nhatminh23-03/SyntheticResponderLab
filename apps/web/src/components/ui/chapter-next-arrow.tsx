@@ -23,11 +23,10 @@ export function ChapterNextArrow() {
   }
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-5 z-40 flex justify-center px-6">
-      <motion.button
-        type="button"
-        onClick={useInSectionAdvance ? goActiveSectionDown : goNextSection}
-        className="pointer-events-auto group relative inline-flex h-[4.35rem] w-[4.35rem] items-center justify-center rounded-full border border-app-cyan/30 bg-[radial-gradient(circle_at_30%_30%,rgba(15,216,255,0.24),rgba(17,24,29,0.92)_68%)] text-app-text shadow-[0_0_0_1px_rgba(15,216,255,0.12),0_0_28px_rgba(15,216,255,0.16),0_18px_42px_rgba(0,0,0,0.4)] backdrop-blur-xl transition hover:border-app-cyan/45 hover:text-app-cyan"
+    <motion.button
+      type="button"
+      onClick={useInSectionAdvance ? goActiveSectionDown : goNextSection}
+      className="pointer-events-auto group relative inline-flex h-[4.35rem] w-[4.35rem] shrink-0 items-center justify-center rounded-full border border-app-cyan/30 bg-[radial-gradient(circle_at_30%_30%,rgba(15,216,255,0.24),rgba(17,24,29,0.92)_68%)] text-app-text shadow-[0_0_0_1px_rgba(15,216,255,0.12),0_0_28px_rgba(15,216,255,0.16),0_18px_42px_rgba(0,0,0,0.4)] backdrop-blur-xl transition hover:border-app-cyan/45 hover:text-app-cyan"
         animate={{ y: [0, 8, 0], boxShadow: [
           "0 0 0 1px rgba(15,216,255,0.12), 0 0 28px rgba(15,216,255,0.16), 0 18px 42px rgba(0,0,0,0.4)",
           "0 0 0 1px rgba(15,216,255,0.2), 0 0 36px rgba(15,216,255,0.24), 0 20px 44px rgba(0,0,0,0.42)",
@@ -56,7 +55,6 @@ export function ChapterNextArrow() {
           <path d="M12 5v14" />
           <path d="m6 13 6 6 6-6" />
         </svg>
-      </motion.button>
-    </div>
+    </motion.button>
   );
 }

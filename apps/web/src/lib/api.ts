@@ -552,6 +552,124 @@ export type InsightsResponse = {
   };
 };
 
+// ---------------------------------------------------------------------------
+// Interview types
+// ---------------------------------------------------------------------------
+
+export type InterviewQuestion = {
+  id: string;
+  text: string;
+};
+
+export type InterviewSynthesisConfig = {
+  questions?: InterviewQuestion[] | null;
+  model_a?: string | null;
+  model_b?: string | null;
+  judge_model?: string | null;
+};
+
+export type InterviewDimensionScores = {
+  purchase_intent: 0 | 1;
+  primary_objection: 0 | 1;
+  fit_tier_alignment: 0 | 1;
+  use_case_specificity: 0 | 1;
+};
+
+export type InterviewPersonaScore = {
+  persona_id: string;
+  score: number;
+  dimension_scores: InterviewDimensionScores;
+  has_error: boolean;
+};
+
+export type InterviewGroundingReport = {
+  corpus_average: number;
+  passes_threshold: boolean;
+  threshold: number;
+  per_dimension_avg: {
+    purchase_intent: number;
+    primary_objection: number;
+    fit_tier_alignment: number;
+    use_case_specificity: number;
+  };
+  flagged_persona_ids: string[];
+  persona_scores: InterviewPersonaScore[];
+};
+
+export type InterviewAnswers = Record<string, string>;
+
+export type InterviewModelResult = {
+  model: string;
+  answers: InterviewAnswers;
+  error: string | null;
+};
+
+export type InterviewPair = {
+  persona_id: string;
+  persona_index: number;
+  persona: Record<string, unknown>;
+  model_a: InterviewModelResult;
+  model_b: InterviewModelResult;
+  generation_timestamp: string;
+};
+
+export type InterviewRunPayload = {
+  job_id: string;
+  status: "running" | "completed" | "failed";
+  persona_count: number | null;
+  model_a: string | null;
+  model_b: string | null;
+  grounding_report: InterviewGroundingReport | null;
+  pairs: InterviewPair[] | null;
+  error: { message?: string } | null;
+  queued_at: string | null;
+  completed_at: string | null;
+};
+
+export type InterviewSynthesisState = {
+  status: string;
+  value: InterviewSynthesisConfig | null;
+  saved_at: string | null;
+  updated_at: string | null;
+  latest_run: InterviewRunPayload | null;
+};
+
+export type ResearchBriefValue = {
+  primary_question: string;
+  hypotheses: string[];
+  decisions_to_inform: string[];
+  focus_fit_tiers: string[];
+  focus_segments: string[];
+  known_context: string | null;
+  notes: string | null;
+};
+
+export type ResearchBriefState = {
+  status: string;
+  value: ResearchBriefValue | null;
+  saved_at: string | null;
+  updated_at: string | null;
+};
+
+export type InterviewTheme = {
+  label: string;
+  count: number;
+  synthesis: string;
+  representative_quote: string;
+  quote_persona_id: string;
+  sentiment: "positive" | "neutral" | "negative";
+};
+
+export type InterviewInsightsPayload = {
+  available: boolean;
+  message?: string;
+  from_run_id?: string;
+  themes?: InterviewTheme[];
+  persona_count?: number;
+  grounding_corpus_average?: number | null;
+  grounding_passes_threshold?: boolean | null;
+};
+
 export type GetStudyResponse = {
   data?: {
     study?: CanonicalStudy;
@@ -1312,4 +1430,114 @@ export async function getInsights(studyId: string) {
 
   const result = (await response.json()) as InsightsResponse;
   return result.data?.insights ?? { available: false };
+}
+
+// ---------------------------------------------------------------------------
+// Interview fetch functions
+// ---------------------------------------------------------------------------
+
+export async function getInterviewSynthesis(studyId: string): Promise<InterviewSynthesisState> {
+  const apiBaseUrl = getApiBaseUrl();
+  const response = await fetch(
+    `${apiBaseUrl}/api/v1/studies/${studyId}/interview/synthesis`,
+    { method: "GET", headers: { Accept: "application/json" }, cache: "no-store" }
+  );
+  if (!response.ok) {
+    throw new Error(await readApiErrorMessage(response, `Interview synthesis load failed with status ${response.status}`));
+  }
+  const result = (await response.json()) as { data?: { interview_synthesis?: InterviewSynthesisState } };
+  return result.data?.interview_synthesis ?? { status: "not_started", value: null, saved_at: null, updated_at: null, latest_run: null };
+}
+
+export async function saveInterviewSynthesisConfig(studyId: string, payload: InterviewSynthesisConfig) {
+  const apiBaseUrl = getApiBaseUrl();
+  const response = await fetch(
+    `${apiBaseUrl}/api/v1/studies/${studyId}/interview/synthesis`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }
+  );
+  if (!response.ok) {
+    throw new Error(await readApiErrorMessage(response, `Interview synthesis save failed with status ${response.status}`));
+  }
+  const result = (await response.json()) as { data?: { interview_synthesis?: Omit<InterviewSynthesisState, "latest_run"> } };
+  return result.data?.interview_synthesis ?? null;
+}
+
+export async function startInterviewRun(
+  studyId: string,
+  payload?: Partial<InterviewSynthesisConfig>
+): Promise<InterviewRunPayload | null> {
+  const apiBaseUrl = getApiBaseUrl();
+  const response = await fetch(
+    `${apiBaseUrl}/api/v1/studies/${studyId}/interview/runs`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload ?? {}),
+    }
+  );
+  if (!response.ok) {
+    throw new Error(await readApiErrorMessage(response, `Interview run failed with status ${response.status}`));
+  }
+  const result = (await response.json()) as { data?: { interview_run?: InterviewRunPayload } };
+  return result.data?.interview_run ?? null;
+}
+
+export async function getLatestInterviewRun(studyId: string): Promise<InterviewRunPayload | null> {
+  const apiBaseUrl = getApiBaseUrl();
+  const response = await fetch(
+    `${apiBaseUrl}/api/v1/studies/${studyId}/interview/runs/latest`,
+    { method: "GET", headers: { Accept: "application/json" }, cache: "no-store" }
+  );
+  if (!response.ok) {
+    throw new Error(await readApiErrorMessage(response, `Interview run load failed with status ${response.status}`));
+  }
+  const result = (await response.json()) as { data?: { interview_run?: InterviewRunPayload | null } };
+  return result.data?.interview_run ?? null;
+}
+
+export async function getResearchBrief(studyId: string): Promise<ResearchBriefState> {
+  const apiBaseUrl = getApiBaseUrl();
+  const response = await fetch(
+    `${apiBaseUrl}/api/v1/studies/${studyId}/interview/brief`,
+    { method: "GET", headers: { Accept: "application/json" }, cache: "no-store" }
+  );
+  if (!response.ok) {
+    throw new Error(await readApiErrorMessage(response, `Research brief load failed with status ${response.status}`));
+  }
+  const result = (await response.json()) as { data?: { research_brief?: ResearchBriefState } };
+  return result.data?.research_brief ?? { status: "not_started", value: null, saved_at: null, updated_at: null };
+}
+
+export async function saveResearchBrief(studyId: string, payload: Partial<ResearchBriefValue>) {
+  const apiBaseUrl = getApiBaseUrl();
+  const response = await fetch(
+    `${apiBaseUrl}/api/v1/studies/${studyId}/interview/brief`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }
+  );
+  if (!response.ok) {
+    throw new Error(await readApiErrorMessage(response, `Research brief save failed with status ${response.status}`));
+  }
+  const result = (await response.json()) as { data?: { research_brief?: ResearchBriefState } };
+  return result.data?.research_brief ?? null;
+}
+
+export async function getInterviewInsights(studyId: string): Promise<InterviewInsightsPayload> {
+  const apiBaseUrl = getApiBaseUrl();
+  const response = await fetch(
+    `${apiBaseUrl}/api/v1/studies/${studyId}/interview/insights`,
+    { method: "GET", headers: { Accept: "application/json" }, cache: "no-store" }
+  );
+  if (!response.ok) {
+    throw new Error(await readApiErrorMessage(response, `Interview insights load failed with status ${response.status}`));
+  }
+  const result = (await response.json()) as { data?: { interview_insights?: InterviewInsightsPayload } };
+  return result.data?.interview_insights ?? { available: false };
 }

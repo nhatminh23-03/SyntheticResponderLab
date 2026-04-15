@@ -1,13 +1,23 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { useMemo } from "react";
 
-import { workflowSections } from "@/lib/workflow-sections";
-import { cn } from "@/lib/utils";
+import { navGroups } from "@/lib/workflow-sections";
 import { useSectionRegistry } from "@/providers/section-registry-provider";
+import { NavGroupDropdown } from "@/components/ui/nav-group-dropdown";
 
 export function WorkflowNav() {
   const { activeSectionId, navigationLocked, scrollToSection } = useSectionRegistry();
+
+  const activeGroupIds = useMemo(() => {
+    const set = new Set<string>();
+    for (const group of navGroups) {
+      if (group.items.some((item) => item.id === activeSectionId)) {
+        set.add(group.id);
+      }
+    }
+    return set;
+  }, [activeSectionId]);
 
   return (
     <header className="sticky top-0 z-50 border-b border-white/[0.06] bg-[rgba(10,15,19,0.78)] backdrop-blur-2xl">
@@ -30,46 +40,18 @@ export function WorkflowNav() {
           </div>
         </button>
 
-        <nav className="fine-scrollbar flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
-          {workflowSections.map((section) => {
-            const isActive = activeSectionId === section.id;
-
-            return (
-              <button
-                key={section.id}
-                type="button"
-                onClick={() => scrollToSection(section.id)}
-                disabled={navigationLocked}
-                className={cn(
-                  "relative shrink-0 rounded-full px-3 py-2 text-sm tracking-[0.01em] transition-colors",
-                  navigationLocked && "cursor-not-allowed opacity-55",
-                  isActive
-                    ? "text-app-text"
-                    : "text-app-muted hover:text-app-cyan"
-                )}
-              >
-                {section.label}
-                {isActive ? (
-                  <motion.span
-                    layoutId="workflow-nav-indicator"
-                    className="absolute inset-x-3 bottom-0 h-px bg-app-cyan shadow-[0_0_18px_rgba(15,216,255,0.42)]"
-                  />
-                ) : null}
-              </button>
-            );
-          })}
+        <nav className="flex min-w-0 flex-1 items-center gap-1">
+          {navGroups.map((group) => (
+            <NavGroupDropdown
+              key={group.id}
+              group={group}
+              isAnyChildActive={activeGroupIds.has(group.id)}
+              navigationLocked={navigationLocked}
+              activeSectionId={activeSectionId}
+              onItemSelect={scrollToSection}
+            />
+          ))}
         </nav>
-
-        <div className="hidden shrink-0 items-center gap-2 xl:flex">
-          <button
-            type="button"
-            disabled
-            className="rounded-full border border-app-gold/30 bg-[rgba(216,186,103,0.14)] px-4 py-1.5 text-[0.62rem] uppercase tracking-[0.22em] text-app-gold shadow-[0_0_24px_rgba(216,186,103,0.12)]"
-            title="Interview extension is not implemented yet."
-          >
-            Interview
-          </button>
-        </div>
       </div>
     </header>
   );
