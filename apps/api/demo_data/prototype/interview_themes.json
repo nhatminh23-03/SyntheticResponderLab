@@ -1,0 +1,260 @@
+{
+  "lda_topics": {
+    "num_topics": 6,
+    "coherence_score": 0.42,
+    "topics": [
+      {
+        "topic_id": 0,
+        "label": "Remote Work Space",
+        "keywords": [
+          "work",
+          "office",
+          "desk",
+          "quiet",
+          "space",
+          "home",
+          "remote",
+          "calls",
+          "noise",
+          "dedicated"
+        ]
+      },
+      {
+        "topic_id": 1,
+        "label": "Outdoor Activity Storage",
+        "keywords": [
+          "gear",
+          "bike",
+          "storage",
+          "garage",
+          "workshop",
+          "outdoor",
+          "equipment",
+          "tools",
+          "space",
+          "organize"
+        ]
+      },
+      {
+        "topic_id": 2,
+        "label": "Personal Wellness Retreat",
+        "keywords": [
+          "yoga",
+          "meditation",
+          "peace",
+          "sanctuary",
+          "wellness",
+          "calm",
+          "practice",
+          "studio",
+          "retreat",
+          "personal"
+        ]
+      },
+      {
+        "topic_id": 3,
+        "label": "Property Value & Investment",
+        "keywords": [
+          "value",
+          "property",
+          "invest",
+          "rental",
+          "income",
+          "adu",
+          "cost",
+          "roi",
+          "quality",
+          "appraisal"
+        ]
+      },
+      {
+        "topic_id": 4,
+        "label": "Family Space Needs",
+        "keywords": [
+          "kids",
+          "family",
+          "storage",
+          "play",
+          "room",
+          "house",
+          "space",
+          "budget",
+          "practical",
+          "affordable"
+        ]
+      },
+      {
+        "topic_id": 5,
+        "label": "Creative Studio",
+        "keywords": [
+          "studio",
+          "creative",
+          "music",
+          "art",
+          "record",
+          "film",
+          "design",
+          "content",
+          "setup",
+          "equipment"
+        ]
+      }
+    ]
+  },
+  "llm_themes": [
+    {
+      "theme_name": "The Desperate Home Office",
+      "description": "Remote and hybrid workers frustrated with makeshift workspaces, craving physical separation between work and personal life.",
+      "frequency": 10,
+      "supporting_quotes": [
+        {
+          "respondent_id": "INT01",
+          "quote": "I'm currently working from the dining table and it's not ideal."
+        },
+        {
+          "respondent_id": "INT06",
+          "quote": "Working from the guest bedroom means I'm never really off."
+        },
+        {
+          "respondent_id": "INT12",
+          "quote": "I need better work-life separation — my desk is in the living room."
+        }
+      ]
+    },
+    {
+      "theme_name": "The Gear Overflow Problem",
+      "description": "Active lifestyle enthusiasts whose equipment has taken over garages, closets, and living spaces, seeking dedicated storage and workshop space.",
+      "frequency": 6,
+      "supporting_quotes": [
+        {
+          "respondent_id": "INT04",
+          "quote": "My garage is packed and I can't fit my car in there anymore."
+        },
+        {
+          "respondent_id": "INT14",
+          "quote": "I need gear storage and an editing station for outdoor photography."
+        }
+      ]
+    },
+    {
+      "theme_name": "The Wellness Sanctuary Dream",
+      "description": "Health-conscious individuals seeking a personal retreat space for yoga, meditation, and creative practices away from household interruptions.",
+      "frequency": 5,
+      "supporting_quotes": [
+        {
+          "respondent_id": "INT06",
+          "quote": "I dream of a proper wellness space separate from the house."
+        },
+        {
+          "respondent_id": "INT21",
+          "quote": "I crave a personal sanctuary at home for decompression after long shifts."
+        }
+      ]
+    },
+    {
+      "theme_name": "The Smart Investment Angle",
+      "description": "Property-minded homeowners who view backyard structures as value-add investments, comparing favorably to expensive ADU alternatives.",
+      "frequency": 5,
+      "supporting_quotes": [
+        {
+          "respondent_id": "INT08",
+          "quote": "I follow property values closely — every improvement should add value."
+        },
+        {
+          "respondent_id": "INT22",
+          "quote": "I want an impressive, private meeting space that also adds to property value."
+        }
+      ]
+    },
+    {
+      "theme_name": "The Budget-Practical Family",
+      "description": "Cost-conscious families needing multipurpose space for kids, hobbies, and storage, where $23K is a significant but potentially worthwhile investment.",
+      "frequency": 4,
+      "supporting_quotes": [
+        {
+          "respondent_id": "INT10",
+          "quote": "We have too much stuff and not enough space."
+        },
+        {
+          "respondent_id": "INT17",
+          "quote": "I need somewhere to practice guitar without bothering neighbors."
+        }
+      ]
+    }
+  ],
+  "segment_suggestions": [
+    {
+      "segment_name": "Remote Work Refugees",
+      "description": "Professionals working from home full-time or hybrid who lack dedicated workspace and suffer from blurred work-life boundaries.",
+      "estimated_size": "30-35%",
+      "representative_respondents": [
+        "INT01",
+        "INT06",
+        "INT12",
+        "INT16",
+        "INT23",
+        "INT27"
+      ],
+      "key_driver": "Physical separation of work and home",
+      "primary_barrier": "HOA restrictions and cost justification"
+    },
+    {
+      "segment_name": "Adventure Basecamp Seekers",
+      "description": "Outdoor enthusiasts drowning in gear who want workshop/storage space integrated into their active lifestyle.",
+      "estimated_size": "15-20%",
+      "representative_respondents": [
+        "INT04",
+        "INT14",
+        "INT28"
+      ],
+      "key_driver": "Gear organization and hobby workspace",
+      "primary_barrier": "Budget and 120 sqft size limitations"
+    },
+    {
+      "segment_name": "Wellness Retreat Builders",
+      "description": "Health-focused individuals seeking a personal sanctuary for yoga, meditation, and creative practice.",
+      "estimated_size": "15-20%",
+      "representative_respondents": [
+        "INT05",
+        "INT06",
+        "INT19",
+        "INT21"
+      ],
+      "key_driver": "Privacy and personal renewal space",
+      "primary_barrier": "Interior aesthetics and climate control"
+    },
+    {
+      "segment_name": "Property Value Maximizers",
+      "description": "Investment-oriented homeowners who see backyard structures as affordable alternatives to ADUs with strong ROI potential.",
+      "estimated_size": "15-20%",
+      "representative_respondents": [
+        "INT08",
+        "INT11",
+        "INT18",
+        "INT22"
+      ],
+      "key_driver": "ROI, rental income, property appreciation",
+      "primary_barrier": "Quality perception and appraisal impact"
+    },
+    {
+      "segment_name": "Budget-Practical Families",
+      "description": "Cost-sensitive households needing multipurpose space for kids, hobbies, and storage. Financing is the key enabler.",
+      "estimated_size": "15-20%",
+      "representative_respondents": [
+        "INT10",
+        "INT17",
+        "INT26",
+        "INT30"
+      ],
+      "key_driver": "Affordable additional space for family needs",
+      "primary_barrier": "Price and financing availability"
+    }
+  ],
+  "existing_segment_mapping": {
+    "Remote Work Refugees": "Remote Professional",
+    "Adventure Basecamp Seekers": "Active Adventurer",
+    "Wellness Retreat Builders": "Wellness Seeker",
+    "Property Value Maximizers": "Property Maximizer",
+    "Budget-Practical Families": "Budget-Conscious DIYer"
+  }
+}

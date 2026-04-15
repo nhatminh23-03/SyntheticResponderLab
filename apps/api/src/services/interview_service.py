@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 
 from src.config.settings import AppSettings
 from src.persistence.models import Job, PersonaPreviewRun, Study, StudySectionState
+from src.services.demo_interview_fixtures import ensure_demo_interview_run
 from src.services.exceptions import ConflictApiError, ValidationApiError
 from src.services.ids import make_public_id
 from src.simulation.interview_runner import (
@@ -161,15 +162,27 @@ def start_interview_run(
             "No persona preview found. Run Personas Preview first before generating interviews."
         )
 
-    api_key = settings.openrouter_api_key or ""
-    if not api_key:
-        raise ConflictApiError("OPENROUTER_API_KEY is not configured.")
-
     # Resolve request parameters
     custom_questions = payload.get("questions") or config.get("questions") or None
     model_a = payload.get("model_a") or config.get("model_a") or DEFAULT_MODEL_A
     model_b = payload.get("model_b") or config.get("model_b") or DEFAULT_MODEL_B
     judge_model = payload.get("judge_model") or config.get("judge_model") or JUDGE_MODEL
+
+    if study.study_mode == "neo_smart":
+        demo_job = ensure_demo_interview_run(
+            session,
+            study,
+            latest_preview=latest_preview,
+            product=product,
+            questions=custom_questions,
+        )
+        session.commit()
+        session.refresh(study)
+        return _serialize_interview_job(demo_job)
+
+    api_key = settings.openrouter_api_key or ""
+    if not api_key:
+        raise ConflictApiError("OPENROUTER_API_KEY is not configured.")
 
     personas = [p.persona_json for p in sorted(latest_preview.personas, key=lambda x: x.row_index)]
 
@@ -329,12 +342,6 @@ def get_interview_insights(
         return {"available": False, "message": "Interview batch is empty."}
 
     api_key = settings.openrouter_api_key or ""
-    if not api_key:
-        return {
-            "available": False,
-            "message": "OPENROUTER_API_KEY not configured — cannot generate insights.",
-        }
-
     # Check if we already have cached insights for this run
     run_public_id = latest_run.public_id
     cached_insights_key = f"interview_insights_{run_public_id}"
@@ -344,6 +351,12 @@ def get_interview_insights(
             "available": True,
             "from_run_id": run_public_id,
             **existing_section.value_json,
+        }
+
+    if not api_key:
+        return {
+            "available": False,
+            "message": "OPENROUTER_API_KEY not configured — cannot generate insights.",
         }
 
     # Build transcript corpus for LLM

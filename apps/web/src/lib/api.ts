@@ -975,6 +975,38 @@ export async function saveStudyMode(studyId: string, studyMode: "neo_smart" | "g
   };
 }
 
+export async function bootstrapNeoDemoStudy(studyId: string) {
+  const apiBaseUrl = getApiBaseUrl();
+
+  const response = await fetch(
+    `${apiBaseUrl}/api/v1/studies/${studyId}/study-mode/bootstrap/neo`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      await readApiErrorMessage(
+        response,
+        `Neo demo bootstrap failed with status ${response.status}`
+      )
+    );
+  }
+
+  const payload = (await response.json()) as GetStudyResponse;
+  const study = payload.data?.study;
+
+  if (!study?.study_id) {
+    throw new Error("Neo demo bootstrap succeeded but no canonical study was returned.");
+  }
+
+  return normalizeCanonicalStudy(study);
+}
+
 export async function saveAudience(studyId: string, payload: AudiencePayload) {
   const apiBaseUrl = getApiBaseUrl();
 

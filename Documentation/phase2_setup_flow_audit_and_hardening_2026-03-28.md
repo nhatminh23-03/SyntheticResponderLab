@@ -656,3 +656,78 @@ Recommended implementation order:
 3. keep persona preview as the final pre-run checkpoint inside Experiment
 4. do not reintroduce a standalone Personas page
 
+## Addendum: Neo Demo Bootstrap And Offline Demo Path
+
+Date: 2026-04-15
+
+This addendum records follow-up changes made after the original Phase 2 pass to support the Neo Smart Living guided demo under live demo time constraints.
+
+### Backend bootstrap for Guided Demo
+
+Files:
+- `apps/api/src/services/study_service.py`
+- `apps/api/src/api/studies.py`
+- `apps/api/tests/test_studies_endpoints.py`
+
+Added capability:
+- `POST /api/v1/studies/{study_id}/study-mode/bootstrap/neo`
+
+Behavior:
+- saves Neo demo defaults for study mode, audience, product, market, survey, and experiment
+- generates and persists persona preview as part of the same bootstrap flow
+- seeds a starter research brief so downstream pages are already populated
+
+Effect:
+- Guided Demo now prepares a study that is actually ready for Interview Synthesis, instead of only loading local frontend defaults
+
+### Frontend Guided Demo wiring
+
+Files:
+- `apps/web/src/components/sections/study-mode-section.tsx`
+- `apps/web/src/lib/api.ts`
+
+Changes:
+- the Neo Guided Demo action now calls the backend bootstrap endpoint
+- status messaging now reflects that the study was prepared for Interview Synthesis
+
+Effect:
+- page 02 no longer depends on the user manually saving each setup section before continuing
+
+### Research Brief fallback and autofill
+
+File:
+- `apps/web/src/components/sections/research-brief-section.tsx`
+
+Changes:
+- when the research brief fetch is empty or fails locally for a Neo study, the section builds a starter brief from saved study context and the latest persona preview
+
+Effect:
+- page 12 remains usable in the demo path even when the normal fetch path is degraded locally
+
+### Offline demo interview fixture path
+
+Files:
+- `apps/api/src/services/demo_interview_fixtures.py`
+- `apps/api/src/services/interview_service.py`
+- `apps/api/tests/test_studies_endpoints.py`
+
+Changes:
+- Neo studies now use a seeded demo interview run instead of waiting on a live model call
+- interview insights are served from cached demo output before any provider-key checks
+- reruns for Neo studies return the demo run immediately
+
+Effect:
+- the demo no longer depends on OpenRouter latency or availability to show Interview Synthesis and Interview Insights
+
+### Prototype data handling
+
+Files:
+- `apps/api/demo_data/prototype/interview_transcripts.csv`
+- `apps/api/demo_data/prototype/interview_themes.json`
+
+Changes:
+- extracted prototype interview assets are stored directly in the repo under `apps/api/demo_data/prototype/`
+- the temporary root zip archive used during implementation was removed after extraction
+
+Effect:
+- demo fixtures now load from stable local files without runtime archive handling

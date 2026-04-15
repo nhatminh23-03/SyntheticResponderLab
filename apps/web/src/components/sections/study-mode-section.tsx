@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 
-import { loadNeoSurveyPreset, saveStudyMode } from "@/lib/api";
+import { bootstrapNeoDemoStudy, saveStudyMode } from "@/lib/api";
 import { buildStudyModeStatusMessage, StudyModeValue } from "@/lib/setup-flow-utils";
 import { cn } from "@/lib/utils";
 import { useStudy } from "@/providers/study-provider";
@@ -60,6 +60,7 @@ export function StudyModeSection() {
     isCreatingStudy,
     isHydratingStudy,
     refreshStudy,
+    setStudy,
   } = useStudy();
   const { scrollToSection } = useSectionRegistry();
   const [selectedMode, setSelectedMode] = useState<StudyModeValue | null>(null);
@@ -123,24 +124,28 @@ export function StudyModeSection() {
         throw new Error("No study is available yet.");
       }
 
-      const result = await saveStudyMode(resolvedStudyId, nextMode);
-      setSelectedMode(result.value as StudyModeValue);
-      const shouldAutoLoadNeoSurvey =
-        nextMode === "neo_smart" &&
-        (isSwitchingModes || study?.survey?.status !== "saved");
-      let neoSurveyPresetWarning: string | null = null;
+      const workspaceMessage = isSwitchingModes
+        ? " A fresh study workspace was created for the new mode so the downstream setup starts clean."
+        : "";
 
-      if (shouldAutoLoadNeoSurvey) {
-        try {
-          await loadNeoSurveyPreset(resolvedStudyId);
-        } catch (error) {
-          neoSurveyPresetWarning =
-            error instanceof Error
-              ? error.message
-              : "The Neo survey preset could not be loaded automatically.";
-        }
+      if (nextMode === "neo_smart") {
+        const bootstrappedStudy = await bootstrapNeoDemoStudy(resolvedStudyId);
+        setStudy(bootstrappedStudy);
+        setSelectedMode("neo_smart");
+
+        const previewWarnings =
+          bootstrappedStudy.derived?.latest_persona_preview?.warning_messages ?? [];
+        const previewMessage =
+          previewWarnings.length > 0
+            ? ` Persona preview completed with warnings: ${previewWarnings.join("; ")}`
+            : " Audience, product, market, survey, experiment, and persona preview are ready for Interview Synthesis.";
+
+        setStatusMessage(`Neo Smart Living Demo prepared.${workspaceMessage}${previewMessage}`);
+        return;
       }
 
+      const result = await saveStudyMode(resolvedStudyId, nextMode);
+      setSelectedMode(result.value as StudyModeValue);
       const refreshedStudy = await refreshStudy(resolvedStudyId);
       const preservedSavedSections = [
         refreshedStudy?.audience?.status === "saved" ? "Audience" : null,
@@ -153,17 +158,8 @@ export function StudyModeSection() {
         nextMode,
         isSwitchingModes ? [] : preservedSavedSections
       );
-      const workspaceMessage = isSwitchingModes
-        ? " A fresh study workspace was created for the new mode so the downstream setup starts clean."
-        : "";
       const neoSurveyMessage =
-        nextMode === "neo_smart"
-          ? shouldAutoLoadNeoSurvey
-            ? neoSurveyPresetWarning
-              ? ` Neo mode is saved, but the bundled survey preset still needs manual attention: ${neoSurveyPresetWarning}`
-              : " The bundled Neo survey preset was loaded automatically."
-            : " Neo defaults remain available across the guided setup path."
-          : " Downstream setup sections now start empty until you fill and save them.";
+        " Downstream setup sections now start empty until you fill and save them.";
       setStatusMessage(`${baseMessage}${workspaceMessage}${neoSurveyMessage}`);
     } catch (error) {
       setErrorMessage(

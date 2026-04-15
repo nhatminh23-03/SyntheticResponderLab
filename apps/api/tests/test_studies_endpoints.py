@@ -59,6 +59,91 @@ def test_patch_study_mode_endpoint(client):
     assert payload["study_lifecycle_status"] == "setup_in_progress"
 
 
+def test_bootstrap_neo_demo_endpoint_persists_ready_interview_setup(client, monkeypatch):
+    created = client.post("/api/v1/studies", json={}).json()["data"]["study"]
+    study_id = created["study_id"]
+
+    monkeypatch.setattr(
+        "src.services.study_service.preview_personas",
+        lambda **kwargs: {
+            "generation_mode": "grounded_priors",
+            "grounded_priors_available": True,
+            "cex_affordability_available": True,
+            "prior_notes": [{"note": "Grounded priors active"}],
+            "personas": [
+                {
+                    "persona_id": "neo-001",
+                    "segment_label": "Backyard office homeowners",
+                    "fit_tier": "strong",
+                    "age_bucket": "35-44",
+                    "income_bucket": "$75k-$124k",
+                },
+                {
+                    "persona_id": "neo-002",
+                    "segment_label": "Wellness-minded suburban households",
+                    "fit_tier": "soft",
+                    "age_bucket": "45-54",
+                    "income_bucket": "$125k-$199k",
+                },
+            ],
+        },
+    )
+
+    response = client.post(f"/api/v1/studies/{study_id}/study-mode/bootstrap/neo")
+
+    assert response.status_code == 200
+    payload = response.json()["data"]["study"]
+    assert payload["study_mode"]["value"] == "neo_smart"
+    assert payload["audience"]["status"] == "saved"
+    assert payload["product"]["status"] == "saved"
+    assert payload["product"]["value"]["product_name"] == "Tahoe Mini"
+    assert payload["market"]["status"] == "saved"
+    assert payload["survey"]["status"] == "saved"
+    assert payload["survey"]["source_filename"] == "Neo Smart Living — Survey_HighPriority.md"
+    assert payload["experiment"]["status"] == "saved"
+    assert payload["experiment"]["value"]["sample_size"] == 100
+    assert payload["experiment"]["value"]["experiment_mode"] == "split"
+    assert payload["derived"]["workflow"]["ready_for_persona_preview"] is True
+    assert payload["derived"]["latest_persona_preview"]["status"] == "completed"
+    assert payload["derived"]["latest_persona_preview"]["request"]["sample_size"] == 12
+    assert len(payload["derived"]["latest_persona_preview"]["personas"]) == 2
+    assert payload["lifecycle_status"] == "persona_previewed"
+
+    brief_response = client.get(f"/api/v1/studies/{study_id}/interview/brief")
+    assert brief_response.status_code == 200
+    brief_payload = brief_response.json()["data"]["research_brief"]
+    assert brief_payload["status"] == "saved"
+    assert "Tahoe Mini" in brief_payload["value"]["primary_question"]
+    assert brief_payload["value"]["focus_fit_tiers"] == ["strong", "soft"]
+    assert brief_payload["value"]["focus_segments"] == [
+        "Backyard office homeowners",
+        "Wellness-minded suburban households",
+    ]
+
+    latest_interview_response = client.get(
+        f"/api/v1/studies/{study_id}/interview/runs/latest"
+    )
+    assert latest_interview_response.status_code == 200
+    latest_interview_payload = latest_interview_response.json()["data"]["interview_run"]
+    assert latest_interview_payload["status"] == "completed"
+    assert latest_interview_payload["persona_count"] == 2
+    assert len(latest_interview_payload["pairs"]) == 2
+    assert latest_interview_payload["grounding_report"]["corpus_average"] > 0
+
+    rerun_response = client.post(f"/api/v1/studies/{study_id}/interview/runs", json={})
+    assert rerun_response.status_code == 200
+    rerun_payload = rerun_response.json()["data"]["interview_run"]
+    assert rerun_payload["status"] == "completed"
+    assert rerun_payload["persona_count"] == 2
+
+    insights_response = client.get(f"/api/v1/studies/{study_id}/interview/insights")
+    assert insights_response.status_code == 200
+    insights_payload = insights_response.json()["data"]["interview_insights"]
+    assert insights_payload["available"] is True
+    assert insights_payload["persona_count"] == 2
+    assert len(insights_payload["themes"]) >= 1
+
+
 def test_save_audience_and_get_workflow(client):
     created = client.post("/api/v1/studies", json={}).json()["data"]["study"]
     study_id = created["study_id"]

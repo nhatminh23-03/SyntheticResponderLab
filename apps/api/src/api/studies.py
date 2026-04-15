@@ -16,6 +16,7 @@ from src.schemas.study import (
     StudyModeUpdateRequest,
 )
 from src.services.study_service import (
+    bootstrap_neo_demo_study,
     clear_latest_simulation_runs,
     create_persona_preview,
     create_study,
@@ -107,6 +108,21 @@ def patch_study_mode_endpoint(
             "study_mode": result.study_mode.model_dump(mode="json"),
             "study_lifecycle_status": result.lifecycle_status,
         },
+    )
+
+
+@router.post("/api/v1/studies/{study_id}/study-mode/bootstrap/neo")
+def bootstrap_neo_demo_endpoint(
+    study_id: str,
+    request: Request,
+    db: Session = Depends(get_db_session),
+    settings: AppSettings = Depends(get_settings),
+):
+    study = get_study_or_404(db, study_id)
+    result = bootstrap_neo_demo_study(db, settings, study)
+    return response_envelope(
+        request,
+        {"study": result.model_dump(mode="json", by_alias=True)},
     )
 
 
