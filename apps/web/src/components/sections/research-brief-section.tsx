@@ -7,6 +7,7 @@ import { RevealOnScroll } from "@/components/ui/reveal-on-scroll";
 import { SectionHeader } from "@/components/ui/section-header";
 import { SectionWrapper } from "@/components/ui/section-wrapper";
 import {
+  CanonicalStudy,
   ResearchBriefValue,
   getResearchBrief,
   saveResearchBrief,
@@ -60,6 +61,40 @@ function toLines(items: string[]): string {
   return items.join("\n");
 }
 
+function buildNeoStarterBrief(study: CanonicalStudy | null): ResearchBriefValue {
+  const productName = study?.product?.value?.product_name ?? "Tahoe Mini";
+  const productType =
+    study?.product?.value?.product_type ??
+    study?.product?.value?.industry ??
+    "modular backyard studio";
+  const segmentLabels = (
+    study?.derived?.latest_persona_preview?.personas?.map((persona) =>
+      typeof persona.segment_label === "string" ? persona.segment_label.trim() : ""
+    ) ?? []
+  ).filter(Boolean);
+  const uniqueSegments = Array.from(new Set(segmentLabels)).slice(0, 4);
+
+  return {
+    primary_question: `Which customer segments show the strongest purchase potential for ${productName}, and which barriers matter most before launch?`,
+    hypotheses: [
+      `Strong-fit respondents will react best to ${productName} as a flexible ${productType} for work, wellness, or guest use.`,
+      "Price, permit confidence, and backyard fit will remain the main conversion barriers.",
+      "Fast install and practical everyday utility will outperform purely aspirational messaging.",
+    ],
+    decisions_to_inform: [
+      "Which segment should anchor launch positioning.",
+      "Which use cases deserve top billing in the narrative.",
+      "Which objections need proof points, financing support, or permit guidance.",
+    ],
+    focus_fit_tiers: ["strong", "soft"],
+    focus_segments: uniqueSegments,
+    known_context:
+      `${productName} is positioned as a permit-light backyard structure with fast install and flexible use cases. ` +
+      "This starter brief was generated from the Neo guided demo context.",
+    notes: "Refine this starter brief before generating interview insights if you need a narrower decision lens.",
+  };
+}
+
 export function ResearchBriefSection() {
   const { studyId, study } = useStudy();
   const { scrollToSection } = useSectionRegistry();
@@ -67,6 +102,7 @@ export function ResearchBriefSection() {
   const [isSaving, setIsSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [statusMsg, setStatusMsg] = useState<string | null>(null);
 
   // Form fields
   const [primaryQuestion, setPrimaryQuestion] = useState("");
@@ -77,29 +113,88 @@ export function ResearchBriefSection() {
   const [knownContext, setKnownContext] = useState("");
   const [notes, setNotes] = useState("");
 
+  function applyBriefValue(value: ResearchBriefValue) {
+    setPrimaryQuestion(value.primary_question || "");
+    setHypothesesText(toLines(value.hypotheses || []));
+    setDecisionsText(toLines(value.decisions_to_inform || []));
+    setFocusTiers(value.focus_fit_tiers || []);
+    setFocusSegmentsText(toLines(value.focus_segments || []));
+    setKnownContext(value.known_context || "");
+    setNotes(value.notes || "");
+  }
+
+  function resetBriefForm() {
+    setPrimaryQuestion("");
+    setHypothesesText("");
+    setDecisionsText("");
+    setFocusTiers([]);
+    setFocusSegmentsText("");
+    setKnownContext("");
+    setNotes("");
+  }
+
   useEffect(() => {
     let cancelled = false;
     async function hydrate() {
-      if (!studyId) return;
+      if (!studyId) {
+        if (!cancelled) {
+          resetBriefForm();
+          setSavedAt(null);
+          setStatusMsg(null);
+        }
+        return;
+      }
+      const neoStarterBrief =
+        study?.study_mode?.value === "neo_smart" ? buildNeoStarterBrief(study) : null;
+
       try {
         const state = await getResearchBrief(studyId);
-        if (!cancelled && state.value) {
-          const v = state.value;
-          setPrimaryQuestion(v.primary_question || "");
-          setHypothesesText(toLines(v.hypotheses || []));
-          setDecisionsText(toLines(v.decisions_to_inform || []));
-          setFocusTiers(v.focus_fit_tiers || []);
-          setFocusSegmentsText(toLines(v.focus_segments || []));
-          setKnownContext(v.known_context || "");
-          setNotes(v.notes || "");
-          setSavedAt(state.saved_at);
+        if (cancelled) {
+          return;
         }
-      } catch {
-        // silently ignore
+
+        if (state.value) {
+          applyBriefValue(state.value);
+          setSavedAt(state.saved_at);
+          setStatusMsg("Saved research brief loaded from the current study.");
+          return;
+        }
+
+        if (neoStarterBrief) {
+          applyBriefValue(neoStarterBrief);
+          setSavedAt(null);
+          setStatusMsg("Neo starter brief loaded locally. Save to persist it.");
+          return;
+        }
+
+        resetBriefForm();
+        setSavedAt(null);
+        setStatusMsg(null);
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        if (neoStarterBrief) {
+          applyBriefValue(neoStarterBrief);
+          setSavedAt(null);
+          setStatusMsg(
+            "Research brief fetch failed locally. Showing a Neo starter brief from the current study context."
+          );
+          return;
+        }
+
+        resetBriefForm();
+        setSavedAt(null);
+        setStatusMsg(
+          error instanceof Error ? error.message : "Research brief could not be loaded."
+        );
       }
     }
     void hydrate();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [studyId, study?.updated_at]);
 
   function toggleTier(tier: string) {
@@ -127,7 +222,10 @@ export function ResearchBriefSection() {
         notes: notes.trim() || null,
       };
       const saved = await saveResearchBrief(studyId, payload);
-      if (saved) setSavedAt(saved.saved_at);
+      if (saved) {
+        setSavedAt(saved.saved_at);
+        setStatusMsg("Research brief saved successfully.");
+      }
     } catch (e) {
       setErrorMsg(e instanceof Error ? e.message : "Save failed.");
     } finally {
@@ -255,6 +353,9 @@ export function ResearchBriefSection() {
               )}
               {errorMsg && (
                 <p className="text-sm text-red-400">{errorMsg}</p>
+              )}
+              {!errorMsg && statusMsg && !savedAt && (
+                <p className="text-sm text-app-muted">{statusMsg}</p>
               )}
             </div>
           </RevealOnScroll>

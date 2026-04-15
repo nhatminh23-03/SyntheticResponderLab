@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl
 
@@ -147,3 +147,16 @@ class StabilityCheckRequest(BaseModel):
 
 class SimulationRunRequest(BaseModel):
     prompt_user_template: Optional[str] = None
+
+
+class InterviewChatMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str
+
+
+class InterviewChatRequest(BaseModel):
+    persona_id: str
+    prompt: str
+    messages: List[InterviewChatMessage] = Field(default_factory=list)
+    transcript_source: Literal["model_a", "model_b"] = "model_a"
+    model: Optional[str] = None

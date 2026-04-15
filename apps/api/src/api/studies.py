@@ -9,6 +9,7 @@ from src.api.dependencies import get_db_session, get_settings
 from src.api.errors import response_envelope
 from src.config.settings import AppSettings
 from src.schemas.study import (
+    InterviewChatRequest,
     PersonaPreviewRequest,
     ProductUrlAutofillRequest,
     StabilityCheckRequest,
@@ -16,6 +17,7 @@ from src.schemas.study import (
     StudyModeUpdateRequest,
 )
 from src.services.study_service import (
+    bootstrap_neo_demo_study,
     clear_latest_simulation_runs,
     create_persona_preview,
     create_study,
@@ -40,6 +42,7 @@ from src.services.study_service import (
     start_stability_check,
 )
 from src.services.interview_service import (
+    continue_interview_chat,
     get_interview_synthesis,
     save_interview_synthesis_config,
     start_interview_run,
@@ -107,6 +110,21 @@ def patch_study_mode_endpoint(
             "study_mode": result.study_mode.model_dump(mode="json"),
             "study_lifecycle_status": result.lifecycle_status,
         },
+    )
+
+
+@router.post("/api/v1/studies/{study_id}/study-mode/bootstrap/neo")
+def bootstrap_neo_demo_endpoint(
+    study_id: str,
+    request: Request,
+    db: Session = Depends(get_db_session),
+    settings: AppSettings = Depends(get_settings),
+):
+    study = get_study_or_404(db, study_id)
+    result = bootstrap_neo_demo_study(db, settings, study)
+    return response_envelope(
+        request,
+        {"study": result.model_dump(mode="json", by_alias=True)},
     )
 
 
@@ -494,3 +512,16 @@ def interview_insights_endpoint(
     study = get_study_or_404(db, study_id)
     result = get_interview_insights(db, settings, study)
     return response_envelope(request, {"interview_insights": result})
+
+
+@router.post("/api/v1/studies/{study_id}/interview/chat")
+def interview_chat_endpoint(
+    study_id: str,
+    payload: InterviewChatRequest,
+    request: Request,
+    db: Session = Depends(get_db_session),
+    settings: AppSettings = Depends(get_settings),
+):
+    study = get_study_or_404(db, study_id)
+    result = continue_interview_chat(db, settings, study, payload.model_dump())
+    return response_envelope(request, {"interview_chat": result})
