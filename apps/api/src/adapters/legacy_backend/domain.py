@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import Counter
 from datetime import datetime, timezone
+import inspect
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -93,6 +94,56 @@ def list_model_catalog(*, settings: AppSettings) -> dict:
         "models": fallback_models,
         "warning": result.get("error") or "OpenRouter model catalog unavailable.",
     }
+
+
+def _generate_response_records_compat(run_manager: Any, **kwargs: Any) -> List[Any]:
+    """Call legacy run_manager.generate_response_records across signature variants.
+
+    The legacy app in this repository can drift independently from the API adapter.
+    Some versions accept optional kwargs like allow_mock_fallback or
+    user_instruction_template_override, while older versions do not.
+    """
+
+    generate_records = run_manager.generate_response_records
+
+    return _call_with_supported_kwargs(generate_records, **kwargs)
+
+
+def _call_with_supported_kwargs(function: Any, **kwargs: Any) -> Any:
+    """Call a function while safely dropping unsupported keyword arguments."""
+
+    try:
+        signature = inspect.signature(function)
+        accepts_var_kwargs = any(
+            parameter.kind is inspect.Parameter.VAR_KEYWORD
+            for parameter in signature.parameters.values()
+        )
+
+        if accepts_var_kwargs:
+            return function(**kwargs)
+
+        filtered_kwargs = {
+            key: value for key, value in kwargs.items() if key in signature.parameters
+        }
+        return function(**filtered_kwargs)
+    except (TypeError, ValueError):
+        return function(**kwargs)
+
+
+def _run_simulation_compat(run_manager: Any, **kwargs: Any) -> Any:
+    """Call whichever simulation entrypoint exists in the loaded legacy run manager."""
+
+    run_simulation = getattr(run_manager, "run_simulation", None)
+    if callable(run_simulation):
+        return _call_with_supported_kwargs(run_simulation, **kwargs)
+
+    run_mock_simulation = getattr(run_manager, "run_mock_simulation", None)
+    if callable(run_mock_simulation):
+        return _call_with_supported_kwargs(run_mock_simulation, **kwargs)
+
+    raise AttributeError(
+        "Legacy run_manager exposes neither run_simulation nor run_mock_simulation."
+    )
 
 
 def parse_normalize_validate_survey(file_name: str, file_bytes: bytes, legacy_root: Path) -> dict:
@@ -280,7 +331,8 @@ def execute_simulation_run(
                 "OPENROUTER_BASE_URL": settings.openrouter_base_url,
             }
         ):
-            records = run_manager.generate_response_records(
+            records = _generate_response_records_compat(
+                run_manager,
                 config=config,
                 survey_schema=survey_schema,
                 audience_filter=audience,
@@ -292,7 +344,8 @@ def execute_simulation_run(
                 allow_mock_fallback=True,
                 user_instruction_template_override=prompt_user_template_override,
             )
-            result = run_manager.run_simulation(
+            result = _run_simulation_compat(
+                run_manager,
                 config=config,
                 generation_mode=generation_mode,
                 provider_model_name=provider_model_name,
@@ -497,7 +550,8 @@ def execute_stability_check(
                     "OPENROUTER_BASE_URL": settings.openrouter_base_url,
                 }
             ):
-                records = run_manager.generate_response_records(
+                records = _generate_response_records_compat(
+                    run_manager,
                     config=config,
                     survey_schema=survey_schema,
                     audience_filter=audience,
