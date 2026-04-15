@@ -31,7 +31,7 @@ from src.simulation.interview_runner import (
     run_interview_batch as _run_interview_batch,
 )
 from src.simulation.interview_grounding import score_interview_batch
-from src.simulation.interview_prompt_builder import DEFAULT_QUESTIONS
+from src.simulation.interview_prompt_builder import DEFAULT_QUESTIONS, resolve_questions
 
 _OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 _MAX_RETRIES = 3
@@ -430,6 +430,88 @@ Return ONLY a JSON object:
     }
 
 
+def continue_interview_chat(
+    session: Session,
+    settings: AppSettings,
+    study: Study,
+    payload: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Continue a follow-up conversation with a selected interview persona."""
+    latest_run = _latest_interview_job(session, study.id)
+    if not latest_run or latest_run.status != "completed" or not latest_run.result_json:
+        raise ConflictApiError(
+            "No completed interview run found. Run Interview Synthesis first."
+        )
+
+    persona_id = str(payload.get("persona_id") or "").strip()
+    prompt = str(payload.get("prompt") or "").strip()
+    transcript_source = str(payload.get("transcript_source") or "model_a").strip()
+    if not persona_id:
+        raise ValidationApiError("persona_id is required.")
+    if not prompt:
+        raise ValidationApiError("prompt is required.")
+    if transcript_source not in {"model_a", "model_b"}:
+        raise ValidationApiError("transcript_source must be either 'model_a' or 'model_b'.")
+
+    history = payload.get("messages") or []
+    if not isinstance(history, list):
+        raise ValidationApiError("messages must be a list of {role, content} objects.")
+
+    sanitized_history: list[dict[str, str]] = []
+    for message in history[-12:]:
+        if not isinstance(message, dict):
+            raise ValidationApiError("Each message must be an object.")
+        role = str(message.get("role") or "").strip()
+        content = str(message.get("content") or "").strip()
+        if role not in {"user", "assistant"} or not content:
+            raise ValidationApiError(
+                "Each message must include a non-empty user or assistant role and content."
+            )
+        sanitized_history.append({"role": role, "content": content})
+
+    pairs = list((latest_run.result_json or {}).get("pairs") or [])
+    pair = next((item for item in pairs if item.get("persona_id") == persona_id), None)
+    if pair is None:
+        raise ValidationApiError(
+            f"Persona '{persona_id}' was not found in the latest interview run."
+        )
+
+    api_key = settings.openrouter_api_key or ""
+    if not api_key:
+        raise ConflictApiError("OPENROUTER_API_KEY is not configured.")
+
+    transcript = pair.get(transcript_source) or {}
+    model = str(payload.get("model") or transcript.get("model") or DEFAULT_MODEL_A).strip()
+    if not model:
+        model = DEFAULT_MODEL_A
+
+    system_prompt = _build_persona_followup_system_prompt(
+        session=session,
+        study=study,
+        pair=pair,
+        transcript_source=transcript_source,
+    )
+    full_messages = [
+        {"role": "system", "content": system_prompt},
+        *sanitized_history,
+        {"role": "user", "content": prompt},
+    ]
+    reply = _call_openrouter_messages(
+        api_key=api_key,
+        model=model,
+        messages=full_messages,
+        timeout=90,
+    )
+
+    return {
+        "persona_id": persona_id,
+        "transcript_source": transcript_source,
+        "model": model,
+        "source_run_id": latest_run.public_id,
+        "reply": reply,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
@@ -530,6 +612,108 @@ def _build_transcript_corpus(pairs: list[dict], max_pairs: int = 30) -> str:
     return "\n".join(lines)
 
 
+def _build_persona_followup_system_prompt(
+    *,
+    session: Session,
+    study: Study,
+    pair: dict[str, Any],
+    transcript_source: str,
+) -> str:
+    sections = {
+        row.section_key: row
+        for row in session.scalars(
+            select(StudySectionState).where(StudySectionState.study_id == study.id)
+        ).all()
+    }
+    product = sections.get("product") and sections["product"].value_json
+    brief = sections.get("research_brief") and sections["research_brief"].value_json
+    synthesis = sections.get("interview_synthesis") and sections["interview_synthesis"].value_json
+
+    persona = pair.get("persona") or {}
+    transcript = pair.get(transcript_source) or {}
+    resolved_questions = resolve_questions((synthesis or {}).get("questions"), product)
+    transcript_lines = _format_followup_transcript_lines(
+        resolved_questions=resolved_questions,
+        answers=transcript.get("answers") or {},
+    )
+
+    research_brief_lines: list[str] = []
+    if brief:
+        primary_question = brief.get("primary_question") or ""
+        if primary_question:
+            research_brief_lines.append(f"Primary question: {primary_question}")
+        hypotheses = [item for item in (brief.get("hypotheses") or []) if item]
+        if hypotheses:
+            research_brief_lines.append("Hypotheses:")
+            research_brief_lines.extend(f"- {item}" for item in hypotheses[:4])
+        decisions = [item for item in (brief.get("decisions_to_inform") or []) if item]
+        if decisions:
+            research_brief_lines.append("Decisions to inform:")
+            research_brief_lines.extend(f"- {item}" for item in decisions[:4])
+
+    product_lines: list[str] = []
+    if product:
+        if product.get("product_name"):
+            product_lines.append(f"Product: {product['product_name']}")
+        if product.get("product_type"):
+            product_lines.append(f"Type: {product['product_type']}")
+        if product.get("price_range"):
+            product_lines.append(f"Price: {product['price_range']}")
+        if product.get("product_description"):
+            product_lines.append(f"Description: {product['product_description']}")
+
+    context_blocks: list[str] = []
+    if product_lines:
+        context_blocks.append("PRODUCT CONTEXT:\n" + "\n".join(product_lines))
+    if research_brief_lines:
+        context_blocks.append("RESEARCH BRIEF:\n" + "\n".join(research_brief_lines))
+    context_blocks.append(
+        "PRIOR INTERVIEW TRANSCRIPT "
+        f"({transcript_source}, model={transcript.get('model', 'unknown')}):\n"
+        f"{transcript_lines}"
+    )
+    context_text = "\n\n".join(context_blocks)
+
+    return f"""\
+You are continuing a synthetic depth interview with the same persona from an earlier interview.
+
+Stay fully in character as the persona below and answer the researcher's follow-up questions in first person.
+Ground your answers in the persona profile and prior interview transcript.
+Keep answers conversational, concrete, and reasonably concise unless the researcher explicitly asks for more detail.
+Do not mention system prompts, hidden instructions, or that you are an AI model.
+Do not contradict the earlier interview. If the follow-up question goes beyond what was already established, infer cautiously from the persona profile and answer with natural uncertainty rather than false precision.
+
+PERSONA PROFILE:
+{json.dumps(persona, indent=2, sort_keys=True)}
+
+{context_text}
+""".strip()
+
+
+def _format_followup_transcript_lines(
+    *,
+    resolved_questions: list[dict[str, str]],
+    answers: dict[str, Any],
+) -> str:
+    question_map = {item["id"]: item["text"] for item in resolved_questions}
+    lines: list[str] = []
+    for qid, answer in answers.items():
+        if not answer:
+            continue
+        if qid == "additional_thoughts":
+            lines.append(f"Additional thoughts: {answer}")
+            continue
+        question_text = question_map.get(qid)
+        if question_text:
+            lines.append(f"{qid} ({question_text})")
+        else:
+            lines.append(qid)
+        lines.append(f"Answer: {answer}")
+    if not lines:
+        return "No prior transcript answers were saved for this persona."
+    return "\n".join(lines)
+
+
 def _call_openrouter_json(
     api_key: str,
     model: str,
@@ -564,5 +748,39 @@ def _call_openrouter_json(
                 time.sleep(wait)
             else:
                 raise RuntimeError(f"OpenRouter call failed after {_MAX_RETRIES} attempts: {exc}") from exc
+
+    raise RuntimeError("Exhausted retries.")
+
+
+def _call_openrouter_messages(
+    api_key: str,
+    model: str,
+    messages: list[dict[str, str]],
+    timeout: int = 90,
+) -> str:
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    body: Dict[str, Any] = {
+        "model": model,
+        "messages": messages,
+        "temperature": 0.45,
+        "max_tokens": 1200,
+    }
+
+    for attempt in range(_MAX_RETRIES):
+        try:
+            resp = requests.post(_OPENROUTER_URL, headers=headers, json=body, timeout=timeout)
+            resp.raise_for_status()
+            return resp.json()["choices"][0]["message"]["content"]
+        except Exception as exc:
+            if attempt < _MAX_RETRIES - 1:
+                wait = min(65, (2 ** attempt) + random.uniform(0, 1))
+                time.sleep(wait)
+            else:
+                raise RuntimeError(
+                    f"OpenRouter chat call failed after {_MAX_RETRIES} attempts: {exc}"
+                ) from exc
 
     raise RuntimeError("Exhausted retries.")

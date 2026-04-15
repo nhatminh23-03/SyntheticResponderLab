@@ -9,6 +9,7 @@ from src.api.dependencies import get_db_session, get_settings
 from src.api.errors import response_envelope
 from src.config.settings import AppSettings
 from src.schemas.study import (
+    InterviewChatRequest,
     PersonaPreviewRequest,
     ProductUrlAutofillRequest,
     StabilityCheckRequest,
@@ -48,6 +49,7 @@ from src.services.interview_service import (
     get_research_brief,
     save_research_brief,
     get_interview_insights,
+    continue_interview_chat,
 )
 
 
@@ -510,3 +512,16 @@ def interview_insights_endpoint(
     study = get_study_or_404(db, study_id)
     result = get_interview_insights(db, settings, study)
     return response_envelope(request, {"interview_insights": result})
+
+
+@router.post("/api/v1/studies/{study_id}/interview/chat")
+def interview_chat_endpoint(
+    study_id: str,
+    payload: InterviewChatRequest,
+    request: Request,
+    db: Session = Depends(get_db_session),
+    settings: AppSettings = Depends(get_settings),
+):
+    study = get_study_or_404(db, study_id)
+    result = continue_interview_chat(db, settings, study, payload.model_dump())
+    return response_envelope(request, {"interview_chat": result})

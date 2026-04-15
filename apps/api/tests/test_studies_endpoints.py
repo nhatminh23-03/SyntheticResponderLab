@@ -144,6 +144,85 @@ def test_bootstrap_neo_demo_endpoint_persists_ready_interview_setup(client, monk
     assert len(insights_payload["themes"]) >= 1
 
 
+def test_interview_chat_endpoint_continues_selected_persona(client, monkeypatch):
+    created = client.post("/api/v1/studies", json={}).json()["data"]["study"]
+    study_id = created["study_id"]
+
+    monkeypatch.setattr(
+        "src.services.study_service.preview_personas",
+        lambda **kwargs: {
+            "generation_mode": "grounded_priors",
+            "grounded_priors_available": True,
+            "cex_affordability_available": True,
+            "prior_notes": [{"note": "Grounded priors active"}],
+            "personas": [
+                {
+                    "persona_id": "neo-001",
+                    "segment_label": "Backyard office homeowners",
+                    "fit_tier": "strong",
+                    "age_bucket": "35-44",
+                    "income_bucket": "$75k-$124k",
+                    "likely_use_case": "Dedicated home office",
+                },
+            ],
+        },
+    )
+
+    bootstrap_response = client.post(f"/api/v1/studies/{study_id}/study-mode/bootstrap/neo")
+    assert bootstrap_response.status_code == 200
+
+    latest_interview_response = client.get(
+        f"/api/v1/studies/{study_id}/interview/runs/latest"
+    )
+    assert latest_interview_response.status_code == 200
+    latest_interview = latest_interview_response.json()["data"]["interview_run"]
+    persona_id = latest_interview["pairs"][0]["persona_id"]
+
+    client.app.state.settings.openrouter_api_key = "test-key"
+    captured = {}
+
+    def fake_call_openrouter_messages(**kwargs):
+        captured.update(kwargs)
+        return "I would move faster if the install felt predictable and the price included everything."
+
+    monkeypatch.setattr(
+        "src.services.interview_service._call_openrouter_messages",
+        fake_call_openrouter_messages,
+    )
+
+    response = client.post(
+        f"/api/v1/studies/{study_id}/interview/chat",
+        json={
+            "persona_id": persona_id,
+            "prompt": "What would make you more confident about buying?",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Remind me what matters most in your decision?",
+                },
+                {
+                    "role": "assistant",
+                    "content": "I need to trust the install process and feel like I will use it every week.",
+                },
+            ],
+            "transcript_source": "model_a",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()["data"]["interview_chat"]
+    assert payload["persona_id"] == persona_id
+    assert payload["transcript_source"] == "model_a"
+    assert payload["reply"].startswith("I would move faster")
+    assert payload["model"] == latest_interview["pairs"][0]["model_a"]["model"]
+    assert captured["api_key"] == "test-key"
+    assert captured["messages"][0]["role"] == "system"
+    assert captured["messages"][-1] == {
+        "role": "user",
+        "content": "What would make you more confident about buying?",
+    }
+
+
 def test_save_audience_and_get_workflow(client):
     created = client.post("/api/v1/studies", json={}).json()["data"]["study"]
     study_id = created["study_id"]
