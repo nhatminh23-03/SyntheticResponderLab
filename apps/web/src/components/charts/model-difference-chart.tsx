@@ -62,7 +62,7 @@ export function ModelDifferenceChart({
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, amount: 0.3 }}
             transition={{ duration: 0.35, delay: rowIndex * 0.05 }}
-            className="rounded-[1.05rem] border border-white/6 bg-[linear-gradient(180deg,rgba(255,255,255,0.022),rgba(255,255,255,0.012))] p-4"
+            className="rounded-[1.05rem] border border-app-border [background:var(--hero-signal-card-bg)] p-4"
           >
             <div className="flex items-center justify-between gap-3">
               <div className="text-sm font-medium text-app-text">{row.label}</div>
@@ -70,7 +70,7 @@ export function ModelDifferenceChart({
                 {row.spreadLabel ?? `spread ${formatNumber(row.spread)}`}
               </div>
             </div>
-            <div className="mt-4 rounded-[1rem] border border-white/6 bg-white/[0.02] p-3">
+            <div className="mt-4 rounded-[1rem] border border-app-border [background:var(--status-neutral-bg)] p-3">
               <div className="mb-3 flex items-center justify-between gap-3 text-[0.62rem] uppercase tracking-[0.22em] text-app-muted">
                 <span>Model spread</span>
                 <span>{row.spreadLabel ?? `spread ${formatNumber(row.spread)}`}</span>
@@ -102,7 +102,7 @@ export function ModelDifferenceChart({
                       {entry.valueLabel ?? formatNumber(entry.value)}
                     </span>
                   </div>
-                  <div className="h-3 rounded-full border border-white/6 bg-white/[0.04] p-[2px]">
+                  <div className="h-3 rounded-full border border-app-border [background:var(--status-neutral-bg)] p-[2px]">
                     <motion.div
                       initial={{ scaleX: 0, opacity: 0.6 }}
                       whileInView={{ scaleX: 1, opacity: 1 }}

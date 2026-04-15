@@ -532,16 +532,16 @@ export function AudienceSection() {
         </div>
 
         <RevealOnScroll delay={0.1}>
-          <div className="rounded-[1.55rem] border border-white/8 bg-[rgba(255,255,255,0.03)] p-5">
+          <div className="rounded-[1.55rem] border border-app-border [background:var(--status-neutral-bg)] p-5">
             <div
               className={cn(
                 "rounded-2xl border px-4 py-3 text-sm leading-6",
                 status.tone === "success" &&
-                  "border-app-cyan/20 bg-[rgba(15,216,255,0.08)] text-app-cyan",
+                  "[border-color:var(--status-success-border)] [background:var(--status-success-bg)] [color:var(--status-success-text)]",
                 status.tone === "error" &&
-                  "border-app-gold/20 bg-[rgba(216,186,103,0.08)] text-app-gold",
+                  "[border-color:var(--status-warning-border)] [background:var(--status-warning-bg)] [color:var(--status-warning-text)]",
                 status.tone === "neutral" &&
-                  "border-white/8 bg-white/[0.03] text-app-muted"
+                  "border-app-border [background:var(--status-neutral-bg)] text-app-muted"
               )}
             >
               {status.message}
@@ -583,7 +583,7 @@ function AudienceGroupCard({
 }) {
   return (
     <GlassPanel className="p-4 sm:p-5">
-      <div className="rounded-[1.45rem] border border-white/5 bg-[linear-gradient(180deg,rgba(12,18,22,0.84),rgba(12,18,22,0.58))] p-5">
+      <div className="rounded-[1.45rem] border border-app-border [background:var(--theme-panel-gradient)] p-5">
         <div className="mb-5">
           <div className="text-[0.72rem] uppercase tracking-[0.24em] text-app-gold">
             {title}

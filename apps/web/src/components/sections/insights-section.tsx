@@ -163,7 +163,7 @@ export function InsightsSection() {
           </RevealOnScroll>
 
           <RevealOnScroll delay={0.04}>
-            <div className="rounded-[1.45rem] border border-app-gold/20 bg-[rgba(216,186,103,0.08)] px-5 py-4 text-sm leading-6 text-app-gold">
+            <div className="rounded-[1.45rem] border [border-color:var(--status-warning-border)] [background:var(--status-warning-bg)] px-5 py-4 text-sm leading-6 text-app-gold">
               {insights?.transparency_note ??
                 "Transparency note: findings, confidence labels, and agreement labels are deterministic rule-based summaries."}
             </div>
@@ -175,7 +175,7 @@ export function InsightsSection() {
 
           {!insights?.available ? (
             <GlassPanel className="p-6 sm:p-7">
-              <div className="rounded-[1.55rem] border border-white/8 bg-[linear-gradient(180deg,rgba(12,18,22,0.84),rgba(12,18,22,0.6))] p-6">
+              <div className="rounded-[1.55rem] border border-app-border [background:var(--theme-panel-gradient)] p-6">
                 <div className="flex flex-wrap gap-3">
                   <BadgeChip tone="gold">Insights Unavailable</BadgeChip>
                   {insights?.run?.status ? <BadgeChip>{insights.run.status}</BadgeChip> : null}
@@ -194,7 +194,7 @@ export function InsightsSection() {
           ) : (
             <>
               <RevealOnScroll delay={0.08}>
-                <details className="rounded-[1.55rem] border border-white/8 bg-[rgba(255,255,255,0.03)] p-5">
+                <details className="rounded-[1.55rem] border border-app-border [background:var(--status-neutral-bg)] p-5">
                   <summary className="cursor-pointer list-none text-sm font-medium text-app-text">
                     Context & Workflow
                   </summary>
@@ -232,7 +232,7 @@ export function InsightsSection() {
 
               <RevealOnScroll delay={0.1}>
                 <GlassPanel className="p-5 sm:p-6">
-                  <div className="rounded-[1.7rem] border border-white/6 bg-[linear-gradient(180deg,rgba(12,18,22,0.86),rgba(12,18,22,0.62))] p-5 sm:p-6">
+                  <div className="rounded-[1.7rem] border border-app-border [background:var(--theme-panel-gradient)] p-5 sm:p-6">
                     <div className="flex flex-wrap items-center gap-3">
                       <BadgeChip tone="cyan">Executive Summary</BadgeChip>
                       {insights.run?.run_id ? <BadgeChip>{insights.run.run_id}</BadgeChip> : null}
@@ -315,7 +315,7 @@ export function InsightsSection() {
                   </div>
 
                   <GlassPanel className="p-5 sm:p-6">
-                    <div className="rounded-[1.65rem] border border-white/5 bg-[linear-gradient(180deg,rgba(12,18,22,0.86),rgba(12,18,22,0.62))] p-5 sm:p-6">
+                    <div className="rounded-[1.65rem] border border-app-border [background:var(--theme-panel-gradient)] p-5 sm:p-6">
                       <div className="flex flex-wrap items-center gap-3">
                         <BadgeChip tone="cyan">Segment Difference Heatmap</BadgeChip>
                         {charts?.segment_heatmap?.available ? (
@@ -351,7 +351,7 @@ export function InsightsSection() {
                   </GlassPanel>
 
                   <GlassPanel className="p-5 sm:p-6">
-                    <div className="rounded-[1.65rem] border border-white/5 bg-[linear-gradient(180deg,rgba(12,18,22,0.86),rgba(12,18,22,0.62))] p-5 sm:p-6">
+                    <div className="rounded-[1.65rem] border border-app-border [background:var(--theme-panel-gradient)] p-5 sm:p-6">
                       <div className="flex flex-wrap items-center gap-3">
                         <BadgeChip tone="gold">Segment Story</BadgeChip>
                         {(insights.segment_story?.notes ?? []).length > 0 ? (
@@ -397,7 +397,7 @@ export function InsightsSection() {
                   </GlassPanel>
 
                   <GlassPanel className="p-5 sm:p-6">
-                    <div className="rounded-[1.55rem] border border-white/5 bg-[linear-gradient(180deg,rgba(12,18,22,0.84),rgba(12,18,22,0.6))] p-5">
+                    <div className="rounded-[1.55rem] border border-app-border [background:var(--theme-panel-gradient)] p-5">
                       <div className="flex flex-wrap items-center gap-3">
                         <BadgeChip tone="gold">Model Difference</BadgeChip>
                         {modelDifferenceModel ? (
@@ -425,7 +425,7 @@ export function InsightsSection() {
               <RevealOnScroll delay={0.16}>
                 <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(18rem,0.82fr)]">
                   <GlassPanel className="p-5 sm:p-6">
-                    <div className="rounded-[1.55rem] border border-white/5 bg-[linear-gradient(180deg,rgba(12,18,22,0.84),rgba(12,18,22,0.6))] p-5">
+                    <div className="rounded-[1.55rem] border border-app-border [background:var(--theme-panel-gradient)] p-5">
                       <div className="flex flex-wrap gap-2">
                         <BadgeChip tone="cyan">Recommendations</BadgeChip>
                         <BadgeChip tone="gold">Exploratory only</BadgeChip>
@@ -439,14 +439,14 @@ export function InsightsSection() {
                           />
                         ))}
                       </div>
-                      <div className="mt-5 rounded-[1.25rem] border border-app-gold/20 bg-[rgba(216,186,103,0.08)] p-4 text-sm leading-7 text-app-gold">
+                      <div className="mt-5 rounded-[1.25rem] border [border-color:var(--status-warning-border)] [background:var(--status-warning-bg)] p-4 text-sm leading-7 text-app-gold">
                         Treat these outputs as decision support for the next research move, not as validated market truth. Important claims should be checked with real respondents.
                       </div>
                     </div>
                   </GlassPanel>
 
                   <GlassPanel className="p-5 sm:p-6">
-                    <div className="rounded-[1.55rem] border border-white/5 bg-[linear-gradient(180deg,rgba(12,18,22,0.84),rgba(12,18,22,0.6))] p-5">
+                    <div className="rounded-[1.55rem] border border-app-border [background:var(--theme-panel-gradient)] p-5">
                       <div className="flex flex-wrap gap-2">
                         <BadgeChip tone="gold">Trust Framing</BadgeChip>
                       </div>
@@ -471,7 +471,7 @@ export function InsightsSection() {
 
               <RevealOnScroll delay={0.18} amount={0.08}>
                 <GlassPanel className="p-5 sm:p-6">
-                  <div className="rounded-[1.55rem] border border-white/5 bg-[linear-gradient(180deg,rgba(12,18,22,0.84),rgba(12,18,22,0.6))] p-5">
+                  <div className="rounded-[1.55rem] border border-app-border [background:var(--theme-panel-gradient)] p-5">
                     <LadderChart
                       title="Interest Ladder"
                       subtitle="Movement from feasibility into purchase likelihood."
@@ -500,7 +500,7 @@ export function InsightsSection() {
         >
           <div className="space-y-5">
             <GlassPanel className="p-5 sm:p-6">
-              <div className="rounded-[1.55rem] border border-white/5 bg-[linear-gradient(180deg,rgba(12,18,22,0.84),rgba(12,18,22,0.6))] p-5">
+              <div className="rounded-[1.55rem] border border-app-border [background:var(--theme-panel-gradient)] p-5">
                 <div className="flex flex-wrap gap-2">
                   <BadgeChip tone="cyan">Run Snapshot</BadgeChip>
                   {isLoading ? <BadgeChip>Refreshing</BadgeChip> : null}
@@ -529,7 +529,7 @@ export function InsightsSection() {
             </GlassPanel>
 
             <GlassPanel className="p-5 sm:p-6">
-              <div className="rounded-[1.55rem] border border-white/5 bg-[linear-gradient(180deg,rgba(12,18,22,0.84),rgba(12,18,22,0.6))] p-5">
+              <div className="rounded-[1.55rem] border border-app-border [background:var(--theme-panel-gradient)] p-5">
                 <div className="flex flex-wrap gap-2">
                   <BadgeChip tone="gold">Trust Snapshot</BadgeChip>
                 </div>
@@ -569,7 +569,7 @@ function TopFindingCard({ finding }: { finding: InsightsTopFinding }) {
 
   return (
     <GlassPanel className="p-5 sm:p-6">
-      <div className="rounded-[1.65rem] border border-white/5 bg-[linear-gradient(180deg,rgba(12,18,22,0.86),rgba(12,18,22,0.62))] p-5 sm:p-6">
+      <div className="rounded-[1.65rem] border border-app-border [background:var(--theme-panel-gradient)] p-5 sm:p-6">
         <div className="flex flex-wrap items-center gap-2">
           <BadgeChip tone="cyan">{finding.title}</BadgeChip>
           {finding.confidence_label ? <BadgeChip>{finding.confidence_label}</BadgeChip> : null}
@@ -642,7 +642,7 @@ function HeroInsightCard({
   detail: string;
 }) {
   return (
-    <div className="rounded-[1.25rem] border border-white/8 bg-white/[0.03] p-4">
+    <div className="rounded-[1.25rem] border border-app-border [background:var(--status-neutral-bg)] p-4">
       <div className="text-[0.68rem] uppercase tracking-[0.22em] text-app-muted">{label}</div>
       <div className="mt-3 text-xl font-medium leading-8 text-app-text">{value}</div>
       <div className="mt-2 text-sm leading-6 text-app-muted">{detail}</div>
@@ -660,7 +660,7 @@ function TrustMiniCard({
   detail: string;
 }) {
   return (
-    <div className="rounded-[1.15rem] border border-white/6 bg-white/[0.03] p-4">
+    <div className="rounded-[1.15rem] border border-app-border [background:var(--status-neutral-bg)] p-4">
       <div className="text-[0.68rem] uppercase tracking-[0.22em] text-app-muted">{label}</div>
       <div className="mt-2 text-base font-medium text-app-text">{value}</div>
       <div className="mt-2 text-sm leading-6 text-app-muted">{detail}</div>
@@ -670,7 +670,7 @@ function TrustMiniCard({
 
 function NarrativeNote({ children }: { children: ReactNode }) {
   return (
-    <div className="rounded-[1.25rem] border border-white/6 bg-[linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.02))] p-5 text-sm leading-7 text-app-text shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
+    <div className="rounded-[1.25rem] border border-app-border [background:var(--theme-panel-inline-gradient)] p-5 text-sm leading-7 text-app-text shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
       {children}
     </div>
   );
@@ -695,7 +695,7 @@ function SegmentStorySpotlight({
           "border-app-cyan/20 bg-[linear-gradient(180deg,rgba(15,216,255,0.1),rgba(255,255,255,0.02))]",
         tone === "gold" &&
           "border-app-gold/20 bg-[linear-gradient(180deg,rgba(216,186,103,0.1),rgba(255,255,255,0.02))]",
-        tone === "neutral" && "border-white/8 bg-white/[0.03]"
+        tone === "neutral" && "border-app-border [background:var(--status-neutral-bg)]"
       )}
     >
       <div className="text-[0.68rem] uppercase tracking-[0.22em] text-app-muted">{label}</div>
@@ -707,7 +707,7 @@ function SegmentStorySpotlight({
 
 function RecommendationRow({ index, body }: { index: number; body: string }) {
   return (
-    <div className="flex gap-3 rounded-[1.1rem] border border-white/6 bg-white/[0.03] p-4">
+    <div className="flex gap-3 rounded-[1.1rem] border border-app-border [background:var(--status-neutral-bg)] p-4">
       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-app-cyan/30 bg-app-cyan/10 text-sm font-medium text-app-cyan">
         {index}
       </div>
@@ -718,7 +718,7 @@ function RecommendationRow({ index, body }: { index: number; body: string }) {
 
 function ContextSummaryCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-[1.2rem] border border-white/6 bg-white/[0.03] p-4">
+    <div className="rounded-[1.2rem] border border-app-border [background:var(--status-neutral-bg)] p-4">
       <div className="text-[0.68rem] uppercase tracking-[0.22em] text-app-muted">{label}</div>
       <div className="mt-2 text-sm leading-7 text-app-text">{value}</div>
     </div>
@@ -727,7 +727,7 @@ function ContextSummaryCard({ label, value }: { label: string; value: string }) 
 
 function SidebarRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-[1.05rem] border border-white/6 bg-white/[0.03] p-3">
+    <div className="rounded-[1.05rem] border border-app-border [background:var(--status-neutral-bg)] p-3">
       <div className="text-[0.68rem] uppercase tracking-[0.2em] text-app-muted">{label}</div>
       <div className="mt-2 text-sm leading-6 text-app-text">{value}</div>
     </div>
@@ -740,9 +740,9 @@ function StatusBanner({ tone, message }: { tone: StatusTone; message: string }) 
       className={cn(
         "rounded-[1.35rem] border px-5 py-4 text-sm leading-6",
         tone === "success" && "border-app-cyan/25 bg-[rgba(15,216,255,0.08)] text-app-cyan",
-        tone === "warning" && "border-app-gold/20 bg-[rgba(216,186,103,0.08)] text-app-gold",
+        tone === "warning" && "[border-color:var(--status-warning-border)] [background:var(--status-warning-bg)] [color:var(--status-warning-text)]",
         tone === "error" && "border-rose-400/25 bg-[rgba(251,113,133,0.08)] text-rose-200",
-        tone === "neutral" && "border-white/10 bg-white/[0.03] text-app-muted"
+        tone === "neutral" && "border-app-border [background:var(--status-neutral-bg)] text-app-muted"
       )}
     >
       {message}
@@ -752,7 +752,7 @@ function StatusBanner({ tone, message }: { tone: StatusTone; message: string }) 
 
 function EmptyState({ message }: { message: string }) {
   return (
-    <div className="rounded-[1.15rem] border border-dashed border-white/8 bg-white/[0.02] px-4 py-5 text-sm leading-7 text-app-muted">
+    <div className="rounded-[1.15rem] border border-dashed border-app-border [background:var(--control-bg)] px-4 py-5 text-sm leading-7 text-app-muted">
       {message}
     </div>
   );

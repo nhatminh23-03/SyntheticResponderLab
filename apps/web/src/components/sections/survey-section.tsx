@@ -316,7 +316,7 @@ export function SurveySection() {
 
         <RevealOnScroll delay={0.04}>
           <GlassPanel className="p-5 sm:p-6">
-            <div className="rounded-[1.55rem] border border-white/5 bg-[linear-gradient(180deg,rgba(12,18,22,0.84),rgba(12,18,22,0.6))] p-5">
+            <div className="rounded-[1.55rem] border border-app-border p-5 [background:var(--theme-panel-gradient)]">
               <div className="flex flex-wrap items-center gap-3">
                 <BadgeChip tone="cyan">Supported Formats</BadgeChip>
                 <BadgeChip>.md</BadgeChip>
@@ -343,7 +343,7 @@ export function SurveySection() {
                 ) : null}
               </div>
 
-              <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-white/6 pt-6">
+              <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-app-border pt-6">
                 <div>
                   <div className="text-[0.72rem] uppercase tracking-[0.24em] text-app-muted">
                     Upload &amp; Validate
@@ -374,8 +374,8 @@ export function SurveySection() {
                 className={cn(
                   "mt-5 flex cursor-pointer flex-col items-center justify-center rounded-[1.6rem] border border-dashed px-6 py-12 text-center transition",
                   isDragActive
-                    ? "border-app-cyan/35 bg-[rgba(15,216,255,0.08)] shadow-[0_0_0_4px_rgba(15,216,255,0.08)]"
-                    : "border-white/12 bg-white/[0.03] hover:border-app-cyan/25 hover:bg-white/[0.05]"
+                    ? "[border-color:var(--color-border-strong)] [background:var(--color-brand-primary-soft)] [box-shadow:var(--focus-ring-shadow)]"
+                    : "border-app-border [background:var(--status-neutral-bg)] hover:[border-color:var(--color-border-strong)] hover:[background:var(--button-secondary-bg-hover)]"
                 )}
               >
                 <div className="text-base font-medium text-app-text">
@@ -410,7 +410,7 @@ export function SurveySection() {
                 />
               </label>
 
-              <div className="mt-5 rounded-[1.35rem] border border-white/6 bg-white/[0.03] p-4">
+              <div className="mt-5 rounded-[1.35rem] border border-app-border p-4 [background:var(--status-neutral-bg)]">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <div className="text-[0.72rem] uppercase tracking-[0.24em] text-app-muted">
@@ -456,8 +456,8 @@ export function SurveySection() {
 
         <RevealOnScroll delay={0.08}>
           <GlassPanel className="p-5 sm:p-6">
-            <div className="rounded-[1.55rem] border border-white/5 bg-[linear-gradient(180deg,rgba(12,18,22,0.84),rgba(12,18,22,0.6))] p-5">
-              <div className="rounded-[1.35rem] border border-white/6 bg-white/[0.03] p-4">
+            <div className="rounded-[1.55rem] border border-app-border p-5 [background:var(--theme-panel-gradient)]">
+              <div className="rounded-[1.35rem] border border-app-border p-4 [background:var(--status-neutral-bg)]">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <div className="text-[0.72rem] uppercase tracking-[0.24em] text-app-muted">
@@ -478,18 +478,18 @@ export function SurveySection() {
                 </div>
 
                 {isParserReviewOpen ? (
-                  <div className="mt-5 space-y-5 border-t border-white/6 pt-5">
+                  <div className="mt-5 space-y-5 border-t border-app-border pt-5">
                     <div
                       className={cn(
                         "rounded-2xl border px-4 py-3 text-sm leading-6",
                         status.tone === "success" &&
-                          "border-app-cyan/20 bg-[rgba(15,216,255,0.08)] text-app-cyan",
+                          "[border-color:var(--status-success-border)] [background:var(--status-success-bg)] [color:var(--status-success-text)]",
                         status.tone === "warning" &&
-                          "border-app-gold/20 bg-[rgba(216,186,103,0.08)] text-app-gold",
+                          "[border-color:var(--status-warning-border)] [background:var(--status-warning-bg)] [color:var(--status-warning-text)]",
                         status.tone === "error" &&
-                          "border-app-gold/20 bg-[rgba(216,186,103,0.08)] text-app-gold",
+                          "[border-color:var(--status-error-border)] [background:var(--status-error-bg)] [color:var(--status-error-text)]",
                         status.tone === "neutral" &&
-                          "border-white/8 bg-white/[0.03] text-app-muted"
+                          "[border-color:var(--status-neutral-border)] [background:var(--status-neutral-bg)] [color:var(--status-neutral-text)]"
                       )}
                     >
                       {status.message}
@@ -510,7 +510,7 @@ export function SurveySection() {
                 ) : null}
               </div>
 
-              <div className="mt-5 border-t border-white/6 pt-5">
+              <div className="mt-5 border-t border-app-border pt-5">
                 <div className="flex flex-wrap gap-2">
                   <BadgeChip tone="cyan">Normalized Survey Schema</BadgeChip>
                   <BadgeChip tone={savedSurvey ? "cyan" : "gold"}>
@@ -538,7 +538,7 @@ export function SurveySection() {
                 />
               </div>
 
-              <div className="mt-5 rounded-[1.35rem] border border-white/6 bg-white/[0.03] p-4">
+              <div className="mt-5 rounded-[1.35rem] border border-app-border p-4 [background:var(--status-neutral-bg)]">
                 <div className="text-[0.72rem] uppercase tracking-[0.24em] text-app-muted">
                   Parse quality
                 </div>
@@ -559,7 +559,7 @@ export function SurveySection() {
                   <div className="text-[0.72rem] uppercase tracking-[0.24em] text-app-muted">
                     Preview Mode
                   </div>
-                  <div className="inline-flex rounded-full border border-white/8 bg-white/[0.03] p-1">
+                  <div className="inline-flex rounded-full border border-app-border p-1 [background:var(--status-neutral-bg)]">
                     <PreviewModeButton
                       active={previewMode === "form"}
                       onClick={() => setPreviewMode("form")}
@@ -690,7 +690,7 @@ function ParseStatusCard({
   warnings: string[];
 }) {
   return (
-    <div className="rounded-[1.35rem] border border-white/6 bg-white/[0.03] p-4">
+    <div className="rounded-[1.35rem] border border-app-border [background:var(--status-neutral-bg)] p-4">
       <div className="flex flex-wrap items-center gap-2">
         <BadgeChip tone={hasSurvey ? (tone === "success" ? "cyan" : "gold") : "neutral"}>
           {hasSurvey ? buildWarningSummaryLabel(warnings) : "Awaiting upload"}
@@ -722,7 +722,7 @@ function WarningInterpretationCard({
   warnings: string[];
 }) {
   return (
-    <div className="rounded-[1.35rem] border border-white/6 bg-white/[0.03] p-4">
+    <div className="rounded-[1.35rem] border border-app-border [background:var(--status-neutral-bg)] p-4">
       <div className="text-[0.72rem] uppercase tracking-[0.24em] text-app-muted">
         Parser interpretation
       </div>
@@ -733,7 +733,7 @@ function WarningInterpretationCard({
       ) : warnings.length > 0 ? (
         <ul className="mt-3 space-y-2 text-sm leading-6 text-app-text">
           {warnings.map((warning) => (
-            <li key={warning} className="rounded-xl border border-white/6 bg-black/10 px-3 py-2">
+            <li key={warning} className="rounded-xl border border-app-border [background:var(--control-bg)] px-3 py-2">
               {warning}
             </li>
           ))}
@@ -763,7 +763,7 @@ function PreviewModeButton({
       className={cn(
         "rounded-full px-4 py-2 text-sm transition",
         active
-          ? "bg-[rgba(15,216,255,0.14)] text-app-cyan"
+          ? "[background:var(--color-brand-primary-soft)] text-app-cyan"
           : "text-app-muted hover:text-app-text"
       )}
     >
@@ -775,7 +775,7 @@ function PreviewModeButton({
 function QuestionFormPreview({ questions }: { questions: SurveyQuestionPayload[] }) {
   if (questions.length === 0) {
     return (
-      <div className="rounded-[1.35rem] border border-dashed border-white/10 bg-white/[0.02] px-5 py-8 text-sm leading-6 text-app-muted">
+      <div className="rounded-[1.35rem] border border-dashed border-app-border [background:var(--control-bg)] px-5 py-8 text-sm leading-6 text-app-muted">
         Upload a survey to preview normalized questions here.
       </div>
     );
@@ -786,7 +786,7 @@ function QuestionFormPreview({ questions }: { questions: SurveyQuestionPayload[]
       {questions.map((question) => (
         <div
           key={question.id}
-          className="rounded-[1.35rem] border border-white/6 bg-white/[0.03] p-4"
+          className="rounded-[1.35rem] border border-app-border [background:var(--status-neutral-bg)] p-4"
         >
           <div className="flex flex-wrap items-center gap-2">
             <BadgeChip tone="cyan">{question.id}</BadgeChip>
@@ -811,15 +811,15 @@ function QuestionFormPreview({ questions }: { questions: SurveyQuestionPayload[]
 function QuestionTablePreview({ questions }: { questions: SurveyQuestionPayload[] }) {
   if (questions.length === 0) {
     return (
-      <div className="rounded-[1.35rem] border border-dashed border-white/10 bg-white/[0.02] px-5 py-8 text-sm leading-6 text-app-muted">
+      <div className="rounded-[1.35rem] border border-dashed border-app-border [background:var(--control-bg)] px-5 py-8 text-sm leading-6 text-app-muted">
         Upload a survey to preview normalized table rows here.
       </div>
     );
   }
 
   return (
-    <div className="overflow-hidden rounded-[1.35rem] border border-white/6 bg-white/[0.03]">
-      <div className="grid grid-cols-[6.5rem_7.5rem_minmax(0,1fr)_6.5rem] gap-3 border-b border-white/6 px-4 py-3 text-[0.68rem] uppercase tracking-[0.22em] text-app-muted">
+    <div className="overflow-hidden rounded-[1.35rem] border border-app-border [background:var(--status-neutral-bg)]">
+      <div className="grid grid-cols-[6.5rem_7.5rem_minmax(0,1fr)_6.5rem] gap-3 border-b border-app-border px-4 py-3 text-[0.68rem] uppercase tracking-[0.22em] text-app-muted">
         <div>ID</div>
         <div>Type</div>
         <div>Prompt</div>
@@ -828,7 +828,7 @@ function QuestionTablePreview({ questions }: { questions: SurveyQuestionPayload[
       {questions.map((question) => (
         <div
           key={question.id}
-          className="grid grid-cols-[6.5rem_7.5rem_minmax(0,1fr)_6.5rem] gap-3 border-b border-white/6 px-4 py-3 text-sm text-app-text last:border-b-0"
+          className="grid grid-cols-[6.5rem_7.5rem_minmax(0,1fr)_6.5rem] gap-3 border-b border-app-border px-4 py-3 text-sm text-app-text last:border-b-0"
         >
           <div>{question.id}</div>
           <div className="text-app-muted">{humanizeQuestionType(question.question_type)}</div>
@@ -880,7 +880,7 @@ function renderQuestionResponseShape(question: SurveyQuestionPayload) {
           (value) => (
             <div
               key={value}
-              className="inline-flex h-9 min-w-9 items-center justify-center rounded-full border border-white/10 bg-black/10 px-3 text-sm text-app-muted"
+              className="inline-flex h-9 min-w-9 items-center justify-center rounded-full border border-app-border [background:var(--control-bg)] px-3 text-sm text-app-muted"
             >
               {value}
             </div>
@@ -892,14 +892,14 @@ function renderQuestionResponseShape(question: SurveyQuestionPayload) {
 
   if (question.question_type === "numeric") {
     return (
-      <div className="rounded-xl border border-white/10 bg-black/10 px-4 py-3 text-sm text-app-muted">
+      <div className="rounded-xl border border-app-border [background:var(--control-bg)] px-4 py-3 text-sm text-app-muted">
         Numeric response
       </div>
     );
   }
 
   return (
-    <div className="rounded-xl border border-white/10 bg-black/10 px-4 py-3 text-sm text-app-muted">
+    <div className="rounded-xl border border-app-border [background:var(--control-bg)] px-4 py-3 text-sm text-app-muted">
       Open-text response
     </div>
   );
@@ -920,7 +920,7 @@ function humanizeQuestionType(questionType: SurveyQuestionPayload["question_type
 
 function MetaCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-[1.15rem] border border-white/6 bg-white/[0.03] p-4">
+    <div className="rounded-[1.15rem] border border-app-border [background:var(--status-neutral-bg)] p-4">
       <div className="text-[0.68rem] uppercase tracking-[0.22em] text-app-muted">
         {label}
       </div>

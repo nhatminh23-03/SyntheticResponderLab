@@ -32,12 +32,12 @@ export function ChartFrame({
     return (
       <div
         className={cn(
-          "rounded-[1.2rem] border border-white/6 bg-[linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.015))] p-5",
+          "rounded-[1.2rem] border border-app-border p-5 [background:var(--hero-signal-card-bg)]",
           className
         )}
       >
         {empty ? (
-          <div className="rounded-[1rem] border border-dashed border-white/8 bg-white/[0.02] px-4 py-5 text-sm leading-7 text-app-muted">
+          <div className="rounded-[1rem] border border-dashed border-app-border px-4 py-5 text-sm leading-7 text-app-muted [background:var(--control-bg)]">
             {emptyMessage ?? "No chart data is available yet."}
           </div>
         ) : (
@@ -51,7 +51,7 @@ export function ChartFrame({
   return (
     <div
       className={cn(
-        "rounded-[1.25rem] border border-white/6 bg-[linear-gradient(180deg,rgba(255,255,255,0.035),rgba(255,255,255,0.018))] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]",
+        "rounded-[1.25rem] border border-app-border p-4 [background:var(--hero-signal-card-bg)] [box-shadow:var(--hero-signal-card-shadow)]",
         className
       )}
     >
@@ -71,12 +71,18 @@ export function ChartFrame({
         </div>
       </div>
 
-      <div className="relative mt-4 overflow-hidden rounded-[1rem] border border-white/6 bg-[linear-gradient(180deg,rgba(8,12,16,0.5),rgba(8,12,16,0.26))]">
-        <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(15,216,255,0.03),transparent_28%,transparent_72%,rgba(216,186,103,0.03))]" />
-        <div className="pointer-events-none absolute inset-0 opacity-35 [background-image:linear-gradient(to_right,rgba(255,255,255,0.05)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.035)_1px,transparent_1px)] [background-size:24%_100%,100%_3rem]" />
+      <div className="relative mt-4 overflow-hidden rounded-[1rem] border border-app-border [background:var(--chart-shell-bg)]">
+        <div className="pointer-events-none absolute inset-0 [background:var(--chart-shell-overlay)]" />
+        <div
+          className="pointer-events-none absolute inset-0 opacity-35"
+          style={{
+            backgroundImage: "var(--chart-shell-grid)",
+            backgroundSize: "24% 100%, 100% 3rem",
+          }}
+        />
         <div className="relative p-4">
         {empty ? (
-            <div className="rounded-[1rem] border border-dashed border-white/8 bg-white/[0.02] px-4 py-5 text-sm leading-7 text-app-muted">
+            <div className="rounded-[1rem] border border-dashed border-app-border px-4 py-5 text-sm leading-7 text-app-muted [background:var(--control-bg)]">
             {emptyMessage ?? "No chart data is available yet."}
           </div>
         ) : (

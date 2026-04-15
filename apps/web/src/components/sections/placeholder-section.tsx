@@ -51,7 +51,7 @@ export function PlaceholderSection({
               </p>
 
               <div className="mt-8 grid gap-3 sm:grid-cols-2">
-                <div className="rounded-2xl border border-white/6 bg-white/[0.03] p-4">
+                <div className="rounded-2xl border border-app-border [background:var(--status-neutral-bg)] p-4">
                   <div className="text-[0.68rem] uppercase tracking-[0.22em] text-app-muted">
                     Frontend status
                   </div>
@@ -59,7 +59,7 @@ export function PlaceholderSection({
                     Section structure ready
                   </div>
                 </div>
-                <div className="rounded-2xl border border-white/6 bg-white/[0.03] p-4">
+                <div className="rounded-2xl border border-app-border [background:var(--status-neutral-bg)] p-4">
                   <div className="text-[0.68rem] uppercase tracking-[0.22em] text-app-muted">
                     Backend fit
                   </div>

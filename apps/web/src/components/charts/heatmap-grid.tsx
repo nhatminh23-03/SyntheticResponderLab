@@ -39,7 +39,7 @@ export function HeatmapGrid({
     >
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3 text-xs text-app-muted">
         <span>Lower signal</span>
-        <div className="flex w-52 overflow-hidden rounded-full border border-white/10 shadow-[0_0_18px_rgba(15,216,255,0.08)]">
+        <div className="flex w-52 overflow-hidden rounded-full border border-app-border shadow-[0_0_18px_rgba(15,216,255,0.08)]">
           <div className="h-2.5 flex-1 bg-[rgba(15,216,255,0.14)]" />
           <div className="h-2.5 flex-1 bg-[rgba(15,216,255,0.28)]" />
           <div className="h-2.5 flex-1 bg-[rgba(15,216,255,0.42)]" />
@@ -49,9 +49,9 @@ export function HeatmapGrid({
       </div>
 
       <div className="overflow-x-auto">
-        <div className="min-w-[58rem] overflow-hidden rounded-[1.2rem] border border-white/8 bg-[linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.015))] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
+        <div className="min-w-[58rem] overflow-hidden rounded-[1.2rem] border border-app-border [background:var(--hero-signal-card-bg)] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
           <table className="min-w-full divide-y divide-white/6 text-sm">
-            <thead className="bg-white/[0.03] text-app-muted">
+            <thead className="[background:var(--status-neutral-bg)] text-app-muted">
               <tr>
                 <th className="px-4 py-3 text-left font-medium">Question</th>
                 {columns.map((column) => (
@@ -63,15 +63,15 @@ export function HeatmapGrid({
             </thead>
             <tbody>
               {rows.map((row, rowIndex) => (
-                <tr key={row.id} className="border-t border-white/6">
-                  <td className={rowIndex % 2 === 0 ? "bg-white/[0.015] px-5 py-4 text-app-text" : "px-5 py-4 text-app-text"}>
+                <tr key={row.id} className="border-t border-app-border">
+                  <td className={rowIndex % 2 === 0 ? "[background:var(--button-secondary-bg)] px-5 py-4 text-app-text" : "px-5 py-4 text-app-text"}>
                     <div className="max-w-[24rem] leading-7">{row.label}</div>
                   </td>
                   {row.values.map((entry) => {
                     const opacity = heatmapOpacity(entry.value, min, max);
                     const baseOpacity = 0.12 + opacity * 0.38;
                     return (
-                      <td key={`${row.id}-${entry.key}`} className={rowIndex % 2 === 0 ? "bg-white/[0.015] px-5 py-4" : "px-5 py-4"}>
+                      <td key={`${row.id}-${entry.key}`} className={rowIndex % 2 === 0 ? "[background:var(--button-secondary-bg)] px-5 py-4" : "px-5 py-4"}>
                         <motion.div
                           initial={{ opacity: 0, scale: 0.96 }}
                           whileInView={{ opacity: 1, scale: 1 }}

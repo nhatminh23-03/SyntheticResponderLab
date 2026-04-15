@@ -493,7 +493,7 @@ export function ProductSection() {
 
           <RevealOnScroll delay={0.06}>
             <GlassPanel className="p-4 sm:p-5">
-              <div className="rounded-[1.45rem] border border-white/5 bg-[linear-gradient(180deg,rgba(12,18,22,0.84),rgba(12,18,22,0.58))] p-5">
+              <div className="rounded-[1.45rem] border border-app-border [background:var(--theme-panel-gradient)] p-5">
                 <div className="flex flex-wrap items-center gap-3">
                   <BadgeChip tone="cyan">URL Autofill</BadgeChip>
                   <BadgeChip>
@@ -518,7 +518,7 @@ export function ProductSection() {
                 </div>
 
                 {urlAutofillPreview ? (
-                  <div className="mt-5 rounded-[1.3rem] border border-white/6 bg-white/[0.03] p-4">
+                  <div className="mt-5 rounded-[1.3rem] border border-app-border [background:var(--status-neutral-bg)] p-4">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div>
                         <div className="text-[0.72rem] uppercase tracking-[0.24em] text-app-muted">
@@ -696,7 +696,7 @@ export function ProductSection() {
               </ProductGroupCard>
 
               <GlassPanel className="p-5 sm:p-6">
-                <div className="rounded-[1.55rem] border border-white/5 bg-[linear-gradient(180deg,rgba(12,18,22,0.84),rgba(12,18,22,0.6))] p-5">
+                <div className="rounded-[1.55rem] border border-app-border [background:var(--theme-panel-gradient)] p-5">
                   <div className="flex flex-wrap items-center gap-3">
                     <BadgeChip tone="gold">Visual Details</BadgeChip>
                     <BadgeChip>Optional</BadgeChip>
@@ -719,7 +719,7 @@ export function ProductSection() {
                   {(draft.product_image_labels.length > 0 ||
                     draft.product_image_objects.length > 0 ||
                     draft.product_image_colors.length > 0) ? (
-                    <div className="mt-5 rounded-[1.35rem] border border-white/6 bg-white/[0.03] p-4">
+                    <div className="mt-5 rounded-[1.35rem] border border-app-border [background:var(--status-neutral-bg)] p-4">
                       <div className="text-[0.72rem] uppercase tracking-[0.24em] text-app-muted">
                         Saved Visual Details
                       </div>
@@ -738,7 +738,7 @@ export function ProductSection() {
                   ) : null}
 
                   {!uploadedImagePreviewUrl && !latestImageAnalysis ? (
-                    <label className="mt-5 flex cursor-pointer flex-col items-center justify-center rounded-[1.45rem] border border-dashed border-white/12 bg-white/[0.03] px-6 py-10 text-center transition hover:border-app-cyan/25 hover:bg-white/[0.05]">
+                    <label className="mt-5 flex cursor-pointer flex-col items-center justify-center rounded-[1.45rem] border border-dashed border-app-border [background:var(--status-neutral-bg)] px-6 py-10 text-center transition hover:border-app-cyan/25 hover:[background:var(--button-secondary-bg-hover)]">
                       <div className="text-sm font-medium text-app-text">
                         Upload Product Image
                       </div>
@@ -761,7 +761,7 @@ export function ProductSection() {
                   ) : (
                     <div className="mt-5 space-y-5">
                       <div className="grid gap-4 md:grid-cols-[minmax(0,0.88fr)_minmax(0,1.12fr)]">
-                        <div className="overflow-hidden rounded-[1.35rem] border border-white/8 bg-white/[0.03]">
+                        <div className="overflow-hidden rounded-[1.35rem] border border-app-border [background:var(--status-neutral-bg)]">
                           {uploadedImagePreviewUrl ? (
                             <img
                               src={uploadedImagePreviewUrl}
@@ -780,7 +780,7 @@ export function ProductSection() {
                         <div className="space-y-4">
                           <div className="flex flex-wrap gap-3">
                             <label className="cursor-pointer">
-                              <span className="inline-flex items-center justify-center rounded-2xl border border-app-border bg-white/[0.03] px-4 py-3 text-sm font-medium text-app-text transition hover:border-app-cyan/30 hover:text-app-cyan">
+                              <span className="inline-flex items-center justify-center rounded-2xl border border-app-border [background:var(--status-neutral-bg)] px-4 py-3 text-sm font-medium text-app-text transition hover:border-app-cyan/30 hover:text-app-cyan">
                                 Upload Product Image
                               </span>
                               <input
@@ -813,7 +813,7 @@ export function ProductSection() {
                               />
                               <ColorSwatchGrid colors={toColorItems(imageSignals.colors)} />
                               {String(imageSignals.text ?? "").trim() ? (
-                                <details className="rounded-2xl border border-white/6 bg-white/[0.03] p-4 text-sm text-app-muted">
+                                <details className="rounded-2xl border border-app-border [background:var(--status-neutral-bg)] p-4 text-sm text-app-muted">
                                   <summary className="cursor-pointer text-app-text">
                                     Detected Text
                                   </summary>
@@ -824,7 +824,7 @@ export function ProductSection() {
                               ) : null}
                             </div>
                           ) : (
-                            <div className="rounded-2xl border border-white/6 bg-white/[0.03] p-4 text-sm text-app-muted">
+                            <div className="rounded-2xl border border-app-border [background:var(--status-neutral-bg)] p-4 text-sm text-app-muted">
                               Analyze the uploaded image to extract raw visual signals.
                             </div>
                           )}
@@ -849,7 +849,7 @@ export function ProductSection() {
                       </div>
 
                       {visualSummary ? (
-                        <div className="rounded-[1.35rem] border border-white/6 bg-white/[0.03] p-4">
+                        <div className="rounded-[1.35rem] border border-app-border [background:var(--status-neutral-bg)] p-4">
                           <div className="text-[0.72rem] uppercase tracking-[0.24em] text-app-muted">
                             Visual Summary
                           </div>
@@ -877,18 +877,18 @@ export function ProductSection() {
                 </Field>
               </ProductGroupCard>
 
-              <div className="rounded-[1.55rem] border border-white/8 bg-[rgba(255,255,255,0.03)] p-5">
+              <div className="rounded-[1.55rem] border border-app-border [background:var(--status-neutral-bg)] p-5">
                 <div
                   className={cn(
                     "rounded-2xl border px-4 py-3 text-sm leading-6",
                     status.tone === "success" &&
-                      "border-app-cyan/20 bg-[rgba(15,216,255,0.08)] text-app-cyan",
+                      "[border-color:var(--status-success-border)] [background:var(--status-success-bg)] [color:var(--status-success-text)]",
                     status.tone === "error" &&
-                      "border-app-gold/20 bg-[rgba(216,186,103,0.08)] text-app-gold",
+                      "[border-color:var(--status-warning-border)] [background:var(--status-warning-bg)] [color:var(--status-warning-text)]",
                     status.tone === "warning" &&
-                      "border-app-gold/20 bg-[rgba(216,186,103,0.08)] text-app-gold",
+                      "[border-color:var(--status-warning-border)] [background:var(--status-warning-bg)] [color:var(--status-warning-text)]",
                     status.tone === "neutral" &&
-                      "border-white/8 bg-white/[0.03] text-app-muted"
+                      "border-app-border [background:var(--status-neutral-bg)] text-app-muted"
                   )}
                 >
                   {status.message}
@@ -933,7 +933,7 @@ function ProductGroupCard({
 }) {
   return (
     <GlassPanel className="p-4 sm:p-5">
-      <div className="rounded-[1.45rem] border border-white/5 bg-[linear-gradient(180deg,rgba(12,18,22,0.84),rgba(12,18,22,0.58))] p-5">
+      <div className="rounded-[1.45rem] border border-app-border [background:var(--theme-panel-gradient)] p-5">
         <div className="mb-5">
           <div className="text-[0.72rem] uppercase tracking-[0.24em] text-app-gold">
             {title}
@@ -948,7 +948,7 @@ function ProductGroupCard({
 
 function PreviewField({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl border border-white/6 bg-white/[0.03] p-4">
+    <div className="rounded-2xl border border-app-border [background:var(--status-neutral-bg)] p-4">
       <div className="text-[0.68rem] uppercase tracking-[0.22em] text-app-muted">
         {label}
       </div>
@@ -1009,7 +1009,7 @@ function ColorSwatchGrid({
         {colors.map((color) => (
           <div
             key={`${color.hex}-${color.label}`}
-            className="flex items-center gap-3 rounded-2xl border border-white/6 bg-white/[0.03] px-3 py-2"
+            className="flex items-center gap-3 rounded-2xl border border-app-border [background:var(--status-neutral-bg)] px-3 py-2"
           >
             <span
               className="inline-flex h-4 w-4 rounded-full border border-white/20"
@@ -1027,7 +1027,7 @@ function ColorBadge({ label }: { label: string }) {
   const hex = extractHexColor(label);
 
   return (
-    <span className="inline-flex items-center gap-2 rounded-full border border-white/8 bg-white/[0.04] px-3 py-1.5 text-sm text-app-text">
+    <span className="inline-flex items-center gap-2 rounded-full border border-app-border [background:var(--status-neutral-bg)] px-3 py-1.5 text-sm text-app-text">
       {hex ? (
         <span
           className="inline-flex h-3 w-3 rounded-full border border-white/20"

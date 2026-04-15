@@ -47,7 +47,7 @@ export function MainHeroSection() {
           <div className="max-w-[42rem]">
             <h1 className="text-balance font-display text-[3.2rem] font-medium leading-[0.94] tracking-[-0.07em] text-app-text sm:text-[4rem] xl:text-[5rem]">
               Grounded{" "}
-              <span className="text-app-cyan [text-shadow:0_0_24px_rgba(15,216,255,0.18)]">
+              <span className="text-app-cyan [text-shadow:var(--hero-title-accent-shadow)]">
                 Synthetic
               </span>{" "}
               Respondent Lab
@@ -121,8 +121,14 @@ function HeroSignalPanel() {
         }}
       >
         <div className="section-grid absolute inset-0 opacity-60" />
-        <div className="absolute left-1/2 top-1/2 h-[17rem] w-[17rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle,rgba(15,216,255,0.2),transparent_62%)] blur-3xl" />
-        <div className="absolute right-[12%] top-[18%] h-16 w-16 rounded-full bg-[radial-gradient(circle,rgba(216,186,103,0.26),transparent_72%)] blur-2xl" />
+        <div
+          className="absolute left-1/2 top-1/2 h-[17rem] w-[17rem] -translate-x-1/2 -translate-y-1/2 rounded-full blur-3xl"
+          style={{ background: "var(--hero-center-glow)" }}
+        />
+        <div
+          className="absolute right-[12%] top-[18%] h-16 w-16 rounded-full blur-2xl"
+          style={{ background: "var(--hero-premium-glow)" }}
+        />
 
         <div className="relative z-10 flex min-h-[16rem] items-center justify-center sm:min-h-[18.5rem]">
           <motion.div
@@ -131,17 +137,26 @@ function HeroSignalPanel() {
             transition={{ duration: 36, repeat: Number.POSITIVE_INFINITY, ease: "linear" }}
           />
           <motion.div
-            className="absolute h-[12rem] w-[12rem] rounded-full border border-white/8"
+            className="absolute h-[12rem] w-[12rem] rounded-full border"
+            style={{ borderColor: "var(--hero-orbit-border-muted)" }}
             animate={{ rotate: -360 }}
             transition={{ duration: 24, repeat: Number.POSITIVE_INFINITY, ease: "linear" }}
           />
           <motion.div
-            className="absolute h-[9rem] w-[9rem] rounded-[1.5rem] border border-app-cyan/20 bg-[linear-gradient(180deg,rgba(118,228,255,0.08),rgba(118,228,255,0.02))] shadow-[inset_0_0_40px_rgba(118,228,255,0.08)]"
+            className="absolute h-[9rem] w-[9rem] rounded-[1.5rem] border border-app-cyan/20"
+            style={{
+              background: "var(--hero-orbit-core-bg)",
+              boxShadow: "var(--hero-orbit-core-shadow)",
+            }}
             animate={{ y: [0, -6, 0] }}
             transition={{ duration: 5.6, repeat: Number.POSITIVE_INFINITY, ease: "easeInOut" }}
           />
           <motion.div
-            className="absolute h-28 w-28 rounded-[1.35rem] bg-[radial-gradient(circle_at_30%_30%,rgba(255,255,255,0.18),rgba(118,228,255,0.14),rgba(15,216,255,0.08)_60%,transparent_80%)] shadow-[0_0_50px_rgba(15,216,255,0.18)] backdrop-blur-xl"
+            className="absolute h-28 w-28 rounded-[1.35rem] backdrop-blur-xl"
+            style={{
+              background: "var(--hero-core-gradient)",
+              boxShadow: "var(--hero-core-shadow)",
+            }}
               animate={{ scale: [1, 1.03, 1] }}
               transition={{ duration: 4.5, repeat: Number.POSITIVE_INFINITY, ease: "easeInOut" }}
             >
@@ -155,9 +170,18 @@ function HeroSignalPanel() {
                 </div>
               </div>
             </motion.div>
-          <div className="absolute left-[16%] top-[17%] h-2.5 w-2.5 rounded-full bg-app-gold shadow-[0_0_18px_rgba(216,186,103,0.8)]" />
-          <div className="absolute right-[18%] top-[34%] h-2 w-2 rounded-full bg-app-cyan shadow-[0_0_16px_rgba(15,216,255,0.8)]" />
-          <div className="absolute bottom-[18%] left-[22%] h-2 w-2 rounded-full bg-white/70 shadow-[0_0_16px_rgba(255,255,255,0.35)]" />
+          <div
+            className="absolute left-[16%] top-[17%] h-2.5 w-2.5 rounded-full bg-app-gold"
+            style={{ boxShadow: "var(--hero-dot-gold-shadow)" }}
+          />
+          <div
+            className="absolute right-[18%] top-[34%] h-2 w-2 rounded-full bg-app-cyan"
+            style={{ boxShadow: "var(--hero-dot-cyan-shadow)" }}
+          />
+          <div
+            className="absolute bottom-[18%] left-[22%] h-2 w-2 rounded-full bg-white/70"
+            style={{ boxShadow: "var(--hero-dot-neutral-shadow)" }}
+          />
         </div>
 
         <div className="relative z-10 mt-2 grid gap-3 sm:grid-cols-2">

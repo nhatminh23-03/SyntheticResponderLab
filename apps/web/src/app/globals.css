@@ -9,16 +9,102 @@
   --nav-height: 5.5rem;
   --font-display: "Manrope";
   --font-body: "Plus Jakarta Sans";
-  --color-bg: #0a0f13;
+  --color-background: #0a0f13;
+  --color-background-muted: #121d25;
   --color-surface: #11181d;
-  --color-surface-soft: #162128;
-  --color-surface-strong: #1c2830;
+  --color-surface-elevated: #1c2830;
   --color-border: rgba(118, 228, 255, 0.14);
-  --color-text: #eef4f7;
-  --color-muted: #9daab3;
-  --color-cyan: #76e4ff;
-  --color-cyan-strong: #0fd8ff;
-  --color-gold: #d8ba67;
+  --color-border-strong: rgba(118, 228, 255, 0.3);
+  --color-text-primary: #eef4f7;
+  --color-text-secondary: #c1ced6;
+  --color-text-muted: #9daab3;
+  --color-brand-primary: #76e4ff;
+  --color-brand-primary-strong: #0fd8ff;
+  --color-brand-primary-soft: rgba(15, 216, 255, 0.14);
+  --color-premium-accent: #d8ba67;
+  --color-premium-accent-soft: rgba(216, 186, 103, 0.14);
+  --color-success: #63cb91;
+  --color-warning: #d8a553;
+  --color-error: #e08177;
+
+  /* Backwards-compatible aliases for existing utility usage. */
+  --color-bg: var(--color-background);
+  --color-surface-soft: var(--color-background-muted);
+  --color-surface-strong: var(--color-surface-elevated);
+  --color-text: var(--color-text-primary);
+  --color-muted: var(--color-text-muted);
+  --color-cyan: var(--color-brand-primary);
+  --color-cyan-strong: var(--color-brand-primary-strong);
+  --color-gold: var(--color-premium-accent);
+
+  /* Shared semantic interaction tokens. */
+  --focus-ring-shadow: 0 0 0 4px rgba(15, 216, 255, 0.1);
+  --button-primary-bg: linear-gradient(135deg, #76e4ff 0%, #0fd8ff 100%);
+  --button-primary-text: #04131a;
+  --button-primary-shadow: 0 0 42px rgba(15, 216, 255, 0.22);
+  --button-primary-shadow-hover: 0 0 52px rgba(15, 216, 255, 0.3);
+
+  --chip-cyan-bg: rgba(15, 216, 255, 0.12);
+  --chip-cyan-text: var(--color-brand-primary);
+  --chip-cyan-shadow: 0 0 18px rgba(15, 216, 255, 0.16);
+  --chip-gold-bg: rgba(216, 186, 103, 0.12);
+  --chip-gold-text: var(--color-premium-accent);
+  --chip-gold-shadow: 0 0 18px rgba(216, 186, 103, 0.14);
+
+  --status-success-bg: rgba(99, 203, 145, 0.14);
+  --status-success-border: rgba(99, 203, 145, 0.34);
+  --status-success-text: #7ad9a6;
+  --status-warning-bg: rgba(216, 165, 83, 0.14);
+  --status-warning-border: rgba(216, 165, 83, 0.3);
+  --status-warning-text: #e1b66e;
+  --status-error-bg: rgba(224, 129, 119, 0.14);
+  --status-error-border: rgba(224, 129, 119, 0.3);
+  --status-error-text: #ea9d94;
+  --status-neutral-bg: rgba(255, 255, 255, 0.03);
+  --status-neutral-border: rgba(255, 255, 255, 0.08);
+  --status-neutral-text: var(--color-text-muted);
+
+  --nav-active-pill-bg: rgba(15, 216, 255, 0.08);
+  --nav-indicator-shadow: 0 0 18px rgba(15, 216, 255, 0.42);
+  --nav-premium-chip-bg: rgba(216, 186, 103, 0.14);
+  --nav-premium-chip-border: rgba(216, 186, 103, 0.3);
+  --nav-premium-chip-shadow: 0 0 24px rgba(216, 186, 103, 0.12);
+
+  --hero-title-accent-shadow: 0 0 24px rgba(15, 216, 255, 0.2);
+  --hero-center-glow: radial-gradient(circle, rgba(15, 216, 255, 0.2), transparent 62%);
+  --hero-premium-glow: radial-gradient(circle, rgba(216, 186, 103, 0.26), transparent 72%);
+  --hero-orbit-border-muted: rgba(255, 255, 255, 0.08);
+  --hero-orbit-core-bg: linear-gradient(180deg, rgba(118, 228, 255, 0.08), rgba(118, 228, 255, 0.02));
+  --hero-orbit-core-shadow: inset 0 0 40px rgba(118, 228, 255, 0.08);
+  --hero-core-gradient: radial-gradient(
+    circle at 30% 30%,
+    rgba(255, 255, 255, 0.18),
+    rgba(118, 228, 255, 0.14),
+    rgba(15, 216, 255, 0.08) 60%,
+    transparent 80%
+  );
+  --hero-core-shadow: 0 0 50px rgba(15, 216, 255, 0.18);
+  --hero-dot-gold-shadow: 0 0 18px rgba(216, 186, 103, 0.8);
+  --hero-dot-cyan-shadow: 0 0 16px rgba(15, 216, 255, 0.8);
+  --hero-dot-neutral-shadow: 0 0 16px rgba(255, 255, 255, 0.35);
+
+  --floating-control-label-shadow: 0 10px 24px rgba(0, 0, 0, 0.14);
+
+  --chart-shell-bg: linear-gradient(180deg, rgba(8, 12, 16, 0.5), rgba(8, 12, 16, 0.26));
+  --chart-shell-overlay: linear-gradient(
+    180deg,
+    rgba(15, 216, 255, 0.03),
+    transparent 28%,
+    transparent 72%,
+    rgba(216, 186, 103, 0.03)
+  );
+  --chart-shell-grid: linear-gradient(to right, rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+
+  --theme-panel-gradient: linear-gradient(180deg, rgba(12, 18, 22, 0.84), rgba(12, 18, 22, 0.6));
+  --theme-panel-gradient-strong: linear-gradient(180deg, rgba(8, 13, 16, 0.86), rgba(12, 18, 22, 0.72));
+  --theme-panel-inline-gradient: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.015));
+
   --app-background:
     radial-gradient(circle at 20% 18%, rgba(15, 216, 255, 0.12), transparent 28%),
     radial-gradient(circle at 85% 16%, rgba(216, 186, 103, 0.1), transparent 22%),
@@ -85,27 +171,111 @@
 
 [data-theme="light"] {
   color-scheme: light;
-  --color-bg: #f5f8fb;
-  --color-surface: #ffffff;
-  --color-surface-soft: #f0f5f9;
-  --color-surface-strong: #e4edf4;
-  --color-border: rgba(58, 120, 160, 0.22);
-  --color-text: #0f2530;
-  --color-muted: #4a6b7c;
-  --color-cyan: #3a82a8;
-  --color-cyan-strong: #2d7a9e;
-  --color-gold: #7a6520;
+  --color-background: #f7f4ee;
+  --color-background-muted: #efe8de;
+  --color-surface: #fffdf9;
+  --color-surface-elevated: #f5efe6;
+  --color-border: rgba(72, 104, 128, 0.24);
+  --color-border-strong: rgba(72, 104, 128, 0.38);
+  --color-text-primary: #102536;
+  --color-text-secondary: #2b4455;
+  --color-text-muted: #5e7383;
+  --color-brand-primary: #3c84ad;
+  --color-brand-primary-strong: #2b6f97;
+  --color-brand-primary-soft: rgba(60, 132, 173, 0.16);
+  --color-premium-accent: #8a6a2f;
+  --color-premium-accent-soft: rgba(138, 106, 47, 0.17);
+  --color-success: #2e7e53;
+  --color-warning: #9a6d20;
+  --color-error: #ae4435;
+
+  --color-bg: var(--color-background);
+  --color-surface-soft: var(--color-background-muted);
+  --color-surface-strong: var(--color-surface-elevated);
+  --color-text: var(--color-text-primary);
+  --color-muted: var(--color-text-muted);
+  --color-cyan: var(--color-brand-primary);
+  --color-cyan-strong: var(--color-brand-primary-strong);
+  --color-gold: var(--color-premium-accent);
+
+  --focus-ring-shadow: 0 0 0 4px rgba(60, 132, 173, 0.16);
+  --button-primary-bg: linear-gradient(135deg, #66c9ea 0%, #3189b5 100%);
+  --button-primary-text: #082130;
+  --button-primary-shadow:
+    0 16px 34px rgba(58, 116, 151, 0.2),
+    0 0 0 1px rgba(60, 132, 173, 0.2);
+  --button-primary-shadow-hover:
+    0 20px 40px rgba(58, 116, 151, 0.28),
+    0 0 0 1px rgba(60, 132, 173, 0.3);
+
+  --chip-cyan-bg: rgba(60, 132, 173, 0.16);
+  --chip-cyan-text: #1d6389;
+  --chip-cyan-shadow: 0 0 18px rgba(60, 132, 173, 0.14);
+  --chip-gold-bg: rgba(138, 106, 47, 0.16);
+  --chip-gold-text: #7a5923;
+  --chip-gold-shadow: 0 0 18px rgba(138, 106, 47, 0.14);
+
+  --status-success-bg: rgba(46, 126, 83, 0.12);
+  --status-success-border: rgba(46, 126, 83, 0.3);
+  --status-success-text: #2d6f49;
+  --status-warning-bg: rgba(138, 106, 47, 0.14);
+  --status-warning-border: rgba(138, 106, 47, 0.34);
+  --status-warning-text: #785822;
+  --status-error-bg: rgba(174, 68, 53, 0.12);
+  --status-error-border: rgba(174, 68, 53, 0.3);
+  --status-error-text: #9b3f32;
+  --status-neutral-bg: rgba(255, 255, 255, 0.94);
+  --status-neutral-border: rgba(72, 104, 128, 0.26);
+  --status-neutral-text: var(--color-text-muted);
+
+  --nav-active-pill-bg: rgba(60, 132, 173, 0.14);
+  --nav-indicator-shadow: 0 0 18px rgba(60, 132, 173, 0.32);
+  --nav-premium-chip-bg: rgba(138, 106, 47, 0.14);
+  --nav-premium-chip-border: rgba(138, 106, 47, 0.34);
+  --nav-premium-chip-shadow: 0 0 20px rgba(138, 106, 47, 0.16);
+
+  --hero-title-accent-shadow: 0 0 22px rgba(60, 132, 173, 0.26);
+  --hero-center-glow: radial-gradient(circle, rgba(60, 132, 173, 0.24), transparent 62%);
+  --hero-premium-glow: radial-gradient(circle, rgba(138, 106, 47, 0.26), transparent 72%);
+  --hero-orbit-border-muted: rgba(72, 104, 128, 0.24);
+  --hero-orbit-core-bg: linear-gradient(180deg, rgba(60, 132, 173, 0.18), rgba(60, 132, 173, 0.1));
+  --hero-orbit-core-shadow: inset 0 0 40px rgba(60, 132, 173, 0.12);
+  --hero-core-gradient: radial-gradient(
+    circle at 30% 30%,
+    rgba(255, 255, 255, 0.86),
+    rgba(102, 190, 229, 0.34),
+    rgba(60, 132, 173, 0.18) 58%,
+    transparent 80%
+  );
+  --hero-core-shadow: 0 0 38px rgba(60, 132, 173, 0.22);
+  --hero-dot-gold-shadow: 0 0 14px rgba(138, 106, 47, 0.55);
+  --hero-dot-cyan-shadow: 0 0 14px rgba(60, 132, 173, 0.5);
+  --hero-dot-neutral-shadow: 0 0 12px rgba(87, 117, 137, 0.36);
+
+  --floating-control-label-shadow: 0 8px 22px rgba(70, 100, 125, 0.18);
+
+  --chart-shell-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.84), rgba(247, 241, 232, 0.7));
+  --chart-shell-overlay: linear-gradient(
+    180deg,
+    rgba(60, 132, 173, 0.05),
+    transparent 28%,
+    transparent 72%,
+    rgba(138, 106, 47, 0.05)
+  );
+  --chart-shell-grid: linear-gradient(to right, rgba(72, 104, 128, 0.12) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(72, 104, 128, 0.09) 1px, transparent 1px);
+
   --app-background:
-    radial-gradient(circle at 18% 14%, rgba(58, 130, 168, 0.1), transparent 24%),
-    radial-gradient(circle at 82% 14%, rgba(120, 140, 155, 0.06), transparent 18%),
-    radial-gradient(circle at 50% 52%, rgba(58, 130, 168, 0.05), transparent 34%),
-    linear-gradient(180deg, #f5f8fb 0%, #f0f4f8 46%, #eaf0f5 100%);
-  --selection-bg: rgba(58, 130, 168, 0.24);
-  --app-backdrop-top: radial-gradient(circle at top, rgba(58, 130, 168, 0.1), transparent 54%);
-  --app-backdrop-gold: radial-gradient(circle, rgba(122, 101, 32, 0.05), transparent 62%);
-  --app-backdrop-cyan: radial-gradient(circle, rgba(58, 130, 168, 0.08), transparent 62%);
-  --nav-bg: rgba(245, 248, 251, 0.92);
-  --nav-border: rgba(58, 120, 160, 0.12);
+    radial-gradient(circle at 18% 14%, rgba(60, 132, 173, 0.12), transparent 24%),
+    radial-gradient(circle at 82% 14%, rgba(138, 106, 47, 0.08), transparent 18%),
+    radial-gradient(circle at 50% 52%, rgba(60, 132, 173, 0.05), transparent 34%),
+    linear-gradient(180deg, #f7f4ee 0%, #f2ece2 46%, #ede6db 100%);
+  --selection-bg: rgba(60, 132, 173, 0.24);
+  --app-backdrop-top: radial-gradient(circle at top, rgba(60, 132, 173, 0.14), transparent 54%);
+  --app-backdrop-gold: radial-gradient(circle, rgba(138, 106, 47, 0.08), transparent 62%);
+  --app-backdrop-cyan: radial-gradient(circle, rgba(60, 132, 173, 0.11), transparent 62%);
+  --nav-bg: rgba(247, 244, 238, 0.9);
+  --nav-border: rgba(72, 104, 128, 0.18);
   --glass-panel-bg: linear-gradient(
     180deg,
     rgba(255, 255, 255, 0.99) 0%,
@@ -124,12 +294,12 @@
     0 20px 48px rgba(70, 100, 125, 0.1);
   --button-secondary-bg: rgba(255, 255, 255, 0.94);
   --button-secondary-bg-hover: rgba(255, 255, 255, 1);
-  --button-secondary-border: rgba(58, 120, 160, 0.24);
+  --button-secondary-border: rgba(72, 104, 128, 0.26);
   --badge-neutral-bg: rgba(255, 255, 255, 0.92);
-  --badge-neutral-border: rgba(58, 120, 160, 0.18);
-  --control-bg: rgba(237, 243, 248, 0.88);
+  --badge-neutral-border: rgba(72, 104, 128, 0.18);
+  --control-bg: rgba(244, 237, 228, 0.9);
   --control-bg-hover: rgba(255, 255, 255, 1);
-  --control-border: rgba(58, 120, 160, 0.24);
+  --control-border: rgba(72, 104, 128, 0.28);
   --floating-control-bg: radial-gradient(
     circle at 30% 30%,
     rgba(58, 130, 168, 0.2),
@@ -137,12 +307,12 @@
   );
   --floating-control-label-bg: rgba(255, 255, 255, 0.98);
   --floating-control-shadow:
-    0 0 0 1px rgba(58, 130, 168, 0.18),
-    0 0 20px rgba(58, 130, 168, 0.1),
-    0 12px 36px rgba(70, 100, 125, 0.18);
+    0 0 0 1px rgba(60, 132, 173, 0.2),
+    0 0 20px rgba(60, 132, 173, 0.12),
+    0 12px 36px rgba(70, 100, 125, 0.2);
   --floating-control-secondary-bg: rgba(255, 255, 255, 0.97);
   --floating-control-secondary-shadow:
-    0 0 0 1px rgba(58, 120, 160, 0.12),
+    0 0 0 1px rgba(72, 104, 128, 0.15),
     0 4px 12px rgba(70, 100, 125, 0.08),
     0 10px 28px rgba(70, 100, 125, 0.12);
   --hero-signal-panel-bg: linear-gradient(
@@ -150,28 +320,28 @@
     rgba(58, 130, 168, 0.16) 0%,
     rgba(58, 130, 168, 0.26) 100%
   );
-  --hero-signal-panel-border: rgba(58, 120, 160, 0.24);
+  --hero-signal-panel-border: rgba(72, 104, 128, 0.26);
   --hero-signal-node-bg: rgba(58, 130, 168, 0.14);
   --hero-signal-card-bg: linear-gradient(
     180deg,
     rgba(255, 255, 255, 0.94) 0%,
     rgba(252, 254, 255, 0.96) 100%
   );
-  --hero-signal-card-border: rgba(58, 120, 160, 0.22);
+  --hero-signal-card-border: rgba(72, 104, 128, 0.24);
   --hero-signal-card-shadow:
     0 2px 8px rgba(70, 100, 125, 0.06),
     inset 0 1px 0 rgba(255, 255, 255, 0.7);
   --metric-pill-bg: rgba(255, 255, 255, 0.96);
-  --metric-pill-border: rgba(58, 120, 160, 0.22);
+  --metric-pill-border: rgba(72, 104, 128, 0.24);
   --theme-panel-gradient: linear-gradient(
     180deg,
-    rgba(58, 130, 168, 0.18),
-    rgba(58, 130, 168, 0.28)
+    rgba(60, 132, 173, 0.2),
+    rgba(60, 132, 173, 0.32)
   );
   --theme-panel-gradient-strong: linear-gradient(
     180deg,
-    rgba(58, 130, 168, 0.22),
-    rgba(58, 130, 168, 0.32)
+    rgba(60, 132, 173, 0.26),
+    rgba(60, 132, 173, 0.36)
   );
   --theme-panel-inline-gradient: linear-gradient(
     180deg,

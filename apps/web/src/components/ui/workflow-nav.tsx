@@ -44,7 +44,7 @@ export function WorkflowNav() {
                   "relative shrink-0 rounded-full px-3 py-2 text-sm tracking-[0.01em] transition-colors",
                   navigationLocked && "cursor-not-allowed opacity-55",
                   isActive
-                    ? "text-app-text"
+                    ? "text-app-text [background:var(--nav-active-pill-bg)]"
                     : "text-app-muted hover:text-app-cyan"
                 )}
               >
@@ -52,7 +52,7 @@ export function WorkflowNav() {
                 {isActive ? (
                   <motion.span
                     layoutId="workflow-nav-indicator"
-                    className="absolute inset-x-3 bottom-0 h-px bg-app-cyan shadow-[0_0_18px_rgba(15,216,255,0.42)]"
+                    className="absolute inset-x-3 bottom-0 h-px bg-app-cyan shadow-[var(--nav-indicator-shadow)]"
                   />
                 ) : null}
               </button>
@@ -83,7 +83,7 @@ export function WorkflowNav() {
           <button
             type="button"
             disabled
-            className="hidden rounded-full border border-app-gold/30 bg-[rgba(216,186,103,0.14)] px-4 py-1.5 text-[0.62rem] uppercase tracking-[0.22em] text-app-gold shadow-[0_0_24px_rgba(216,186,103,0.12)] xl:flex"
+            className="hidden rounded-full border px-4 py-1.5 text-[0.62rem] uppercase tracking-[0.22em] [border-color:var(--nav-premium-chip-border)] [background:var(--nav-premium-chip-bg)] [color:var(--chip-gold-text)] [box-shadow:var(--nav-premium-chip-shadow)] xl:flex"
             title="Interview extension is not implemented yet."
           >
             Interview

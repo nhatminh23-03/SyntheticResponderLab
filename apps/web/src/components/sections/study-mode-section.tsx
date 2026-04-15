@@ -242,11 +242,11 @@ export function StudyModeSection() {
                     className={cn(
                       "h-full p-4 transition duration-300 sm:p-5",
                       isSelected
-                        ? "border-app-cyan/30 bg-[linear-gradient(180deg,rgba(118,228,255,0.12),rgba(255,255,255,0.04))] shadow-[0_0_60px_rgba(15,216,255,0.12)]"
-                        : "hover:border-white/15 hover:bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.02))]"
+                        ? "[border-color:var(--color-border-strong)] [background:var(--color-brand-primary-soft)] [box-shadow:var(--button-primary-shadow)]"
+                        : "hover:[border-color:var(--color-border-strong)] hover:[background:var(--button-secondary-bg-hover)]"
                     )}
                   >
-                    <div className="flex h-full flex-col rounded-[1.45rem] border border-white/5 bg-[linear-gradient(180deg,rgba(12,18,22,0.82),rgba(12,18,22,0.56))] p-5">
+                    <div className="flex h-full flex-col rounded-[1.45rem] border border-app-border p-5 [background:var(--theme-panel-gradient)]">
                       <div className="flex items-start justify-between gap-4">
                         <div>
                           <div className="flex flex-wrap items-center gap-3">
@@ -267,8 +267,8 @@ export function StudyModeSection() {
                           className={cn(
                             "relative flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border",
                             isSelected
-                              ? "border-app-cyan/35 bg-[rgba(15,216,255,0.12)] text-app-cyan"
-                              : "border-white/10 bg-white/[0.03] text-app-muted"
+                              ? "text-app-cyan [border-color:var(--color-border-strong)] [background:var(--color-brand-primary-soft)]"
+                              : "text-app-muted [border-color:var(--status-neutral-border)] [background:var(--status-neutral-bg)]"
                           )}
                         >
                           {card.value === "neo_smart" ? (
@@ -283,14 +283,14 @@ export function StudyModeSection() {
                         {card.bullets.map((bullet) => (
                           <div
                             key={bullet}
-                            className="flex items-start gap-3 rounded-2xl border border-white/5 bg-white/[0.02] px-3.5 py-3"
+                            className="flex items-start gap-3 rounded-2xl border border-app-border px-3.5 py-3 [background:var(--button-secondary-bg)]"
                           >
                             <span
                               className={cn(
                                 "mt-1 inline-flex h-2.5 w-2.5 shrink-0 rounded-full",
                                 card.accent === "gold"
-                                  ? "bg-app-gold shadow-[0_0_14px_rgba(216,186,103,0.55)]"
-                                  : "bg-app-cyan shadow-[0_0_14px_rgba(15,216,255,0.55)]"
+                                  ? "bg-app-gold shadow-[var(--chip-gold-shadow)]"
+                                  : "bg-app-cyan shadow-[var(--chip-cyan-shadow)]"
                               )}
                             />
                             <span className="text-sm leading-5 text-app-muted">
@@ -312,8 +312,8 @@ export function StudyModeSection() {
                           className={cn(
                             "inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs tracking-[0.18em]",
                             isSelected
-                              ? "bg-[rgba(15,216,255,0.12)] text-app-cyan"
-                              : "bg-white/[0.03] text-app-muted"
+                              ? "text-app-cyan [background:var(--color-brand-primary-soft)]"
+                              : "text-app-muted [background:var(--status-neutral-bg)]"
                           )}
                         >
                           <span

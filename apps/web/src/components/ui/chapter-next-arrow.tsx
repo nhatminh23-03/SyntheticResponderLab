@@ -36,8 +36,8 @@ export function ChapterNextArrow() {
         }}
         aria-label={useInSectionAdvance ? "Continue through this section" : "Go to the next section"}
       >
-        <span className="absolute inset-0 rounded-full bg-app-cyan/10 blur-xl transition group-hover:bg-app-cyan/15" />
-        <span className="absolute -top-8 rounded-full border border-app-cyan/20 px-3 py-1 text-[0.62rem] uppercase tracking-[0.26em] text-app-cyan shadow-[0_10px_24px_rgba(0,0,0,0.14)] [background:var(--floating-control-label-bg)]">
+        <span className="absolute inset-0 rounded-full blur-xl transition opacity-80 group-hover:opacity-100 [background:var(--color-brand-primary-soft)]" />
+        <span className="absolute -top-8 rounded-full border border-app-cyan/20 px-3 py-1 text-[0.62rem] uppercase tracking-[0.26em] text-app-cyan shadow-[var(--floating-control-label-shadow)] [background:var(--floating-control-label-bg)]">
           {useInSectionAdvance ? "More" : "Next"}
         </span>
         <svg

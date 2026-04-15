@@ -17,11 +17,11 @@ export function BadgeChip({
       className={cn(
         "inline-flex items-center gap-2 rounded-full px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.24em]",
         tone === "cyan" &&
-          "bg-[rgba(15,216,255,0.12)] text-app-cyan shadow-[0_0_18px_rgba(15,216,255,0.16)]",
+          "[background:var(--chip-cyan-bg)] [color:var(--chip-cyan-text)] [box-shadow:var(--chip-cyan-shadow)]",
         tone === "gold" &&
-          "bg-[rgba(216,186,103,0.12)] text-app-gold shadow-[0_0_18px_rgba(216,186,103,0.14)]",
+          "[background:var(--chip-gold-bg)] [color:var(--chip-gold-text)] [box-shadow:var(--chip-gold-shadow)]",
         tone === "neutral" &&
-          "text-app-muted [background:var(--badge-neutral-bg)] [box-shadow:inset_0_0_0_1px_var(--badge-neutral-border)]",
+          "[color:var(--status-neutral-text)] [background:var(--badge-neutral-bg)] [box-shadow:inset_0_0_0_1px_var(--badge-neutral-border)]",
         className
       )}
     >

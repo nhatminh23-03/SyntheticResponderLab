@@ -86,7 +86,7 @@ export function GroupedBarChart({
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, amount: 0.3 }}
             transition={{ duration: 0.35, delay: rowIndex * 0.05 }}
-            className="rounded-[1.05rem] border border-white/6 bg-[linear-gradient(180deg,rgba(255,255,255,0.022),rgba(255,255,255,0.012))] p-4"
+            className="rounded-[1.05rem] border border-app-border [background:var(--hero-signal-card-bg)] p-4"
           >
             <div className="mb-4 text-sm font-medium text-app-text">{row.label}</div>
             <div className="space-y-3">
@@ -101,7 +101,7 @@ export function GroupedBarChart({
                           : "n/a")}
                     </span>
                   </div>
-                  <div className="h-3 rounded-full border border-white/6 bg-white/[0.04] p-[2px]">
+                  <div className="h-3 rounded-full border border-app-border [background:var(--status-neutral-bg)] p-[2px]">
                       <motion.div
                         initial={{ scaleX: 0, opacity: 0.6 }}
                         whileInView={{ scaleX: 1, opacity: 1 }}

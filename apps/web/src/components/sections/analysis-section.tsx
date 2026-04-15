@@ -151,7 +151,7 @@ export function AnalysisSection() {
           </RevealOnScroll>
 
           <RevealOnScroll delay={0.04}>
-            <div className="rounded-[1.45rem] border border-app-gold/20 bg-[rgba(216,186,103,0.08)] px-5 py-4 text-sm leading-6 text-app-gold">
+            <div className="rounded-[1.45rem] border [border-color:var(--status-warning-border)] [background:var(--status-warning-bg)] px-5 py-4 text-sm leading-6 text-app-gold">
               {analysis?.transparency_note ??
                 "Transparency note: confidence and agreement labels are rule-based heuristics for demo trust framing."}
             </div>
@@ -163,7 +163,7 @@ export function AnalysisSection() {
 
           {!analysis?.available ? (
             <GlassPanel className="p-6 sm:p-7">
-              <div className="rounded-[1.55rem] border border-white/8 bg-[linear-gradient(180deg,rgba(12,18,22,0.84),rgba(12,18,22,0.6))] p-6">
+              <div className="rounded-[1.55rem] border border-app-border [background:var(--theme-panel-gradient)] p-6">
                 <div className="flex flex-wrap gap-3">
                   <BadgeChip tone="gold">Analysis Unavailable</BadgeChip>
                   {run?.status ? <BadgeChip>{run.status}</BadgeChip> : null}
@@ -182,7 +182,7 @@ export function AnalysisSection() {
           ) : (
             <>
               <RevealOnScroll delay={0.08}>
-                <details className="rounded-[1.55rem] border border-white/8 bg-[rgba(255,255,255,0.03)] p-5">
+                <details className="rounded-[1.55rem] border border-app-border [background:var(--status-neutral-bg)] p-5">
                   <summary className="cursor-pointer list-none text-sm font-medium text-app-text">
                     Context & Workflow
                   </summary>
@@ -256,7 +256,7 @@ export function AnalysisSection() {
                     }
                   >
                     {benchmark?.available ? (
-                      <details className="mt-4 rounded-[1.15rem] border border-white/8 bg-white/[0.03] p-3">
+                      <details className="mt-4 rounded-[1.15rem] border border-app-border [background:var(--status-neutral-bg)] p-3">
                         <summary className="cursor-pointer list-none text-sm text-app-text">
                           Show detailed benchmark table
                         </summary>
@@ -277,7 +277,7 @@ export function AnalysisSection() {
                     }
                   >
                     {realism?.available ? (
-                      <details className="mt-4 rounded-[1.15rem] border border-white/8 bg-white/[0.03] p-3">
+                      <details className="mt-4 rounded-[1.15rem] border border-app-border [background:var(--status-neutral-bg)] p-3">
                         <summary className="cursor-pointer list-none text-sm text-app-text">
                           Show detailed realism table
                         </summary>
@@ -313,7 +313,7 @@ export function AnalysisSection() {
 
               <RevealOnScroll delay={0.14}>
                 <GlassPanel className="p-5 sm:p-6">
-                  <div className="rounded-[1.55rem] border border-white/5 bg-[linear-gradient(180deg,rgba(12,18,22,0.84),rgba(12,18,22,0.6))] p-5">
+                  <div className="rounded-[1.55rem] border border-app-border [background:var(--theme-panel-gradient)] p-5">
                     <div className="flex flex-wrap items-center gap-3">
                       <BadgeChip tone="cyan">Question Explorer</BadgeChip>
                       <BadgeChip>{`${analysis.filters?.filtered_record_count ?? 0} records after filter`}</BadgeChip>
@@ -351,7 +351,7 @@ export function AnalysisSection() {
 
                     <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1.04fr)_minmax(20rem,0.96fr)]">
                       <div className="space-y-4">
-                        <div className="rounded-[1.35rem] border border-white/8 bg-white/[0.03] p-4">
+                        <div className="rounded-[1.35rem] border border-app-border [background:var(--status-neutral-bg)] p-4">
                           <div className="flex flex-wrap gap-2">
                             <BadgeChip>{questionExplorer?.question_id ?? "No question"}</BadgeChip>
                             <BadgeChip tone="neutral">
@@ -389,7 +389,7 @@ export function AnalysisSection() {
                         </div>
                       </div>
 
-                      <div className="rounded-[1.35rem] border border-white/8 bg-white/[0.03] p-4">
+                      <div className="rounded-[1.35rem] border border-app-border [background:var(--status-neutral-bg)] p-4">
                         <div className="text-[0.72rem] uppercase tracking-[0.24em] text-app-muted">
                           Question trust note
                         </div>
@@ -406,7 +406,7 @@ export function AnalysisSection() {
               <RevealOnScroll delay={0.16}>
                 <div className="grid gap-4 xl:grid-cols-2">
                   <GlassPanel className="p-5 sm:p-6">
-                    <div className="rounded-[1.55rem] border border-white/5 bg-[linear-gradient(180deg,rgba(12,18,22,0.84),rgba(12,18,22,0.6))] p-5">
+                    <div className="rounded-[1.55rem] border border-app-border [background:var(--theme-panel-gradient)] p-5">
                       <div className="flex flex-wrap items-center gap-3">
                         <BadgeChip tone="gold">Open Text Evidence</BadgeChip>
                         {openTextQuestion ? (
@@ -439,7 +439,7 @@ export function AnalysisSection() {
                   </GlassPanel>
 
                   <GlassPanel className="p-5 sm:p-6">
-                    <div className="rounded-[1.55rem] border border-white/5 bg-[linear-gradient(180deg,rgba(12,18,22,0.84),rgba(12,18,22,0.6))] p-5">
+                    <div className="rounded-[1.55rem] border border-app-border [background:var(--theme-panel-gradient)] p-5">
                       <div className="flex flex-wrap items-center gap-3">
                         <BadgeChip tone="gold">Evidence Notes</BadgeChip>
                       </div>
@@ -470,7 +470,7 @@ export function AnalysisSection() {
 
               <RevealOnScroll delay={0.18}>
                 <GlassPanel className="p-5 sm:p-6">
-                  <div className="rounded-[1.55rem] border border-white/5 bg-[linear-gradient(180deg,rgba(12,18,22,0.84),rgba(12,18,22,0.6))] p-5">
+                  <div className="rounded-[1.55rem] border border-app-border [background:var(--theme-panel-gradient)] p-5">
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <div>
                         <div className="flex flex-wrap items-center gap-3">
@@ -504,7 +504,7 @@ export function AnalysisSection() {
         <RevealOnScroll delay={0.08} className="min-w-0 lg:sticky lg:top-6 lg:w-full lg:max-w-[22rem] lg:justify-self-end xl:max-w-[24rem] 2xl:max-w-[29rem]">
           <div className="space-y-5">
             <GlassPanel className="p-5 sm:p-6">
-              <div className="rounded-[1.55rem] border border-white/5 bg-[linear-gradient(180deg,rgba(12,18,22,0.84),rgba(12,18,22,0.6))] p-5">
+              <div className="rounded-[1.55rem] border border-app-border [background:var(--theme-panel-gradient)] p-5">
                 <div className="flex flex-wrap gap-2">
                   <BadgeChip tone="cyan">Run Snapshot</BadgeChip>
                   {isLoading ? <BadgeChip>Refreshing</BadgeChip> : null}
@@ -554,7 +554,7 @@ export function AnalysisSection() {
             </GlassPanel>
 
             <GlassPanel className="p-5 sm:p-6">
-              <div className="rounded-[1.55rem] border border-white/5 bg-[linear-gradient(180deg,rgba(12,18,22,0.84),rgba(12,18,22,0.6))] p-5">
+              <div className="rounded-[1.55rem] border border-app-border [background:var(--theme-panel-gradient)] p-5">
                 <div className="flex flex-wrap gap-2">
                   <BadgeChip tone="gold">Interpretation Frame</BadgeChip>
                 </div>
@@ -594,7 +594,7 @@ function SelectBlock({
 function SummaryKpiCard({ label, value }: { label: string; value: string }) {
   return (
     <GlassPanel className="p-4 sm:p-5">
-      <div className="rounded-[1.3rem] border border-white/6 bg-[linear-gradient(180deg,rgba(12,18,22,0.8),rgba(12,18,22,0.58))] p-4">
+      <div className="rounded-[1.3rem] border border-app-border [background:var(--theme-panel-gradient)] p-4">
         <div className="text-[0.68rem] uppercase tracking-[0.22em] text-app-muted">
           {label}
         </div>
@@ -617,7 +617,7 @@ function TrustBandCard({
 }) {
   return (
     <GlassPanel className="p-5 sm:p-6">
-      <div className="rounded-[1.55rem] border border-white/5 bg-[linear-gradient(180deg,rgba(12,18,22,0.84),rgba(12,18,22,0.6))] p-5">
+      <div className="rounded-[1.55rem] border border-app-border [background:var(--theme-panel-gradient)] p-5">
         <div className="flex flex-wrap gap-2">
           <BadgeChip tone={tone}>{title}</BadgeChip>
         </div>
@@ -632,7 +632,7 @@ function DistributionChart({ rows }: { rows: AnalysisDistributionRow[] }) {
   const maxCount = rows.reduce((highest, row) => Math.max(highest, row.count), 0);
 
   return (
-    <div className="rounded-[1.35rem] border border-white/8 bg-white/[0.03] p-4">
+    <div className="rounded-[1.35rem] border border-app-border [background:var(--status-neutral-bg)] p-4">
       <div className="text-[0.72rem] uppercase tracking-[0.24em] text-app-muted">
         Answer Distribution
       </div>
@@ -666,13 +666,13 @@ function DistributionChart({ rows }: { rows: AnalysisDistributionRow[] }) {
 
 function DistributionTable({ rows }: { rows: AnalysisDistributionRow[] }) {
   return (
-    <div className="rounded-[1.35rem] border border-white/8 bg-white/[0.03] p-4">
+    <div className="rounded-[1.35rem] border border-app-border [background:var(--status-neutral-bg)] p-4">
       <div className="text-[0.72rem] uppercase tracking-[0.24em] text-app-muted">
         Answer Summary
       </div>
-      <div className="mt-4 overflow-hidden rounded-[1rem] border border-white/6">
+      <div className="mt-4 overflow-hidden rounded-[1rem] border border-app-border">
         <table className="min-w-full divide-y divide-white/6 text-sm">
-          <thead className="bg-white/[0.03] text-app-muted">
+          <thead className="[background:var(--status-neutral-bg)] text-app-muted">
             <tr>
               <th className="px-3 py-2 text-left font-medium">Answer</th>
               <th className="px-3 py-2 text-left font-medium">Count</th>
@@ -682,7 +682,7 @@ function DistributionTable({ rows }: { rows: AnalysisDistributionRow[] }) {
           <tbody>
             {rows.length > 0 ? (
               rows.map((row) => (
-                <tr key={row.answer_display} className="border-t border-white/6 text-app-text">
+                <tr key={row.answer_display} className="border-t border-app-border text-app-text">
                   <td className="px-3 py-2">{row.answer_display}</td>
                   <td className="px-3 py-2">{row.count}</td>
                   <td className="px-3 py-2">{row.percentage}%</td>
@@ -712,7 +712,7 @@ function EvidenceCard({
   subtext?: string;
 }) {
   return (
-    <div className="rounded-[1.2rem] border border-white/6 bg-white/[0.03] p-4">
+    <div className="rounded-[1.2rem] border border-app-border [background:var(--status-neutral-bg)] p-4">
       <div className="text-sm font-medium text-app-text">{header}</div>
       {subtext ? <div className="mt-1 text-sm text-app-muted">{subtext}</div> : null}
       <p className="mt-3 text-sm leading-7 text-app-text">{body}</p>
@@ -735,7 +735,7 @@ function EvidenceList({
         "rounded-[1.2rem] border p-4",
         tone === "gold"
           ? "border-app-gold/20 bg-[rgba(216,186,103,0.08)]"
-          : "border-white/8 bg-white/[0.03]"
+          : "border-app-border [background:var(--status-neutral-bg)]"
       )}
     >
       <div className="text-[0.72rem] uppercase tracking-[0.24em] text-app-muted">
@@ -764,7 +764,7 @@ function RecordsPreviewTable({ rows }: { rows: AnalysisResponseRecord[] }) {
       <tbody>
         {rows.length > 0 ? (
           rows.map((row, index) => (
-            <tr key={`${String(row.respondent_id ?? index)}-${String(row.question_id ?? index)}-${index}`} className="border-t border-white/6 text-app-text">
+            <tr key={`${String(row.respondent_id ?? index)}-${String(row.question_id ?? index)}-${index}`} className="border-t border-app-border text-app-text">
               <td className="px-3 py-3 align-top">{String(row.respondent_id ?? "n/a")}</td>
               <td className="px-3 py-3 align-top">{String(row.model ?? "n/a")}</td>
               <td className="px-3 py-3 align-top">
@@ -808,7 +808,7 @@ function CompactTable({ rows }: { rows: Array<Record<string, unknown>> }) {
       </thead>
       <tbody>
         {rows.map((row, index) => (
-          <tr key={index} className="border-t border-white/6 text-app-text">
+          <tr key={index} className="border-t border-app-border text-app-text">
             {columns.map((column) => (
               <td key={column} className="px-3 py-3 align-top">
                 {formatAnswer(row[column])}
@@ -833,13 +833,13 @@ function PagerControls({
   onNext: () => void;
 }) {
   return (
-    <div className="inline-flex items-center gap-3 rounded-[1.2rem] border border-white/8 bg-white/[0.03] px-3 py-2">
+    <div className="inline-flex items-center gap-3 rounded-[1.2rem] border border-app-border [background:var(--status-neutral-bg)] px-3 py-2">
       <button
         type="button"
         onClick={onPrev}
         disabled={page <= 0}
         className={cn(
-          "inline-flex h-9 w-9 items-center justify-center rounded-xl border border-white/8 bg-black/10 text-app-text transition",
+          "inline-flex h-9 w-9 items-center justify-center rounded-xl border border-app-border [background:var(--control-bg)] text-app-text transition",
           page <= 0 ? "cursor-not-allowed opacity-40" : "hover:border-app-cyan/25 hover:text-app-cyan"
         )}
       >
@@ -853,7 +853,7 @@ function PagerControls({
         onClick={onNext}
         disabled={page >= pageCount - 1}
         className={cn(
-          "inline-flex h-9 w-9 items-center justify-center rounded-xl border border-white/8 bg-black/10 text-app-text transition",
+          "inline-flex h-9 w-9 items-center justify-center rounded-xl border border-app-border [background:var(--control-bg)] text-app-text transition",
           page >= pageCount - 1
             ? "cursor-not-allowed opacity-40"
             : "hover:border-app-cyan/25 hover:text-app-cyan"
@@ -867,7 +867,7 @@ function PagerControls({
 
 function MetaMiniCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-[1rem] border border-white/6 bg-black/10 p-3">
+    <div className="rounded-[1rem] border border-app-border [background:var(--control-bg)] p-3">
       <div className="text-[0.68rem] uppercase tracking-[0.22em] text-app-muted">{label}</div>
       <div className="mt-2 text-sm text-app-text">{value}</div>
     </div>
@@ -876,7 +876,7 @@ function MetaMiniCard({ label, value }: { label: string; value: string }) {
 
 function SidebarRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-[1.1rem] border border-white/6 bg-white/[0.03] p-3">
+    <div className="rounded-[1.1rem] border border-app-border [background:var(--status-neutral-bg)] p-3">
       <div className="text-[0.68rem] uppercase tracking-[0.22em] text-app-muted">{label}</div>
       <div className="mt-2 text-sm text-app-text">{value}</div>
     </div>
@@ -885,7 +885,7 @@ function SidebarRow({ label, value }: { label: string; value: string }) {
 
 function ContextSummaryCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-[1.1rem] border border-white/6 bg-white/[0.03] p-4">
+    <div className="rounded-[1.1rem] border border-app-border [background:var(--status-neutral-bg)] p-4">
       <div className="text-[0.68rem] uppercase tracking-[0.22em] text-app-muted">{label}</div>
       <div className="mt-2 text-sm leading-6 text-app-text">{value}</div>
     </div>
@@ -897,10 +897,10 @@ function StatusBanner({ tone, message }: { tone: StatusTone; message: string }) 
     <div
       className={cn(
         "rounded-[1.35rem] border px-5 py-4 text-sm leading-6",
-        tone === "success" && "border-app-cyan/20 bg-[rgba(15,216,255,0.08)] text-app-cyan",
-        tone === "warning" && "border-app-gold/20 bg-[rgba(216,186,103,0.08)] text-app-gold",
-        tone === "error" && "border-app-gold/20 bg-[rgba(216,186,103,0.08)] text-app-gold",
-        tone === "neutral" && "border-white/8 bg-white/[0.03] text-app-muted"
+        tone === "success" && "[border-color:var(--status-success-border)] [background:var(--status-success-bg)] [color:var(--status-success-text)]",
+        tone === "warning" && "[border-color:var(--status-warning-border)] [background:var(--status-warning-bg)] [color:var(--status-warning-text)]",
+        tone === "error" && "[border-color:var(--status-warning-border)] [background:var(--status-warning-bg)] [color:var(--status-warning-text)]",
+        tone === "neutral" && "border-app-border [background:var(--status-neutral-bg)] text-app-muted"
       )}
     >
       {message}
@@ -910,7 +910,7 @@ function StatusBanner({ tone, message }: { tone: StatusTone; message: string }) 
 
 function EmptyState({ message }: { message: string }) {
   return (
-    <div className="rounded-[1.2rem] border border-dashed border-white/10 bg-white/[0.02] px-4 py-6 text-sm leading-6 text-app-muted">
+    <div className="rounded-[1.2rem] border border-dashed border-app-border [background:var(--control-bg)] px-4 py-6 text-sm leading-6 text-app-muted">
       {message}
     </div>
   );

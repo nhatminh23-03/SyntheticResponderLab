@@ -69,10 +69,10 @@ export function HorizontalBarChart({
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, amount: 0.3 }}
             transition={{ duration: 0.35, delay: index * 0.05 }}
-            className="rounded-[1.05rem] border border-white/6 bg-[linear-gradient(180deg,rgba(255,255,255,0.022),rgba(255,255,255,0.012))] p-4"
+            className="rounded-[1.05rem] border border-app-border [background:var(--hero-signal-card-bg)] p-4"
           >
             <div className="flex items-center gap-3">
-              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-xs font-medium text-app-muted">
+              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-app-border [background:var(--status-neutral-bg)] text-xs font-medium text-app-muted">
                 {index + 1}
               </div>
               <div className="min-w-0 flex-1">
@@ -87,7 +87,7 @@ export function HorizontalBarChart({
 
             {row.meta ? <div className="mt-1 text-xs leading-6 text-app-muted">{row.meta}</div> : null}
 
-            <div className="mt-4 h-3 rounded-full border border-white/6 bg-white/[0.04] p-[2px]">
+            <div className="mt-4 h-3 rounded-full border border-app-border [background:var(--status-neutral-bg)] p-[2px]">
                 <motion.div
                   initial={{ scaleX: 0, opacity: 0.6 }}
                   whileInView={{ scaleX: 1, opacity: 1 }}
