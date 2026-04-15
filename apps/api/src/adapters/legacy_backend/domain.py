@@ -203,6 +203,7 @@ def execute_simulation_run(
     product_payload: Optional[dict],
     market_payload: Optional[dict],
     geography_context: Optional[Dict[str, Any]],
+    prompt_user_template_override: Optional[str] = None,
 ) -> dict:
     schemas = load_module("backend.schemas", settings.legacy_app_root)
     run_manager = load_module("backend.simulation.run_manager", settings.legacy_app_root)
@@ -289,6 +290,7 @@ def execute_simulation_run(
                 generation_mode=generation_mode,
                 openrouter_model_name=None,
                 allow_mock_fallback=True,
+                user_instruction_template_override=prompt_user_template_override,
             )
             result = run_manager.run_simulation(
                 config=config,

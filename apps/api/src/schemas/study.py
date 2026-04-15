@@ -143,3 +143,7 @@ class PersonaPreviewRequest(BaseModel):
 
 class StabilityCheckRequest(BaseModel):
     repeat_runs: int = 3
+
+
+class SimulationRunRequest(BaseModel):
+    prompt_user_template: Optional[str] = None

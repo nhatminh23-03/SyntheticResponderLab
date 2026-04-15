@@ -201,6 +201,10 @@ export type PromptPreviewPayload = {
   combined_prompt: string;
 };
 
+export type SimulationRunRequest = {
+  prompt_user_template?: string | null;
+};
+
 export type SimulationRunConditions = {
   context_influence?: {
     enabled?: boolean;
@@ -1159,11 +1163,18 @@ export async function getPromptPreview(studyId: string, personaIndex = 0) {
   return result.data?.prompt_preview ?? null;
 }
 
-export async function startSimulationRun(studyId: string) {
+export async function startSimulationRun(
+  studyId: string,
+  payload?: SimulationRunRequest
+) {
   const apiBaseUrl = getApiBaseUrl();
 
   const response = await fetch(`${apiBaseUrl}/api/v1/studies/${studyId}/simulation-runs`, {
     method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload ?? {}),
   });
 
   if (!response.ok) {

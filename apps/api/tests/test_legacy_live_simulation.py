@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from src.adapters.legacy_backend.domain import execute_simulation_run
 from src.adapters.legacy_backend.runtime import load_module
-from src.services.exceptions import ProviderUnavailableApiError
+from src.services.exceptions import LegacyModuleApiError, ProviderUnavailableApiError
 
 
 class _FakeOpenRouterResponse:
@@ -159,6 +159,46 @@ def test_execute_simulation_run_uses_live_selected_models(test_settings, monkeyp
     assert result["run_debug_summary"]["ml_persona_completion_enabled"] is False
 
 
+def test_execute_simulation_run_applies_custom_prompt_template(test_settings, monkeypatch):
+    settings = _settings_with_openrouter(test_settings)
+    payloads = _base_run_payloads(sample_size=1, experiment_mode="split")
+    payloads["experiment_payload"]["selected_models"] = ["openai/gpt-4o-mini"]
+    _patch_grounded_personas(monkeypatch, settings, sample_size=1)
+
+    llm_client = load_module("backend.simulation.llm_client", settings.legacy_app_root)
+    captured_prompt: dict[str, str] = {}
+
+    def fake_post(url, headers, json, timeout):
+        captured_prompt["user_instruction"] = json["messages"][1]["content"]
+        return _FakeOpenRouterResponse(
+            '{"answers":[{"question_id":"Q1","answer":"Yes"},{"question_id":"Q2","answer":"Custom prompt still feels grounded."}]}'
+        )
+
+    monkeypatch.setattr(llm_client.requests, "post", fake_post)
+
+    result = execute_simulation_run(
+        settings=settings,
+        audience_payload=payloads["audience_payload"],
+        survey_payload=payloads["survey_payload"],
+        experiment_payload=payloads["experiment_payload"],
+        product_payload=payloads["product_payload"],
+        market_payload=payloads["market_payload"],
+        geography_context=None,
+        prompt_user_template_override=(
+            "Custom run instructions.\n\n"
+            "{{persona_section}}\n\n"
+            "{{survey_section}}\n\n"
+            "{{return_format}}"
+        ),
+    )
+
+    assert result["generation_mode"] == "openrouter_live"
+    assert "Custom run instructions." in captured_prompt["user_instruction"]
+    assert "Persona\n- Persona ID: PERS_001" in captured_prompt["user_instruction"]
+    assert "Survey\n- Title: Live Survey Test\n1. Q1 [single_choice] Would you consider this product?" in captured_prompt["user_instruction"]
+    assert "Audience grounding" not in captured_prompt["user_instruction"]
+
+
 def test_execute_simulation_run_reports_temporary_fallback_usage(test_settings, monkeypatch):
     settings = _settings_with_openrouter(test_settings)
     payloads = _base_run_payloads(sample_size=1, experiment_mode="split")
@@ -223,3 +263,40 @@ def test_execute_simulation_run_counts_malformed_json_fallbacks(test_settings, m
     assert result["generation_debug"]["questions_fallback_to_mock"] == 2
     assert result["run_debug_summary"]["fallback_answers"] == 2
     assert any("malformed JSON" in warning for warning in result["warnings"])
+
+
+def test_execute_simulation_run_fails_fast_on_openrouter_401(test_settings, monkeypatch):
+    settings = _settings_with_openrouter(test_settings)
+    payloads = _base_run_payloads(sample_size=1, experiment_mode="split")
+    payloads["experiment_payload"]["selected_models"] = ["openai/gpt-4o-mini"]
+    _patch_grounded_personas(monkeypatch, settings, sample_size=1)
+
+    llm_client = load_module("backend.simulation.llm_client", settings.legacy_app_root)
+
+    class _UnauthorizedResponse:
+        status_code = 401
+        text = '{"error":{"message":"User not found.","code":401}}'
+
+        def json(self):
+            return {"error": {"message": "User not found.", "code": 401}}
+
+    def fake_post(url, headers, json, timeout):
+        return _UnauthorizedResponse()
+
+    monkeypatch.setattr(llm_client.requests, "post", fake_post)
+
+    try:
+        execute_simulation_run(
+            settings=settings,
+            audience_payload=payloads["audience_payload"],
+            survey_payload=payloads["survey_payload"],
+            experiment_payload=payloads["experiment_payload"],
+            product_payload=payloads["product_payload"],
+            market_payload=payloads["market_payload"],
+            geography_context=None,
+        )
+    except LegacyModuleApiError as exc:
+        assert "authentication failed" in exc.message.lower()
+        assert "user not found" in exc.message.lower()
+    else:
+        raise AssertionError("Expected execute_simulation_run to fail fast on OpenRouter 401 errors.")

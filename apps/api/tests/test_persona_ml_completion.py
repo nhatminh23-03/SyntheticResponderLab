@@ -127,7 +127,7 @@ def test_prompt_builder_returns_human_readable_preview(test_settings):
 
     assert "System\n" in preview["combined_prompt"]
     assert "User\n" in preview["combined_prompt"]
-    assert "You are responding as this grounded persona." in preview["user_instruction"]
+    assert "You are acting as this grounded persona." in preview["user_instruction"]
     assert "Persona ID: PERS_001" in preview["user_instruction"]
     assert "Product: Tahoe Mini" in preview["user_instruction"]
     assert "Category: Backyard prefab studio" in preview["user_instruction"]

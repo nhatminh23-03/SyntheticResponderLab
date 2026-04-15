@@ -418,6 +418,52 @@ def test_start_simulation_run_endpoint_returns_saved_job(client, monkeypatch):
     assert latest_payload["simulation_run"]["result"]["total_generated_responses"] == 80
 
 
+def test_start_simulation_run_endpoint_passes_prompt_override(client, monkeypatch):
+    study_id = _create_ready_to_run_study(client)
+    captured: dict[str, object] = {}
+
+    def fake_execute_simulation_run(**kwargs):
+        captured.update(kwargs)
+        return {
+            "run_id": "run_prompt_001",
+            "status": "completed",
+            "total_requested_responses": 80,
+            "total_generated_responses": 80,
+            "models_used": ["openai/gpt-4o-mini", "google/gemini-2.0-flash-001"],
+            "experiment_mode": "mirror",
+            "survey_title": "Neo Smart Living Demo Survey",
+            "question_count": 32,
+            "generation_mode": "mock",
+            "run_conditions": {
+                "context_influence": {"enabled": True, "sources": ["audience"]},
+                "generation_mode": "mock",
+                "selected_models": ["openai/gpt-4o-mini", "google/gemini-2.0-flash-001"],
+            },
+            "personas": [],
+            "response_record_preview": [],
+            "response_records": [],
+            "warnings": [],
+            "survey_parse_warnings": [],
+        }
+
+    monkeypatch.setattr(
+        "src.services.study_service.execute_simulation_run",
+        fake_execute_simulation_run,
+    )
+
+    response = client.post(
+        f"/api/v1/studies/{study_id}/simulation-runs",
+        json={
+            "prompt_user_template": "Custom run template\n\n{{persona_section}}\n\n{{survey_section}}"
+        },
+    )
+
+    assert response.status_code == 200
+    assert captured["prompt_user_template_override"] == (
+        "Custom run template\n\n{{persona_section}}\n\n{{survey_section}}"
+    )
+
+
 def test_start_simulation_run_endpoint_requires_openrouter_and_saves_failed_job(client):
     study_id = _create_ready_to_run_study(client)
 

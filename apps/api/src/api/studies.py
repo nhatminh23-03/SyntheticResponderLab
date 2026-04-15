@@ -11,6 +11,7 @@ from src.config.settings import AppSettings
 from src.schemas.study import (
     PersonaPreviewRequest,
     ProductUrlAutofillRequest,
+    SimulationRunRequest,
     StabilityCheckRequest,
     StudyCreateRequest,
     StudyModeUpdateRequest,
@@ -359,11 +360,17 @@ def prompt_preview_endpoint(
 def start_simulation_run_endpoint(
     study_id: str,
     request: Request,
+    payload: Optional[SimulationRunRequest] = Body(default=None),
     db: Session = Depends(get_db_session),
     settings: AppSettings = Depends(get_settings),
 ):
     study = get_study_or_404(db, study_id)
-    result = start_simulation_run(db, settings, study)
+    result = start_simulation_run(
+        db,
+        settings,
+        study,
+        prompt_user_template_override=payload.prompt_user_template if payload else None,
+    )
     return response_envelope(request, result)
 
 

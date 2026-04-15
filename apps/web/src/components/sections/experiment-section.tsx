@@ -6,9 +6,7 @@ import {
   ExperimentPayload,
   generatePersonaPreview,
   getModelCatalog,
-  getPromptPreview,
   ModelCatalogEntry,
-  PromptPreviewPayload,
   saveExperiment,
   WorkflowReadiness,
 } from "@/lib/api";
@@ -107,11 +105,6 @@ export function ExperimentSection() {
     tone: "neutral",
     message: "Experiment settings are local until you save the execution plan.",
   });
-  const [previewStatus, setPreviewStatus] = useState<ExperimentStatusState>({
-    tone: "neutral",
-    message:
-      "Save the experiment plan first, then generate a persona preview as a realism check before Simulation UI exists.",
-  });
   const [modelSearch, setModelSearch] = useState("");
   const [isAddModelControlsOpen, setIsAddModelControlsOpen] = useState(false);
   const [isModelPickerOpen, setIsModelPickerOpen] = useState(false);
@@ -122,9 +115,6 @@ export function ExperimentSection() {
   const [isSaving, setIsSaving] = useState(false);
   const [isGeneratingPreview, setIsGeneratingPreview] = useState(false);
   const [isRerunsInfoOpen, setIsRerunsInfoOpen] = useState(false);
-  const [promptPreview, setPromptPreview] = useState<PromptPreviewPayload | null>(null);
-  const [isLoadingPromptPreview, setIsLoadingPromptPreview] = useState(false);
-  const [promptPreviewError, setPromptPreviewError] = useState<string | null>(null);
   const latestPreview = study?.derived?.latest_persona_preview ?? null;
 
   const loadModelCatalog = useCallback(async () => {
@@ -163,18 +153,11 @@ export function ExperimentSection() {
           setIsAddModelControlsOpen(false);
           setIsModelPickerOpen(false);
           setIsRerunsInfoOpen(false);
-          setPromptPreview(null);
-          setPromptPreviewError(null);
           setSavedSnapshot("");
           setHasSavedExperiment(false);
           setStatus({
             tone: "neutral",
             message: "Experiment settings are local until you save the execution plan.",
-          });
-          setPreviewStatus({
-            tone: "neutral",
-            message:
-              "Save the experiment plan first, then generate a persona preview as a realism check before Simulation UI exists.",
           });
         }
         return;
@@ -197,15 +180,12 @@ export function ExperimentSection() {
           hasSaved ? JSON.stringify(experimentDraftToPayload(nextDraft)) : ""
         );
         setHasSavedExperiment(hasSaved);
-        setPromptPreview(null);
-        setPromptPreviewError(null);
         setStatus({
           tone: hasSaved ? "success" : "neutral",
           message: hasSaved
             ? "Saved experiment plan loaded from the current study."
             : "Experiment settings are local until you save the execution plan.",
         });
-        setPreviewStatus(buildPreviewStatus(latestPreview, hasSaved));
       }
     }
 
@@ -220,48 +200,6 @@ export function ExperimentSection() {
     study?.experiment?.status,
     study?.derived?.latest_persona_preview?.completed_at,
   ]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function hydratePromptPreview() {
-      if (!studyId || !latestPreview?.personas?.length) {
-        if (!cancelled) {
-          setPromptPreview(null);
-          setPromptPreviewError(null);
-        }
-        return;
-      }
-
-      setIsLoadingPromptPreview(true);
-      try {
-        const result = await getPromptPreview(studyId, 0);
-        if (!cancelled) {
-          setPromptPreview(result);
-          setPromptPreviewError(null);
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setPromptPreview(null);
-          setPromptPreviewError(
-            error instanceof Error
-              ? error.message
-              : "Unable to load prompt preview right now."
-          );
-        }
-      } finally {
-        if (!cancelled) {
-          setIsLoadingPromptPreview(false);
-        }
-      }
-    }
-
-    void hydratePromptPreview();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [studyId, latestPreview?.completed_at, latestPreview?.personas?.length]);
 
   const draftPayload = useMemo(() => experimentDraftToPayload(draft), [draft]);
   const isDirty = JSON.stringify(draftPayload) !== savedSnapshot;
@@ -436,15 +374,39 @@ export function ExperimentSection() {
       setHasSavedExperiment(true);
       setWorkflow(result.workflow ?? null);
       setStatus({
-        tone: "success",
-        message: "Experiment plan saved successfully.",
+        tone: "neutral",
+        message: "Generating persona preview...",
       });
-      if (!latestPreview) {
-        setPreviewStatus({
-          tone: "neutral",
-          message:
-            "Experiment plan saved. Generate a persona preview to verify grounding quality before the later run flow.",
+
+      setIsGeneratingPreview(true);
+      try {
+        const previewResult = await generatePersonaPreview(resolvedStudyId, {
+          sample_size: previewSampleSize,
+          use_grounded_priors: true,
+          use_geography_filtered_priors: true,
+          use_cex_affordability_priors: true,
         });
+        await refreshStudy(resolvedStudyId);
+        setWorkflow(previewResult.workflow ?? result.workflow ?? null);
+        setStatus({
+          tone: previewResult.personaPreview?.warning_messages?.length
+            ? "warning"
+            : "success",
+          message: previewResult.personaPreview?.warning_messages?.length
+            ? "Experiment saved. Persona preview completed with warnings, but the run stage is ready."
+            : "Experiment saved. Persona preview completed and the run stage is ready.",
+        });
+        scrollToSection("run-simulation");
+      } catch (error) {
+        setStatus({
+          tone: "error",
+          message:
+            error instanceof Error
+              ? `Experiment saved, but automatic persona preview failed: ${error.message}`
+              : "Experiment saved, but automatic persona preview failed.",
+        });
+      } finally {
+        setIsGeneratingPreview(false);
       }
     } catch (error) {
       setStatus({
@@ -458,56 +420,7 @@ export function ExperimentSection() {
       setIsSaving(false);
     }
   }
-
-  async function handleGeneratePreview() {
-    setIsGeneratingPreview(true);
-    setPreviewStatus({
-      tone: "neutral",
-      message: "Generating persona preview...",
-    });
-
-    try {
-      const resolvedStudyId = (await createOrLoadStudy()) ?? studyId;
-
-      if (!resolvedStudyId) {
-        throw new Error("No study is available yet.");
-      }
-
-      const result = await generatePersonaPreview(resolvedStudyId, {
-        sample_size: previewSampleSize,
-        use_grounded_priors: true,
-        use_geography_filtered_priors: true,
-        use_cex_affordability_priors: true,
-      });
-      await refreshStudy(resolvedStudyId);
-      setWorkflow(result.workflow ?? null);
-      setPreviewStatus(
-        result.personaPreview?.warning_messages?.length
-          ? {
-              tone: "warning",
-              message:
-                "Persona preview completed with warnings. Review degraded grounding and missing-context notes before moving on.",
-            }
-          : {
-              tone: "success",
-              message: "Persona preview completed successfully.",
-            }
-      );
-      scrollToSection("run-simulation");
-    } catch (error) {
-      setPreviewStatus({
-        tone: "error",
-        message:
-          error instanceof Error
-            ? error.message
-            : "Unable to generate persona preview right now.",
-      });
-    } finally {
-      setIsGeneratingPreview(false);
-    }
-  }
-
-  const isBusy = isCreatingStudy || isHydratingStudy || isSaving;
+  const isBusy = isCreatingStudy || isHydratingStudy || isSaving || isGeneratingPreview;
   const inlineStatusMessage =
     validationMessage ??
     (status.tone === "success" || status.tone === "warning" || status.tone === "error"
@@ -791,7 +704,9 @@ export function ExperimentSection() {
                       onClick={handleSavePlan}
                       disabled={isBusy}
                     >
-                      {isSaving ? "Saving Experiment..." : "Save Experiment Plan"}
+                      {isSaving || isGeneratingPreview
+                        ? "Preparing Run..."
+                        : "Save Experiment Plan"}
                     </Button>
                     <BadgeChip tone={hasSavedExperiment ? "cyan" : "gold"}>
                       {hasSavedExperiment ? "Saved state" : "Unsaved experiment"}
@@ -814,108 +729,6 @@ export function ExperimentSection() {
                       {inlineStatusMessage}
                     </p>
                   ) : null}
-                </div>
-              </div>
-            </GlassPanel>
-          </div>
-
-          <div>
-            <GlassPanel className="p-5 sm:p-6">
-              <div className="rounded-[1.55rem] border border-white/5 bg-[linear-gradient(180deg,rgba(12,18,22,0.84),rgba(12,18,22,0.6))] p-5">
-                <div className="flex flex-wrap items-center gap-3">
-                  <BadgeChip tone="gold">Persona Preview</BadgeChip>
-                  <BadgeChip>{`Uses ${previewSampleSize} persona${previewSampleSize === 1 ? "" : "s"} max`}</BadgeChip>
-                  {latestPreview ? <BadgeChip tone="cyan">Latest preview loaded</BadgeChip> : null}
-                </div>
-
-                <p className="mt-4 max-w-2xl text-sm leading-6 text-app-muted">
-                  Persona preview is the final setup check before Simulation UI. It uses the saved audience plus grounded priors, geography, and affordability context where available, then stores the latest preview back into canonical study state.
-                </p>
-
-                <div
-                  className={cn(
-                    "mt-5 rounded-2xl border px-4 py-3 text-sm leading-6",
-                    previewStatus.tone === "success" &&
-                      "border-app-cyan/20 bg-[rgba(15,216,255,0.08)] text-app-cyan",
-                    previewStatus.tone === "warning" &&
-                      "border-app-gold/20 bg-[rgba(216,186,103,0.08)] text-app-gold",
-                    previewStatus.tone === "error" &&
-                      "border-app-gold/20 bg-[rgba(216,186,103,0.08)] text-app-gold",
-                    previewStatus.tone === "neutral" &&
-                      "border-white/8 bg-white/[0.03] text-app-muted"
-                  )}
-                >
-                  {previewStatus.message}
-                </div>
-
-                <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-                  <Button
-                    onClick={handleGeneratePreview}
-                    disabled={
-                      isGeneratingPreview ||
-                      isSaving ||
-                      isCreatingStudy ||
-                      isHydratingStudy ||
-                      !workflow?.ready_for_persona_preview
-                    }
-                  >
-                    {isGeneratingPreview
-                      ? "Generating Preview..."
-                      : "Generate Persona Preview"}
-                  </Button>
-                  <BadgeChip tone={workflow?.ready_for_persona_preview ? "cyan" : "gold"}>
-                    {workflow?.ready_for_persona_preview
-                      ? "Setup ready for preview"
-                      : "Save the full setup stack first"}
-                  </BadgeChip>
-                </div>
-
-                <div className="mt-5 rounded-[1.35rem] border border-white/6 bg-white/[0.03] p-4">
-                  <div className="flex flex-wrap items-center gap-3">
-                    <BadgeChip tone="cyan">Prompt Preview</BadgeChip>
-                    {promptPreview ? (
-                      <BadgeChip>{promptPreview.persona_label ?? `Persona ${promptPreview.persona_index + 1}`}</BadgeChip>
-                    ) : null}
-                    {isLoadingPromptPreview ? <BadgeChip>Loading</BadgeChip> : null}
-                  </div>
-
-                  <p className="mt-3 text-sm leading-6 text-app-muted">
-                    This shows the actual prompt scaffold for the first preview persona. If you run 100 samples, each persona uses this same structure and only the persona section changes.
-                  </p>
-
-                  {promptPreview ? (
-                    <details className="mt-4 rounded-[1.2rem] border border-white/8 bg-[rgba(8,12,16,0.6)] p-4">
-                      <summary className="cursor-pointer list-none text-sm font-medium text-app-text">
-                        Show first-persona prompt preview
-                      </summary>
-                      <div className="mt-4 grid gap-4 xl:grid-cols-2">
-                        <div className="rounded-[1rem] border border-white/6 bg-black/20 p-4">
-                          <div className="text-[0.72rem] uppercase tracking-[0.22em] text-app-muted">
-                            System
-                          </div>
-                          <pre className="mt-3 whitespace-pre-wrap break-words font-mono text-xs leading-6 text-app-text">
-                            {promptPreview.system_instruction}
-                          </pre>
-                        </div>
-                        <div className="rounded-[1rem] border border-white/6 bg-black/20 p-4">
-                          <div className="text-[0.72rem] uppercase tracking-[0.22em] text-app-muted">
-                            User
-                          </div>
-                          <pre className="mt-3 max-h-[28rem] overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-6 text-app-text">
-                            {promptPreview.user_instruction}
-                          </pre>
-                        </div>
-                      </div>
-                    </details>
-                  ) : (
-                    <div className="mt-4 rounded-[1.2rem] border border-dashed border-white/10 bg-white/[0.02] px-4 py-5 text-sm leading-6 text-app-muted">
-                      {promptPreviewError
-                        ? promptPreviewError
-                        : latestPreview
-                          ? "Prompt preview will load from the latest persona preview."
-                          : "Generate a persona preview first to inspect the prompt."}
-                    </div>
-                  )}
                 </div>
               </div>
             </GlassPanel>
@@ -1148,44 +961,6 @@ function experimentDraftToPayload(draft: ExperimentDraft): ExperimentPayload {
     mirror_personas_across_models: draft.experiment_mode === "mirror",
     split_across_models: draft.experiment_mode === "split",
     notes: null,
-  };
-}
-
-function buildPreviewStatus(
-  preview:
-    | {
-        warning_messages?: string[];
-      }
-    | null,
-  hasSavedExperiment: boolean
-): ExperimentStatusState {
-  if (preview?.warning_messages?.length) {
-    return {
-      tone: "warning",
-      message:
-        "Latest persona preview is loaded with warnings. Review degraded grounding and missing-context notes before moving on.",
-    };
-  }
-
-  if (preview) {
-    return {
-      tone: "success",
-      message: "Latest persona preview is loaded from backend study state.",
-    };
-  }
-
-  if (hasSavedExperiment) {
-    return {
-      tone: "neutral",
-      message:
-        "Experiment plan is saved. Generate a persona preview to verify grounding quality before the later run flow.",
-    };
-  }
-
-  return {
-    tone: "neutral",
-    message:
-      "Save the experiment plan first, then generate a persona preview as a realism check before Simulation UI exists.",
   };
 }
 

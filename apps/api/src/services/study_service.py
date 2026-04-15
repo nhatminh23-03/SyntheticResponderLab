@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from src.adapters.legacy_backend.runtime import load_module
 from src.adapters.legacy_backend.domain import (
     build_geography_context,
     build_analysis_view,
@@ -576,6 +577,8 @@ def start_simulation_run(
     session: Session,
     settings: AppSettings,
     study: Study,
+    *,
+    prompt_user_template_override: Optional[str] = None,
 ) -> Dict[str, Any]:
     sections = _get_sections(session, study)
     audience = sections["audience"].value_json
@@ -590,6 +593,8 @@ def start_simulation_run(
         raise ConflictApiError("Survey must be saved before running the study.")
     if not experiment:
         raise ConflictApiError("Experiment plan must be saved before running the study.")
+
+    normalized_prompt_override = (prompt_user_template_override or "").strip() or None
 
     geography_context = None
     geography_warning = None
@@ -609,6 +614,7 @@ def start_simulation_run(
             "audience": audience,
             "survey_title": survey.get("survey_title"),
             "experiment": experiment,
+            "prompt_user_template_override": normalized_prompt_override,
         },
         result_json=None,
         error_json=None,
@@ -627,6 +633,7 @@ def start_simulation_run(
             product_payload=product,
             market_payload=market,
             geography_context=geography_context,
+            prompt_user_template_override=normalized_prompt_override,
         )
         if geography_warning:
             result.setdefault("warnings", []).append(geography_warning)
