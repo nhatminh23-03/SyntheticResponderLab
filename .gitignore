@@ -36,7 +36,13 @@ venv/
 *.egg-info/
 
 # Local agent/tool state
+.codex
 .codex/
+
+# Local cloud/service credentials
+*service-account*.json
+*google-credentials*.json
+apps/api/cra-applying-sql-*.json
 
 # Databases / local runtime state
 *.db
