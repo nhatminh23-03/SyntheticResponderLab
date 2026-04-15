@@ -75,15 +75,14 @@ def ensure_interview_sections(session: Session, study: Study) -> None:
 
 def get_interview_synthesis(session: Session, study: Study) -> Dict[str, Any]:
     """Return current interview synthesis config + latest run status."""
-    ensure_interview_sections(session, study)
-    section = _get_section(session, study, "interview_synthesis")
+    section = _get_section_or_none(session, study, "interview_synthesis")
     latest_run = _latest_interview_job(session, study.id)
 
     return {
-        "status": section.status,
-        "value": section.value_json,
-        "saved_at": section.saved_at.isoformat() if section.saved_at else None,
-        "updated_at": section.updated_at.isoformat() if section.updated_at else None,
+        "status": section.status if section else "not_started",
+        "value": section.value_json if section else None,
+        "saved_at": section.saved_at.isoformat() if section and section.saved_at else None,
+        "updated_at": section.updated_at.isoformat() if section and section.updated_at else None,
         "latest_run": _serialize_interview_job(latest_run) if latest_run else None,
     }
 
@@ -138,11 +137,9 @@ def start_interview_run(
     Uses personas from the latest persona preview run.
     Stores results in a Job row with job_type="interview_run".
     """
-    ensure_interview_sections(session, study)
-
     # Resolve configuration
-    synthesis_section = _get_section(session, study, "interview_synthesis")
-    config = synthesis_section.value_json or {}
+    synthesis_section = _get_section_or_none(session, study, "interview_synthesis")
+    config = synthesis_section.value_json if synthesis_section and synthesis_section.value_json else {}
 
     # Get product and audience from saved sections
     sections = {
@@ -192,7 +189,8 @@ def start_interview_run(
         started_at=utcnow(),
     )
     session.add(job)
-    session.flush()
+    session.commit()
+    session.refresh(job)
 
     try:
         # Run dual-LLM interviews
@@ -252,13 +250,12 @@ def get_latest_interview_run(session: Session, study: Study) -> Optional[Dict[st
 
 def get_research_brief(session: Session, study: Study) -> Dict[str, Any]:
     """Return saved research brief state."""
-    ensure_interview_sections(session, study)
-    section = _get_section(session, study, "research_brief")
+    section = _get_section_or_none(session, study, "research_brief")
     return {
-        "status": section.status,
-        "value": section.value_json,
-        "saved_at": section.saved_at.isoformat() if section.saved_at else None,
-        "updated_at": section.updated_at.isoformat() if section.updated_at else None,
+        "status": section.status if section else "not_started",
+        "value": section.value_json if section else None,
+        "saved_at": section.saved_at.isoformat() if section and section.saved_at else None,
+        "updated_at": section.updated_at.isoformat() if section and section.updated_at else None,
     }
 
 
@@ -312,8 +309,6 @@ def get_interview_insights(
     Uses an LLM to identify 3-6 recurring themes across the transcript corpus,
     with a representative quote and sentiment label per theme.
     """
-    ensure_interview_sections(session, study)
-
     latest_run = _latest_interview_job(session, study.id)
     if not latest_run or latest_run.status != "completed" or not latest_run.result_json:
         return {

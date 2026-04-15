@@ -622,7 +622,8 @@ def start_simulation_run(
         started_at=utcnow(),
     )
     session.add(job)
-    session.flush()
+    session.commit()
+    session.refresh(job)
 
     try:
         result = execute_simulation_run(
@@ -716,7 +717,8 @@ def start_stability_check(
         started_at=utcnow(),
     )
     session.add(job)
-    session.flush()
+    session.commit()
+    session.refresh(job)
 
     try:
         result = execute_stability_check(

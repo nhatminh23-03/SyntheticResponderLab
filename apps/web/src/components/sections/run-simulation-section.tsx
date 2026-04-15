@@ -69,7 +69,7 @@ export function RunSimulationSection() {
   const [isClearing, setIsClearing] = useState(false);
   const [isRunningStability, setIsRunningStability] = useState(false);
   const [executionPhaseIndex, setExecutionPhaseIndex] = useState(0);
-  const [repeatRuns, setRepeatRuns] = useState(3);
+  const [repeatRuns, setRepeatRuns] = useState(2);
   const [responseRecordPage, setResponseRecordPage] = useState(0);
   const [arePersonasExpanded, setArePersonasExpanded] = useState(false);
   const progressTimerRef = useRef<number | null>(null);
@@ -291,7 +291,7 @@ export function RunSimulationSection() {
     setIsRunningStability(true);
     setStabilityStatus({
       tone: "neutral",
-      message: "Running lightweight repeatability checks...",
+      message: "Running repeatability checks. This can take a few minutes on live models...",
     });
 
     try {
