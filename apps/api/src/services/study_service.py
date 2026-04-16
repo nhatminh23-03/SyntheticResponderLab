@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 from datetime import datetime, timezone
 import re
 import time
@@ -55,7 +56,9 @@ from src.schemas.study import (
     SurveyState,
 )
 from src.services.exceptions import ConflictApiError, NotFoundApiError, UnsupportedMediaTypeApiError, ValidationApiError
+from src.services.demo_interview_fixtures import ensure_demo_interview_run
 from src.services.ids import make_public_id
+from src.services.interview_service import save_research_brief
 from src.services.workflow_service import build_workflow
 
 
@@ -66,6 +69,154 @@ INSIGHTS_SUMMARY_MODEL = "openai/gpt-4o-mini"
 INSIGHTS_SUMMARY_TIMEOUT_SECONDS = 30
 INSIGHTS_SUMMARY_MAX_ATTEMPTS = 2
 INSIGHTS_SUMMARY_CACHE_VERSION = "v3"
+
+NEO_BOOTSTRAP_PERSONA_PREVIEW_SAMPLE_SIZE = 12
+NEO_BOOTSTRAP_AUDIENCE = {
+    "state": None,
+    "metro": None,
+    "zip_code": None,
+    "age_min": 25,
+    "age_max": 64,
+    "income_min": 50000,
+    "income_max": 199999,
+    "household_size_min": None,
+    "household_size_max": None,
+    "homeowner_only": True,
+    "renter_only": False,
+    "work_from_home": None,
+    "home_type": "Single-family",
+    "lifestyle_tags": [
+        "remote work",
+        "home improvement",
+        "wellness",
+        "hosting guests",
+        "storage",
+        "outdoor lifestyle",
+    ],
+    "notes": "backyard-space-compatible homeowners, broad geography (not locked to a specific state or metro).",
+}
+NEO_BOOTSTRAP_PRODUCT = {
+    "business_name": "Neo Smart Living",
+    "industry": "Factory-built modular backyard structures",
+    "product_name": "Tahoe Mini",
+    "product_type": "Permit-light modular backyard studio",
+    "product_description": (
+        "Tahoe Mini is a compact ~117 sq ft factory-built backyard unit delivered as flat-pack panels "
+        "and typically installed in about one day. It is positioned as a non-habitable accessory "
+        "structure, with no plumbing and no kitchen."
+    ),
+    "target_customer": "Homeowners with usable backyard/property space",
+    "price_range": "$23,000 delivered and installed",
+    "primary_goal": "Validate demand, barriers, and strongest positioning for Tahoe Mini.",
+    "key_features": [
+        "~117 sq ft compact footprint",
+        "Flat-pack delivery and fast install",
+        "Modular interchangeable wall system",
+        "Pre-wired electrical",
+        "Smart entry lock",
+        "Dual-pane floor-to-ceiling glass",
+        "Pitched roof with drainage",
+        "Optional sound insulation and HVAC",
+    ],
+    "main_use_cases": [
+        "Home office",
+        "Guest suite / short-term stay",
+        "Wellness studio",
+        "Adventure gear basecamp",
+        "General storage / premium speed shed",
+        "Creative studio",
+    ],
+    "main_pain_points_solved": [
+        "Need extra functional space without full remodel",
+        "Desire simpler and faster setup versus traditional construction",
+        "Need flexible backyard use cases",
+    ],
+    "main_barriers_or_concerns": [
+        "Upfront cost",
+        "HOA restrictions",
+        "Permit uncertainty",
+        "Space and access constraints",
+        "Financing options",
+        "Quality and durability concerns",
+        "Resale uncertainty",
+    ],
+    "product_image_labels": ["Prefabricated building", "Modular structure", "Glass door"],
+    "product_image_objects": [],
+    "product_image_colors": [],
+    "notes": "Preset from Neo Smart Living challenge docs for demo mode.",
+}
+NEO_BOOTSTRAP_MARKET = {
+    "category": "Backyard prefab studio",
+    "typical_price_band": "$20,000-$45,000",
+    "substitutes": [
+        "Traditional shed conversion",
+        "Garage conversion",
+        "Home addition / remodel",
+        "Coworking membership",
+    ],
+    "common_expected_features": [
+        "Fast installation",
+        "Weather durability",
+        "Natural light",
+        "Electrical readiness",
+        "Year-round comfort upgrades",
+    ],
+    "common_objections": [
+        "Upfront cost",
+        "Permit or HOA friction",
+        "Backyard fit uncertainty",
+        "Durability and resale questions",
+    ],
+    "direct_competitors": [
+        {
+            "name": "Studio Shed",
+            "product_type": "Premium prefabricated backyard studio",
+            "price_range": "$25,000-$45,000+",
+            "key_features": ["Multiple layouts", "High-end finishes", "Design-forward exterior"],
+            "strengths": ["Strong design appeal", "Recognizable category benchmark"],
+            "weaknesses": ["Higher cost", "Can feel premium beyond budget fit"],
+        },
+        {
+            "name": "Traditional shed conversion",
+            "product_type": "DIY or contractor-led backyard conversion",
+            "price_range": "$8,000-$25,000",
+            "key_features": ["Lower entry cost", "Local builder flexibility", "Incremental upgrades"],
+            "strengths": ["Budget-friendly starting point", "Familiar alternative"],
+            "weaknesses": ["Less polished", "Longer and less predictable process"],
+        },
+    ],
+    "notes": "Preset market frame for Neo Smart Living demo mode.",
+}
+NEO_BOOTSTRAP_EXPERIMENT = {
+    "sample_size": 100,
+    "selected_models": ["openai/gpt-4o-mini", "anthropic/claude-sonnet-4.5"],
+    "experiment_mode": "split",
+    "reruns_per_persona": 1,
+}
+NEO_BOOTSTRAP_RESEARCH_BRIEF = {
+    "primary_question": (
+        "Which Neo Smart Living customer segments show the strongest purchase potential for "
+        "Tahoe Mini, and what barriers need to be resolved to convert them?"
+    ),
+    "hypotheses": [
+        "Strong-fit homeowners will respond most strongly to home office, wellness, and guest-use positioning.",
+        "Price, permit clarity, and backyard fit will remain the main reasons interested respondents hesitate.",
+        "Fast installation and flexible use cases will outperform purely design-led messaging.",
+    ],
+    "decisions_to_inform": [
+        "Which target segment should anchor launch messaging.",
+        "Which use cases deserve top billing in the product story.",
+        "Which objections need proof points, financing support, or permit guidance before launch.",
+    ],
+    "focus_fit_tiers": ["strong", "soft"],
+    "focus_segments": [],
+    "known_context": (
+        "Tahoe Mini is a permit-light modular backyard studio positioned around quick install, "
+        "flexible backyard use, and a premium but simpler alternative to major construction."
+    ),
+    "notes": "Starter brief generated automatically for the Neo Smart Living guided demo.",
+}
+NEO_SURVEY_PRESET_FILENAME = "Neo Smart Living — Survey_HighPriority.md"
 
 
 def utcnow() -> datetime:
@@ -227,6 +378,72 @@ def save_experiment_section(session: Session, settings: AppSettings, study: Stud
     return serialize_study(session, study)
 
 
+def bootstrap_neo_demo_study(
+    session: Session,
+    settings: AppSettings,
+    study: Study,
+) -> CanonicalStudy:
+    legacy_available = _legacy_backend_available(settings.legacy_app_root)
+    _save_study_mode_internal(session, study, "neo_smart")
+    _save_section(
+        session,
+        study,
+        "audience",
+        _prepare_bootstrap_audience(legacy_available, settings),
+    )
+    _save_section(
+        session,
+        study,
+        "product",
+        _prepare_bootstrap_product(legacy_available, settings),
+    )
+
+    validated_market = _prepare_bootstrap_market(legacy_available, settings)
+    if not _market_has_content(validated_market):
+        raise ValidationApiError("Neo bootstrap market payload is invalid.")
+    _save_section(session, study, "market", validated_market)
+
+    _save_section(
+        session,
+        study,
+        "experiment",
+        _prepare_bootstrap_experiment(legacy_available, settings),
+    )
+    _save_neo_survey_preset_to_study(session, settings, study)
+    _recompute_lifecycle_status(session, study)
+    session.flush()
+
+    create_persona_preview(
+        session,
+        settings,
+        study,
+        sample_size=NEO_BOOTSTRAP_PERSONA_PREVIEW_SAMPLE_SIZE,
+        use_grounded_priors=True,
+        use_geography_filtered_priors=True,
+        use_cex_affordability_priors=True,
+        seed=None,
+    )
+
+    latest_preview = _latest_persona_preview(session, study)
+    if latest_preview is None:
+        raise ConflictApiError("Neo demo bootstrap could not find the generated persona preview.")
+
+    ensure_demo_interview_run(
+        session,
+        study,
+        latest_preview=latest_preview,
+        product=_get_sections(session, study)["product"].value_json,
+        questions=None,
+    )
+    save_research_brief(
+        session,
+        study,
+        _build_neo_bootstrap_research_brief(serialize_study(session, study)),
+    )
+    session.refresh(study)
+    return serialize_study(session, study)
+
+
 def handle_product_url_autofill(
     session: Session,
     settings: AppSettings,
@@ -382,20 +599,7 @@ def handle_neo_survey_preset(
     settings: AppSettings,
     study: Study,
 ) -> Dict[str, Any]:
-    if study.study_mode != "neo_smart":
-        raise ConflictApiError("Neo survey preset is only available when study_mode is neo_smart.")
-
-    filename, file_bytes, schema = load_neo_survey_schema_default(settings.legacy_app_root)
-    asset = _create_asset_from_bytes(
-        session,
-        settings,
-        study,
-        asset_type="survey_upload",
-        original_filename=filename,
-        mime_type="text/markdown",
-        payload=file_bytes,
-    )
-    _save_section(session, study, "survey", schema, source_asset=asset)
+    asset = _save_neo_survey_preset_to_study(session, settings, study)
     _recompute_lifecycle_status(session, study)
     session.commit()
     session.refresh(study)
@@ -1466,6 +1670,108 @@ def _serialize_job(job: Job) -> Dict[str, Any]:
 
 def _extension_from_name(filename: str) -> str:
     return filename.lower().rsplit(".", 1)[-1] if "." in filename else ""
+
+
+def _save_neo_survey_preset_to_study(
+    session: Session,
+    settings: AppSettings,
+    study: Study,
+) -> StudyAsset:
+    if study.study_mode != "neo_smart":
+        raise ConflictApiError("Neo survey preset is only available when study_mode is neo_smart.")
+
+    if _legacy_backend_available(settings.legacy_app_root):
+        filename, file_bytes, schema = load_neo_survey_schema_default(settings.legacy_app_root)
+    else:
+        filename, file_bytes, schema = _load_fallback_neo_survey_schema_default()
+    asset = _create_asset_from_bytes(
+        session,
+        settings,
+        study,
+        asset_type="survey_upload",
+        original_filename=filename,
+        mime_type="text/markdown",
+        payload=file_bytes,
+    )
+    _save_section(session, study, "survey", schema, source_asset=asset)
+    return asset
+
+
+def _build_neo_bootstrap_research_brief(study_view: CanonicalStudy) -> Dict[str, Any]:
+    brief = deepcopy(NEO_BOOTSTRAP_RESEARCH_BRIEF)
+    preview = study_view.derived.latest_persona_preview
+    if not preview:
+        return brief
+
+    segment_labels: List[str] = []
+    for persona in preview.personas:
+        label = persona.get("segment_label") if isinstance(persona, dict) else None
+        if isinstance(label, str):
+            normalized = label.strip()
+            if normalized and normalized not in segment_labels:
+                segment_labels.append(normalized)
+
+    brief["focus_segments"] = segment_labels[:4]
+    return brief
+
+
+def _legacy_backend_available(legacy_root: Path) -> bool:
+    return (legacy_root / "backend").is_dir()
+
+
+def _prepare_bootstrap_audience(legacy_available: bool, settings: AppSettings) -> Dict[str, Any]:
+    payload = deepcopy(NEO_BOOTSTRAP_AUDIENCE)
+    if not legacy_available:
+        return payload
+    return validate_audience(payload, settings.legacy_app_root)
+
+
+def _prepare_bootstrap_product(legacy_available: bool, settings: AppSettings) -> Dict[str, Any]:
+    payload = deepcopy(NEO_BOOTSTRAP_PRODUCT)
+    if not legacy_available:
+        return payload
+    return validate_product(payload, settings.legacy_app_root)
+
+
+def _prepare_bootstrap_market(legacy_available: bool, settings: AppSettings) -> Dict[str, Any]:
+    payload = deepcopy(NEO_BOOTSTRAP_MARKET)
+    if not legacy_available:
+        return payload
+    return validate_market(payload, settings.legacy_app_root)
+
+
+def _prepare_bootstrap_experiment(legacy_available: bool, settings: AppSettings) -> Dict[str, Any]:
+    payload = deepcopy(NEO_BOOTSTRAP_EXPERIMENT)
+    if not legacy_available:
+        payload["split_across_models"] = payload.get("experiment_mode") == "split"
+        payload["mirror_personas_across_models"] = payload.get("experiment_mode") == "mirror"
+        return payload
+    return validate_experiment(payload, settings.legacy_app_root)
+
+
+def _load_fallback_neo_survey_schema_default() -> tuple[str, bytes, Dict[str, Any]]:
+    questions = [
+        {
+            "id": f"Q{i + 1}",
+            "text": f"Neo Smart Living demo question {i + 1}",
+            "question_type": "single_choice",
+            "options": ["Strongly disagree", "Disagree", "Neutral", "Agree", "Strongly agree"],
+            "required": True,
+            "help_text": None,
+        }
+        for i in range(32)
+    ]
+    markdown = "# Neo Smart Living Demo Survey\n\nFallback local preset used because the legacy survey source is unavailable.\n"
+    schema = {
+        "survey_title": "Neo Smart Living Demo Survey",
+        "description": "Fallback local survey preset for the Neo Smart Living guided demo.",
+        "source_format": "md",
+        "parse_warnings": [
+            "Fallback local Neo survey preset used because the legacy survey source was unavailable."
+        ],
+        "questions": questions,
+    }
+    return NEO_SURVEY_PRESET_FILENAME, markdown.encode("utf-8"), schema
 
 
 def _market_has_content(payload: Dict[str, Any]) -> bool:
