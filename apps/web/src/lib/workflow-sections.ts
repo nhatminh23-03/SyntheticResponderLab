@@ -7,7 +7,7 @@ export const workflowSections = [
   { id: "survey", label: "Survey" },
   { id: "experiment", label: "Experiment" },
   { id: "run-simulation", label: "Run" },
-  { id: "analysis", label: "Analysis" },
+  { id: "analysis", label: "Result" },
   { id: "insights", label: "Insights" },
   { id: "interview-synthesis", label: "Interview" },
   { id: "research-brief", label: "Research Brief" },
