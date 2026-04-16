@@ -276,6 +276,7 @@ export type AnalysisQuestionOption = {
   text: string;
   question_type?: string;
   response_count?: number;
+  question_order?: number;
 };
 
 export type AnalysisTrustPayload = {
@@ -289,6 +290,56 @@ export type AnalysisDistributionRow = {
   answer_display: string;
   count: number;
   percentage: number;
+};
+
+export type AnalysisDashboardDistributionRow = {
+  label: string;
+  count: number;
+  percentage: number;
+};
+
+export type AnalysisDashboardHistogramBin = {
+  label: string;
+  count: number;
+  start?: number;
+  end?: number;
+};
+
+export type AnalysisDashboardLinePoint = {
+  label: string;
+  count: number;
+  value?: string;
+};
+
+export type AnalysisDashboardWordCloudTerm = {
+  term: string;
+  count: number;
+  weight: number;
+};
+
+export type AnalysisDashboardQuote = {
+  text: string;
+  respondent_id?: string | null;
+  model?: string | null;
+};
+
+export type AnalysisDashboardQuestion = {
+  question_id: string;
+  question_text: string;
+  question_type?: string;
+  question_order: number;
+  response_count: number;
+  chart_kind:
+    | "categorical_bar"
+    | "likert"
+    | "histogram"
+    | "line"
+    | "word_cloud";
+  distribution?: AnalysisDashboardDistributionRow[];
+  histogram_bins?: AnalysisDashboardHistogramBin[];
+  line_points?: AnalysisDashboardLinePoint[];
+  word_cloud_terms?: AnalysisDashboardWordCloudTerm[];
+  quotes?: AnalysisDashboardQuote[];
 };
 
 export type AnalysisResponseRecord = {
@@ -333,6 +384,11 @@ export type AnalysisPayload = {
     selected_model?: string;
     selected_segment?: string;
     filtered_record_count?: number;
+  };
+  dashboard?: {
+    model_options?: string[];
+    selected_model?: string;
+    questions?: AnalysisDashboardQuestion[];
   };
   run_debug_summary?: SimulationRunDebugSummary | null;
   benchmark_snapshot?: {
@@ -386,6 +442,40 @@ export type InsightsTopFinding = {
   agreement_label?: string;
   chart_kind?: string;
   chart_rows?: Array<Record<string, unknown>>;
+};
+
+export type InsightsLlmKeyFinding = {
+  title: string;
+  summary: string;
+  why_it_matters: string;
+  evidence_ids: string[];
+};
+
+export type InsightsLlmSummary = {
+  available: boolean;
+  message?: string;
+  overview?: string;
+  key_findings?: InsightsLlmKeyFinding[];
+  result_reliability?: {
+    level: string;
+    summary: string;
+    reason: string;
+    evidence_ids: string[];
+  };
+  recommended_next_steps?: string[];
+  researcher_note?: string;
+  model?: string;
+  from_run_id?: string;
+  generated_at?: string;
+  cached?: boolean;
+};
+
+export type InsightsEvidenceItem = {
+  id: string;
+  category?: string;
+  title?: string;
+  summary?: string;
+  metrics?: Record<string, unknown>;
 };
 
 export type InsightsPayload = {
@@ -503,6 +593,20 @@ export type InsightsPayload = {
     segment_notes?: string[];
     run_warnings?: string[];
     survey_parse_warnings?: string[];
+  };
+  llm_summary?: InsightsLlmSummary;
+  evidence_package?: {
+    version?: string;
+    from_run_id?: string;
+    run_context?: {
+      run_id?: string;
+      survey_title?: string | null;
+      experiment_mode?: string;
+      models_used?: string[];
+      respondent_count?: number | null;
+      question_count?: number | null;
+    };
+    items?: InsightsEvidenceItem[];
   };
 };
 

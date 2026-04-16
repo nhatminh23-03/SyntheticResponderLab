@@ -11,6 +11,7 @@ from src.config.settings import AppSettings
 from src.schemas.study import (
     PersonaPreviewRequest,
     ProductUrlAutofillRequest,
+    SimulationRunRequest,
     StabilityCheckRequest,
     StudyCreateRequest,
     StudyModeUpdateRequest,
@@ -23,6 +24,7 @@ from src.services.study_service import (
     get_latest_stability_check,
     get_analysis_view,
     get_insights_view,
+    get_prompt_preview,
     get_study_or_404,
     get_models,
     get_workflow,
@@ -345,15 +347,39 @@ def persona_preview_endpoint(
     return response_envelope(request, result)
 
 
-@router.post("/api/v1/studies/{study_id}/simulation-runs")
-def start_simulation_run_endpoint(
+@router.get("/api/v1/studies/{study_id}/prompt-preview")
+def prompt_preview_endpoint(
     study_id: str,
     request: Request,
+    persona_index: int = Query(default=0, ge=0),
     db: Session = Depends(get_db_session),
     settings: AppSettings = Depends(get_settings),
 ):
     study = get_study_or_404(db, study_id)
-    result = start_simulation_run(db, settings, study)
+    result = get_prompt_preview(
+        db,
+        settings,
+        study,
+        persona_index=persona_index,
+    )
+    return response_envelope(request, result)
+
+
+@router.post("/api/v1/studies/{study_id}/simulation-runs")
+def start_simulation_run_endpoint(
+    study_id: str,
+    request: Request,
+    payload: Optional[SimulationRunRequest] = Body(default=None),
+    db: Session = Depends(get_db_session),
+    settings: AppSettings = Depends(get_settings),
+):
+    study = get_study_or_404(db, study_id)
+    result = start_simulation_run(
+        db,
+        settings,
+        study,
+        prompt_user_template_override=(payload.prompt_user_template if payload else None),
+    )
     return response_envelope(request, result)
 
 

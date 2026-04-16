@@ -451,7 +451,7 @@ export function ExperimentSection() {
               index={6}
               eyebrow="Experiment Design"
               title="Define how this study should execute."
-              description="Choose the scale, model set, and comparison strategy that will govern the later simulation. This chapter now saves into canonical backend study state and also houses persona preview as a pre-run grounding check."
+              description="Choose how many responses to generate, which models to use, and how you want to compare them before running the study."
             />
 
             <div className="mt-5 flex flex-wrap gap-3">

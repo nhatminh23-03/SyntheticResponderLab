@@ -10,7 +10,6 @@ import {
   SimulationRunResultPayload,
   SimulationStabilityResultPayload,
   startSimulationRun,
-  startStabilityCheck,
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useStudy } from "@/providers/study-provider";
@@ -61,17 +60,12 @@ export function RunSimulationSection() {
   const [latestStabilityCheck, setLatestStabilityCheck] =
     useState<SimulationJobPayload<SimulationStabilityResultPayload> | null>(null);
   const [status, setStatus] = useState<StatusState>(EMPTY_STATUS);
-  const [stabilityStatus, setStabilityStatus] = useState<StatusState>({
-    tone: "neutral",
-    message: "Run the main study first, then use Stability Check as a lightweight repeatability pass.",
-  });
   const [isRunning, setIsRunning] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
-  const [isRunningStability, setIsRunningStability] = useState(false);
   const [executionPhaseIndex, setExecutionPhaseIndex] = useState(0);
-  const [repeatRuns, setRepeatRuns] = useState(2);
   const [responseRecordPage, setResponseRecordPage] = useState(0);
   const [arePersonasExpanded, setArePersonasExpanded] = useState(false);
+  const [isResponseDetailsVisible, setIsResponseDetailsVisible] = useState(false);
   const progressTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -83,11 +77,6 @@ export function RunSimulationSection() {
           setLatestRun(null);
           setLatestStabilityCheck(null);
           setStatus(EMPTY_STATUS);
-          setStabilityStatus({
-            tone: "neutral",
-            message:
-              "Run the main study first, then use Stability Check as a lightweight repeatability pass.",
-          });
         }
         return;
       }
@@ -105,7 +94,6 @@ export function RunSimulationSection() {
         setLatestRun(runResult);
         setLatestStabilityCheck(stabilityResult);
         setStatus(buildRunStatus(runResult, study));
-        setStabilityStatus(buildStabilityStatus(stabilityResult));
       } catch (error) {
         if (!cancelled) {
           setStatus({
@@ -176,10 +164,13 @@ export function RunSimulationSection() {
     () => paginateItems(allResponseRecords, responseRecordPage, RESPONSE_RECORDS_PER_PAGE),
     [allResponseRecords, responseRecordPage]
   );
-  const stabilityRows = latestStabilityCheck?.result?.stability_table ?? [];
 
   useEffect(() => {
     setResponseRecordPage(0);
+  }, [latestRun?.job_id]);
+
+  useEffect(() => {
+    setIsResponseDetailsVisible(false);
   }, [latestRun?.job_id]);
 
   useEffect(() => {
@@ -261,11 +252,6 @@ export function RunSimulationSection() {
         tone: "success",
         message: "Saved simulation result and stability outputs were cleared.",
       });
-      setStabilityStatus({
-        tone: "neutral",
-        message:
-          "Run the main study first, then use Stability Check as a lightweight repeatability pass.",
-      });
     } catch (error) {
       setStatus({
         tone: "error",
@@ -276,38 +262,6 @@ export function RunSimulationSection() {
       });
     } finally {
       setIsClearing(false);
-    }
-  }
-
-  async function handleRunStabilityCheck() {
-    if (!studyId || !latestRun?.result) {
-      setStabilityStatus({
-        tone: "warning",
-        message: "Complete the main study run first, then launch a stability check.",
-      });
-      return;
-    }
-
-    setIsRunningStability(true);
-    setStabilityStatus({
-      tone: "neutral",
-      message: "Running repeatability checks. This can take a few minutes on live models...",
-    });
-
-    try {
-      const result = await startStabilityCheck(studyId, repeatRuns);
-      setLatestStabilityCheck(result);
-      setStabilityStatus(buildStabilityStatus(result));
-    } catch (error) {
-      setStabilityStatus({
-        tone: "error",
-        message:
-          error instanceof Error
-            ? error.message
-            : "Unable to run the stability check right now.",
-      });
-    } finally {
-      setIsRunningStability(false);
     }
   }
 
@@ -323,8 +277,8 @@ export function RunSimulationSection() {
             <SectionHeader
               index={7}
               eyebrow="Run Simulation"
-              title="Launch the grounded study with a clear view of what is about to happen."
-              description="This is the execution chapter: review the saved setup and run the study through the configured models before moving into Analysis."
+              title="Generate Synthetic Survey Responses"
+              description="Review the saved setup, then generate synthetic responses before moving into analysis."
             />
           </RevealOnScroll>
 
@@ -448,12 +402,22 @@ export function RunSimulationSection() {
                     <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
                       <Button
                         variant="secondary"
-                        onClick={() => scrollToSection("analysis")}
+                        onClick={() => {
+                          setIsResponseDetailsVisible(false);
+                          window.requestAnimationFrame(() => {
+                            scrollToSection("analysis");
+                          });
+                        }}
                       >
-                        Continue to Analysis
+                        Continue to Result
                       </Button>
-                      <Button variant="secondary" onClick={() => scrollToSection("analysis")}>
-                        Inspect Details
+                      <Button
+                        variant="secondary"
+                        onClick={() =>
+                          setIsResponseDetailsVisible((current) => !current)
+                        }
+                      >
+                        {isResponseDetailsVisible ? "Hide Detail Responses" : "Detail Responses"}
                       </Button>
                     </div>
                   </>
@@ -476,20 +440,11 @@ export function RunSimulationSection() {
             <>
               <GlassPanel className="p-5 sm:p-6">
               <div className="rounded-[1.55rem] border border-white/5 bg-[linear-gradient(180deg,rgba(12,18,22,0.84),rgba(12,18,22,0.6))] p-5">
-                <div className="flex flex-wrap items-center gap-3">
-                  <BadgeChip tone="gold">Generated Personas</BadgeChip>
-                  <BadgeChip>{`${latestRun.result.personas?.length ?? 0} personas`}</BadgeChip>
-                </div>
-                  <p className="mt-4 text-sm leading-6 text-app-muted">
-                    This is the payoff of the setup flow: the grounded personas that shaped the study run.
-                  </p>
-
-                  <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="text-sm text-app-muted">
-                      {allPersonas.length <= 2 || arePersonasExpanded
-                        ? `Showing ${allPersonas.length} of ${allPersonas.length} personas`
-                        : `Showing 2 of ${allPersonas.length} personas`}
-                    </div>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <BadgeChip tone="gold">Generated Personas</BadgeChip>
+                    <BadgeChip>{`${latestRun.result.personas?.length ?? 0} personas`}</BadgeChip>
+                  </div>
                     {allPersonas.length > 2 ? (
                       <Button
                         variant="secondary"
@@ -500,7 +455,7 @@ export function RunSimulationSection() {
                           : `Show all ${allPersonas.length} personas`}
                       </Button>
                     ) : null}
-                  </div>
+                </div>
 
                   <div className="mt-5 grid gap-4 xl:grid-cols-2">
                     {personaPreviewRows.length > 0 ? (
@@ -518,49 +473,7 @@ export function RunSimulationSection() {
                 </div>
               </GlassPanel>
 
-              <GlassPanel className="p-5 sm:p-6">
-                <div className="rounded-[1.55rem] border border-white/5 bg-[linear-gradient(180deg,rgba(12,18,22,0.84),rgba(12,18,22,0.6))] p-5">
-                  <div className="flex flex-wrap items-center gap-3">
-                    <BadgeChip tone="gold">Stability Check</BadgeChip>
-                    <BadgeChip>Secondary module</BadgeChip>
-                  </div>
-                  <p className="mt-4 text-sm leading-6 text-app-muted">
-                    Use this lightweight repeatability check after the main run. It should not visually compete with the primary run CTA.
-                  </p>
-
-                  <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-                    <NumberStepper
-                      label="Repeat runs"
-                      value={repeatRuns}
-                      min={2}
-                      max={5}
-                      onChange={setRepeatRuns}
-                    />
-                    <Button
-                      variant="secondary"
-                      onClick={handleRunStabilityCheck}
-                      disabled={isRunningStability}
-                    >
-                      {isRunningStability ? "Running Stability Check..." : "Run Stability Check"}
-                    </Button>
-                  </div>
-
-                  <div className="mt-5">
-                    <StatusBanner
-                      tone={stabilityStatus.tone}
-                      message={stabilityStatus.message}
-                      compact
-                    />
-                  </div>
-
-                  {stabilityRows.length > 0 ? (
-                    <div className="mt-5 rounded-[1.35rem] border border-white/8 bg-white/[0.03] p-4">
-                      <StabilityTable rows={stabilityRows} />
-                    </div>
-                  ) : null}
-                </div>
-              </GlassPanel>
-
+              {isResponseDetailsVisible ? (
               <GlassPanel className="p-5 sm:p-6">
                 <div className="rounded-[1.55rem] border border-white/5 bg-[linear-gradient(180deg,rgba(12,18,22,0.84),rgba(12,18,22,0.6))] p-5">
                 <div className="flex flex-wrap items-center gap-3">
@@ -609,6 +522,7 @@ export function RunSimulationSection() {
                   </div>
                 </div>
               </GlassPanel>
+              ) : null}
             </>
           ) : null}
         </div>
@@ -647,32 +561,6 @@ function buildRunStatus(
   }
 
   return buildReadinessBanner(study);
-}
-
-function buildStabilityStatus(
-  latestStabilityCheck: SimulationJobPayload<SimulationStabilityResultPayload> | null
-): StatusState {
-  if (!latestStabilityCheck?.result) {
-    return {
-      tone: "neutral",
-      message: "Run the main study first, then use Stability Check as a lightweight repeatability pass.",
-    };
-  }
-
-  const unstableCount =
-    latestStabilityCheck.result.stability_labels?.filter((label) => label === "unstable")
-      .length ?? 0;
-  if (unstableCount > 0) {
-    return {
-      tone: "warning",
-      message: `Stability check completed with ${unstableCount} unstable metric${unstableCount === 1 ? "" : "s"}.`,
-    };
-  }
-
-  return {
-    tone: "success",
-    message: "Stability check completed and saved.",
-  };
 }
 
 function buildReadinessBanner(study: any): StatusState {
@@ -982,74 +870,6 @@ function ResponseRecordCard({
   );
 }
 
-function StabilityTable({ rows }: { rows: Array<Record<string, unknown>> }) {
-  const runColumns = Array.from(
-    new Set(
-      rows.flatMap((row) =>
-        Object.keys(row).filter((key) => key.startsWith("run_"))
-      )
-    )
-  ).sort((left, right) => left.localeCompare(right, undefined, { numeric: true }));
-
-  return (
-    <div className="overflow-x-auto">
-      <table className="min-w-full border-separate border-spacing-y-3">
-        <thead>
-          <tr className="text-left">
-            <th className="px-3 pb-1 text-[0.68rem] uppercase tracking-[0.22em] text-app-muted">
-              Metric
-            </th>
-            <th className="px-3 pb-1 text-[0.68rem] uppercase tracking-[0.22em] text-app-muted">
-              Status
-            </th>
-            {runColumns.map((column) => (
-              <th
-                key={column}
-                className="px-3 pb-1 text-[0.68rem] uppercase tracking-[0.22em] text-app-muted"
-              >
-                {humanizeRunColumn(column)}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row, index) => (
-            <tr key={`${String(row.metric_name ?? index)}-${index}`}>
-              <td className="rounded-l-[1rem] border border-white/6 border-r-0 bg-black/10 px-3 py-3 text-sm text-app-text">
-                {humanizeMetricName(row.metric_name, index)}
-              </td>
-              <td className="border border-white/6 border-l-0 border-r-0 bg-black/10 px-3 py-3">
-                <BadgeChip
-                  tone={
-                    row.stability_label === "stable"
-                      ? "cyan"
-                      : row.stability_label === "mostly_stable"
-                        ? "gold"
-                        : "gold"
-                  }
-                >
-                  {humanizeToken(toOptionalString(row.stability_label) || "unknown")}
-                </BadgeChip>
-              </td>
-              {runColumns.map((column, runIndex) => (
-                <td
-                  key={`${String(row.metric_name ?? index)}-${column}`}
-                  className={cn(
-                    "border border-white/6 border-l-0 bg-black/10 px-3 py-3 text-sm leading-6 text-app-muted",
-                    runIndex === runColumns.length - 1 && "rounded-r-[1rem]"
-                  )}
-                >
-                  {formatTableValue(row[column])}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
 function WarningListPanel({
   title,
   items,
@@ -1125,41 +945,6 @@ function EmptyPanel({ message }: { message: string }) {
   );
 }
 
-function NumberStepper({
-  label,
-  value,
-  min,
-  max,
-  onChange,
-}: {
-  label: string;
-  value: number;
-  min: number;
-  max: number;
-  onChange: (value: number) => void;
-}) {
-  return (
-    <div className="inline-flex items-center gap-3 rounded-[1.2rem] border border-white/8 bg-white/[0.03] px-3 py-2">
-      <span className="text-sm text-app-muted">{label}</span>
-      <button
-        type="button"
-        onClick={() => onChange(Math.max(min, value - 1))}
-        className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-white/8 bg-black/10 text-app-text transition hover:border-app-cyan/25 hover:text-app-cyan"
-      >
-        −
-      </button>
-      <span className="w-6 text-center text-sm text-app-text">{value}</span>
-      <button
-        type="button"
-        onClick={() => onChange(Math.min(max, value + 1))}
-        className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-white/8 bg-black/10 text-app-text transition hover:border-app-cyan/25 hover:text-app-cyan"
-      >
-        +
-      </button>
-    </div>
-  );
-}
-
 function toOptionalString(value: unknown) {
   if (typeof value !== "string") {
     return null;
@@ -1196,35 +981,4 @@ function prettifyQuestionText(value: unknown) {
     .replace(/([a-z])([A-Z])/g, "$1 $2")
     .replace(/\s+/g, " ")
     .trim();
-}
-
-function humanizeMetricName(value: unknown, index: number) {
-  const label = toOptionalString(value);
-  if (!label) {
-    return `Metric ${index + 1}`;
-  }
-  return humanizeToken(label);
-}
-
-function humanizeRunColumn(value: string) {
-  return value.replace("run_", "Run ");
-}
-
-function humanizeToken(value: string) {
-  return value
-    .replaceAll("_", " ")
-    .replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
-
-function formatTableValue(value: unknown) {
-  if (Array.isArray(value)) {
-    return value.map((entry) => String(entry)).join(" • ");
-  }
-  if (typeof value === "number") {
-    return Number.isInteger(value) ? String(value) : value.toFixed(4).replace(/0+$/, "").replace(/\.$/, "");
-  }
-  if (value === null || typeof value === "undefined" || value === "") {
-    return "n/a";
-  }
-  return String(value).replaceAll("_", " ");
 }

@@ -45,6 +45,9 @@ export function SectionRegistryProvider({ children }: PropsWithChildren) {
   >({});
   const sectionElementsRef = useRef(sectionElements);
   const scrollContainersRef = useRef(scrollContainers);
+  const rememberedScrollPositionsRef = useRef<
+    Partial<Record<WorkflowSectionId, number>>
+  >({});
   const activeSectionIdRef = useRef(activeSectionId);
   const navigationLockedRef = useRef(navigationLocked);
   const transitionLockRef = useRef(false);
@@ -87,6 +90,13 @@ export function SectionRegistryProvider({ children }: PropsWithChildren) {
 
   const registerScrollContainer = useCallback(
     (id: WorkflowSectionId, element: HTMLElement | null) => {
+      if (element) {
+        const rememberedTop = rememberedScrollPositionsRef.current[id];
+        if (typeof rememberedTop === "number") {
+          element.scrollTop = rememberedTop;
+        }
+      }
+
       setScrollContainers((current) => {
         if (current[id] === element) {
           return current;
@@ -193,6 +203,13 @@ export function SectionRegistryProvider({ children }: PropsWithChildren) {
       return;
     }
 
+    const currentSectionId = activeSectionIdRef.current;
+    const currentScrollContainer = scrollContainersRef.current[currentSectionId];
+    if (currentScrollContainer) {
+      rememberedScrollPositionsRef.current[currentSectionId] =
+        currentScrollContainer.scrollTop;
+    }
+
     const element = sectionElementsRef.current[id];
     if (!element) {
       return;
@@ -203,8 +220,9 @@ export function SectionRegistryProvider({ children }: PropsWithChildren) {
     const top = element.getBoundingClientRect().top + window.scrollY - navHeight;
 
     if (scrollContainer) {
+      const rememberedTop = rememberedScrollPositionsRef.current[id] ?? 0;
       scrollContainer.scrollTo({
-        top: 0,
+        top: rememberedTop,
         behavior: "auto",
       });
     }

@@ -1,11 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import {
-  AnalysisDistributionRow,
+  AnalysisDashboardDistributionRow,
+  AnalysisDashboardHistogramBin,
+  AnalysisDashboardLinePoint,
+  AnalysisDashboardQuestion,
+  AnalysisDashboardQuote,
+  AnalysisDashboardWordCloudTerm,
   AnalysisPayload,
-  AnalysisResponseRecord,
   getAnalysis,
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -18,44 +22,47 @@ import { GlassPanel } from "@/components/ui/glass-panel";
 import { RevealOnScroll } from "@/components/ui/reveal-on-scroll";
 import { SectionHeader } from "@/components/ui/section-header";
 import { SectionWrapper } from "@/components/ui/section-wrapper";
+import { StabilityCheckPanel } from "@/components/sections/stability-check-panel";
+import { ChartFrame } from "@/components/charts/chart-frame";
 
-const RECORDS_PER_PAGE = 12;
-
-type StatusTone = "neutral" | "success" | "warning" | "error";
-
-type StatusState = {
-  tone: StatusTone;
-  message: string;
-};
-
-const EMPTY_STATUS: StatusState = {
-  tone: "neutral",
-  message: "Analysis loads after a run is completed and saved.",
-};
+const EMPTY_MESSAGE = "Analysis loads after a run is completed and saved.";
+const OPEN_TEXT_LIMIT = 5;
+const WORD_CLOUD_SLOTS = [
+  { x: 50, y: 48, rotate: -2 },
+  { x: 34, y: 60, rotate: 0 },
+  { x: 64, y: 58, rotate: 1 },
+  { x: 50, y: 26, rotate: -1 },
+  { x: 28, y: 38, rotate: -3 },
+  { x: 71, y: 36, rotate: 2 },
+  { x: 40, y: 76, rotate: 1 },
+  { x: 61, y: 74, rotate: -2 },
+  { x: 19, y: 52, rotate: 1 },
+  { x: 80, y: 51, rotate: -1 },
+  { x: 24, y: 26, rotate: -2 },
+  { x: 76, y: 24, rotate: 2 },
+  { x: 15, y: 71, rotate: 0 },
+  { x: 86, y: 68, rotate: -3 },
+  { x: 40, y: 18, rotate: 1 },
+  { x: 61, y: 18, rotate: -1 },
+  { x: 32, y: 87, rotate: -2 },
+  { x: 69, y: 87, rotate: 1 },
+] as const;
 
 export function AnalysisSection() {
   const { studyId, study } = useStudy();
   const { scrollToSection } = useSectionRegistry();
   const [analysis, setAnalysis] = useState<AnalysisPayload | null>(null);
-  const [status, setStatus] = useState<StatusState>(EMPTY_STATUS);
   const [isLoading, setIsLoading] = useState(false);
-  const [selectedQuestionId, setSelectedQuestionId] = useState<string | null>(null);
   const [selectedModel, setSelectedModel] = useState("All");
-  const [selectedSegment, setSelectedSegment] = useState("All");
-  const [recordsPage, setRecordsPage] = useState(0);
-
-  useEffect(() => {
-    setRecordsPage(0);
-  }, [selectedQuestionId, selectedModel, selectedSegment]);
+  const [isStabilityOpen, setIsStabilityOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
 
-    async function hydrateAnalysis() {
+    async function hydrateAnalysisDashboard() {
       if (!studyId) {
         if (!cancelled) {
           setAnalysis(null);
-          setStatus(EMPTY_STATUS);
         }
         return;
       }
@@ -63,44 +70,19 @@ export function AnalysisSection() {
       setIsLoading(true);
       try {
         const result = await getAnalysis(studyId, {
-          questionId: selectedQuestionId,
           model: selectedModel,
-          segment: selectedSegment,
-          recordsLimit: RECORDS_PER_PAGE,
-          recordsOffset: recordsPage * RECORDS_PER_PAGE,
-          openTextLimit: 8,
+          openTextLimit: OPEN_TEXT_LIMIT,
         });
 
-        if (cancelled) {
-          return;
+        if (!cancelled) {
+          setAnalysis(result);
         }
-
-        setAnalysis(result);
-        setSelectedQuestionId(result.filters?.selected_question_id ?? null);
-        setSelectedModel(result.filters?.selected_model ?? "All");
-        setSelectedSegment(result.filters?.selected_segment ?? "All");
-        setStatus(
-          result.available
-            ? {
-                tone: "success",
-                message:
-                  "Analysis is loaded from the latest run. Confidence and agreement labels are directional heuristics, not final proof.",
-              }
-            : {
-                tone: "warning",
-                message:
-                  result.message ??
-                  "No analysis payload is available yet. Run the study first.",
-              }
-        );
       } catch (error) {
         if (!cancelled) {
-          setStatus({
-            tone: "error",
+          setAnalysis({
+            available: false,
             message:
-              error instanceof Error
-                ? error.message
-                : "Unable to load analysis right now.",
+              error instanceof Error ? error.message : "Unable to load analysis right now.",
           });
         }
       } finally {
@@ -110,67 +92,43 @@ export function AnalysisSection() {
       }
     }
 
-    void hydrateAnalysis();
+    void hydrateAnalysisDashboard();
 
     return () => {
       cancelled = true;
     };
-  }, [studyId, study?.updated_at, selectedQuestionId, selectedModel, selectedSegment, recordsPage]);
+  }, [studyId, study?.updated_at, selectedModel]);
 
-  const questionOptions = analysis?.filters?.question_options ?? [];
-  const modelOptions = analysis?.filters?.model_options ?? ["All"];
-  const segmentOptions = analysis?.filters?.segment_options ?? ["All"];
-  const questionExplorer = analysis?.question_explorer;
-  const distributionRows = questionExplorer?.distribution ?? [];
-  const recordsPreview = analysis?.records_preview;
-  const recordsTotal = recordsPreview?.total ?? 0;
-  const recordPageCount = recordsTotal > 0 ? Math.ceil(recordsTotal / RECORDS_PER_PAGE) : 0;
-  const benchmark = analysis?.benchmark_snapshot;
-  const realism = analysis?.realism_scorecard;
-  const run = analysis?.run;
-  const runDebugSummary = analysis?.run_debug_summary;
-  const runWarnings = analysis?.context_notes?.run_warnings ?? [];
-  const surveyWarnings = analysis?.context_notes?.survey_parse_warnings ?? [];
-  const openTextSamples = analysis?.open_text?.samples ?? [];
-  const openTextQuestion = useMemo(() => {
-    const selectedId = analysis?.open_text?.selected_question_id;
-    return analysis?.open_text?.question_options?.find((entry) => entry.id === selectedId) ?? null;
-  }, [analysis?.open_text]);
+  const dashboard = analysis?.dashboard;
+  const modelOptions = dashboard?.model_options ?? ["All"];
+  const questions = dashboard?.questions ?? [];
 
   return (
-    <SectionWrapper id="analysis" scrollable contentClassName="relative">
-      <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_22rem] xl:grid-cols-[minmax(0,1.03fr)_24rem] 2xl:grid-cols-[minmax(0,1.04fr)_29rem]">
+    <SectionWrapper
+      id="analysis"
+      scrollable
+      contentClassName="relative scrollbar-hidden"
+    >
+      <div className="grid items-start gap-8">
         <div className="min-w-0 space-y-6">
           <RevealOnScroll>
             <SectionHeader
               index={8}
               eyebrow="Analysis"
-              title="Read what happened in the run and how trustworthy each signal is."
-              description="Start with summary cards, then inspect question-level evidence before carrying signals into Insights."
+              title="Read every survey question as a response dashboard."
+              description="Review the latest run question by question, switch the model view when needed, then optionally check repeatability at the bottom."
             />
-          </RevealOnScroll>
-
-          <RevealOnScroll delay={0.04}>
-            <div className="rounded-[1.45rem] border [border-color:var(--status-warning-border)] [background:var(--status-warning-bg)] px-5 py-4 text-sm leading-6 text-app-gold">
-              {analysis?.transparency_note ??
-                "Transparency note: confidence and agreement labels are rule-based summaries to speed interpretation."}
-            </div>
-          </RevealOnScroll>
-
-          <RevealOnScroll delay={0.06}>
-            <StatusBanner tone={status.tone} message={status.message} />
           </RevealOnScroll>
 
           {!analysis?.available ? (
             <GlassPanel className="p-6 sm:p-7">
               <div className="rounded-[1.55rem] border border-app-border [background:var(--theme-panel-gradient)] p-6">
-                <div className="flex flex-wrap gap-3">
+                <div className="flex flex-wrap items-center gap-3">
                   <BadgeChip tone="gold">Analysis Unavailable</BadgeChip>
-                  {run?.status ? <BadgeChip>{run.status}</BadgeChip> : null}
+                  {isLoading ? <BadgeChip>Loading</BadgeChip> : null}
                 </div>
                 <p className="mt-4 max-w-2xl text-sm leading-7 text-app-muted">
-                  {analysis?.message ??
-                    "No saved run is available yet. Complete Run Simulation first, then return here for summary patterns, trust framing, and question-level evidence."}
+                  {analysis?.message ?? EMPTY_MESSAGE}
                 </p>
                 <div className="mt-5">
                   <Button variant="secondary" onClick={() => scrollToSection("run-simulation")}>
@@ -181,847 +139,518 @@ export function AnalysisSection() {
             </GlassPanel>
           ) : (
             <>
-              <RevealOnScroll delay={0.08}>
-                <details className="rounded-[1.55rem] border border-app-border [background:var(--status-neutral-bg)] p-5">
-                  <summary className="cursor-pointer list-none text-sm font-medium text-app-text">
-                    Context & Study Inputs
-                  </summary>
-                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                    <ContextSummaryCard
-                      label="Run"
-                      value={
-                        [
-                          run?.run_id,
-                          run?.survey_title,
-                          run?.experiment_mode ? formatMode(run.experiment_mode) : null,
-                        ]
-                          .filter(Boolean)
-                          .join(" • ") || "No run metadata"
-                      }
-                    />
-                    <ContextSummaryCard
-                      label="Workflow"
-                      value={
-                        study?.derived?.workflow?.ready_for_persona_preview
-                          ? "All setup sections were saved before this run."
-                          : "Run completed with partial setup; interpret outputs more cautiously."
-                      }
-                    />
-                    <ContextSummaryCard
-                      label="Audience"
-                      value={buildAudienceAnchor(study?.audience?.value)}
-                    />
-                    <ContextSummaryCard
-                      label="Product & Market"
-                      value={buildProductMarketAnchor(study)}
-                    />
-                  </div>
-                </details>
-              </RevealOnScroll>
-
-              <RevealOnScroll delay={0.1}>
-                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-                  <SummaryKpiCard
-                    label="Responses Analyzed"
-                    value={String(analysis.summary?.total_records ?? 0)}
-                  />
-                  <SummaryKpiCard
-                    label="Unique Personas"
-                    value={String(analysis.summary?.unique_respondents ?? 0)}
-                  />
-                  <SummaryKpiCard
-                    label="Questions Covered"
-                    value={String(analysis.summary?.question_count ?? 0)}
-                  />
-                  <SummaryKpiCard
-                    label="Models Compared"
-                    value={String(analysis.summary?.models_present?.length ?? 0)}
-                  />
-                  <SummaryKpiCard
-                    label="Segment Coverage"
-                    value={analysis.summary?.active_segment_summary ?? "No segment labels"}
-                  />
-                </div>
-              </RevealOnScroll>
-
-              <RevealOnScroll delay={0.12}>
-                <div className="grid gap-4 xl:grid-cols-2">
-                  <TrustBandCard
-                    title="Benchmark Snapshot"
-                    tone={benchmark?.available ? "cyan" : "gold"}
-                    body={
-                      benchmark?.available
-                        ? `Consistency snapshot: ${benchmark.stability_summary}. Top repeated use case: ${benchmark.top_use_case_consensus ?? "n/a"}. Top repeated barrier: ${benchmark.top_barrier_consensus ?? "n/a"}.`
-                        : benchmark?.message ?? "Benchmark snapshot is unavailable."
-                    }
-                  >
-                    {benchmark?.available ? (
-                      <details className="mt-4 rounded-[1.15rem] border border-app-border [background:var(--status-neutral-bg)] p-3">
-                        <summary className="cursor-pointer list-none text-sm text-app-text">
-                          Show detailed benchmark table
-                        </summary>
-                        <div className="mt-3 overflow-x-auto">
-                          <CompactTable rows={benchmark.detailed_table ?? []} />
-                        </div>
-                      </details>
-                    ) : null}
-                  </TrustBandCard>
-
-                  <TrustBandCard
-                    title="Neo Realism Scorecard"
-                    tone={realism?.available ? "cyan" : "gold"}
-                    body={
-                      realism?.available
-                        ? buildRealismSummary(realism.summary)
-                        : realism?.message ?? "Realism scorecard unavailable."
-                    }
-                  >
-                    {realism?.available ? (
-                      <details className="mt-4 rounded-[1.15rem] border border-app-border [background:var(--status-neutral-bg)] p-3">
-                        <summary className="cursor-pointer list-none text-sm text-app-text">
-                          Show detailed realism table
-                        </summary>
-                        <div className="mt-3 overflow-x-auto">
-                          <CompactTable rows={realism.question_rows ?? []} />
-                        </div>
-                      </details>
-                    ) : null}
-                  </TrustBandCard>
-
-                  <TrustBandCard
-                    title="Confidence"
-                    tone={confidenceTone(questionExplorer?.trust?.confidence_label)}
-                    body={questionExplorer?.trust?.confidence_label ?? "Needs validation"}
-                  >
-                    <p className="mt-3 text-sm leading-6 text-app-muted">
-                      {questionExplorer?.trust?.explanation ??
-                        "Confidence updates after you select a question and filters."}
-                    </p>
-                  </TrustBandCard>
-
-                  <TrustBandCard
-                    title="Model Agreement"
-                    tone={agreementTone(questionExplorer?.trust?.agreement_label)}
-                    body={questionExplorer?.trust?.agreement_label ?? "Partial agreement"}
-                  >
-                    <p className="mt-3 text-sm leading-6 text-app-muted">
-                      Agreement is a heuristic read of how aligned models are under current filters.
-                    </p>
-                  </TrustBandCard>
-                </div>
-              </RevealOnScroll>
-
-              <RevealOnScroll delay={0.14}>
-                <GlassPanel className="p-5 sm:p-6">
-                  <div className="rounded-[1.55rem] border border-app-border [background:var(--theme-panel-gradient)] p-5">
+              <div className="sticky top-0 z-20 -mx-1 bg-[linear-gradient(180deg,rgba(7,11,15,0.96)_0%,rgba(7,11,15,0.88)_78%,rgba(7,11,15,0)_100%)] px-1 pb-5 pt-1">
+                <div className="rounded-[1.55rem] border border-app-border/70 px-5 py-4 shadow-[0_18px_44px_rgba(0,0,0,0.24)] backdrop-blur-xl [background:linear-gradient(180deg,rgba(16,23,29,0.92),rgba(13,19,24,0.88))] sm:px-6">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                     <div className="flex flex-wrap items-center gap-3">
-                      <BadgeChip tone="cyan">Question Explorer</BadgeChip>
-                      <BadgeChip>{`${analysis.filters?.filtered_record_count ?? 0} records match filters`}</BadgeChip>
+                      <h2 className="text-[1.55rem] font-semibold tracking-tight text-app-text sm:text-[1.75rem]">
+                        Result Dashboard
+                      </h2>
+                      <span className="inline-flex items-center rounded-full border border-app-border/70 px-3.5 py-1.5 text-sm font-medium text-app-muted [background:var(--status-neutral-bg)]">
+                        {`${questions.length} questions`}
+                      </span>
+                      {isLoading ? <BadgeChip>Refreshing</BadgeChip> : null}
                     </div>
 
-                    <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(13rem,0.8fr)_minmax(13rem,0.8fr)]">
-                      <SelectBlock
-                        label="Question"
-                        value={selectedQuestionId ?? ""}
-                        onChange={(value) => setSelectedQuestionId(value)}
-                        options={questionOptions.map((question) => ({
-                          label: `${question.id} — ${question.text}`,
-                          value: question.id,
-                        }))}
-                      />
-                      <SelectBlock
-                        label="Model"
+                    <div className="w-full max-w-md lg:w-[23rem]">
+                      <div className="mb-2 text-[0.72rem] uppercase tracking-[0.22em] text-app-muted">
+                        Filter Results By Model
+                      </div>
+                      <SelectInput
                         value={selectedModel}
                         onChange={setSelectedModel}
-                        options={modelOptions.map((entry) => ({
-                          label: entry,
-                          value: entry,
+                        options={modelOptions.map((model) => ({
+                          label: model === "All" ? "Overall Results" : model,
+                          value: model,
                         }))}
                       />
-                      <SelectBlock
-                        label="Segment"
-                        value={selectedSegment}
-                        onChange={setSelectedSegment}
-                        options={segmentOptions.map((entry) => ({
-                          label: entry,
-                          value: entry,
-                        }))}
-                      />
-                    </div>
-
-                    <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1.04fr)_minmax(20rem,0.96fr)]">
-                      <div className="space-y-4">
-                        <div className="rounded-[1.35rem] border border-app-border [background:var(--status-neutral-bg)] p-4">
-                          <div className="flex flex-wrap gap-2">
-                            <BadgeChip>{questionExplorer?.question_id ?? "No question"}</BadgeChip>
-                            <BadgeChip tone="neutral">
-                              {formatQuestionType(questionExplorer?.question_type)}
-                            </BadgeChip>
-                            <BadgeChip>{`${questionExplorer?.response_count ?? 0} responses`}</BadgeChip>
-                          </div>
-                          <h3 className="mt-4 text-lg font-medium leading-8 text-app-text">
-                            {questionExplorer?.question_text ?? "No question selected."}
-                          </h3>
-
-                          <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                            <MetaMiniCard
-                              label="Top Answer"
-                              value={String(questionExplorer?.stats_summary?.top_answer ?? "n/a")}
-                            />
-                            <MetaMiniCard
-                              label="Top Share"
-                              value={
-                                questionExplorer?.stats_summary?.top_percentage !== undefined
-                                  ? `${String(questionExplorer?.stats_summary?.top_percentage)}%`
-                                  : "n/a"
-                              }
-                            />
-                            <MetaMiniCard
-                              label="Average"
-                              value={String(questionExplorer?.stats_summary?.average_value ?? "n/a")}
-                            />
-                          </div>
-                        </div>
-
-                        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_18rem]">
-                          <DistributionChart rows={distributionRows} />
-                          <DistributionTable rows={distributionRows} />
-                        </div>
-                      </div>
-
-                      <div className="rounded-[1.35rem] border border-app-border [background:var(--status-neutral-bg)] p-4">
-                        <div className="text-[0.72rem] uppercase tracking-[0.24em] text-app-muted">
-                          Question Trust Note
-                        </div>
-                        <p className="mt-3 text-sm leading-7 text-app-text">
-                          {questionExplorer?.trust?.explanation ??
-                            "Trust explanation will appear once the selected question has enough evidence."}
-                        </p>
-                      </div>
                     </div>
                   </div>
-                </GlassPanel>
-              </RevealOnScroll>
-
-              <RevealOnScroll delay={0.16}>
-                <div className="grid gap-4 xl:grid-cols-2">
-                  <GlassPanel className="p-5 sm:p-6">
-                    <div className="rounded-[1.55rem] border border-app-border [background:var(--theme-panel-gradient)] p-5">
-                      <div className="flex flex-wrap items-center gap-3">
-                        <BadgeChip tone="gold">Open Text Evidence</BadgeChip>
-                        {openTextQuestion ? (
-                          <BadgeChip>{openTextQuestion.id}</BadgeChip>
-                        ) : (
-                          <BadgeChip>No open-text samples</BadgeChip>
-                        )}
-                      </div>
-                      <p className="mt-4 text-sm leading-6 text-app-muted">
-                        {openTextQuestion
-                          ? openTextQuestion.text
-                          : "No open-text question is available under the active filters."}
-                      </p>
-
-                      <div className="mt-5 space-y-3">
-                        {openTextSamples.length > 0 ? (
-                          openTextSamples.map((sample, index) => (
-                            <EvidenceCard
-                              key={`${String(sample.respondent_id ?? index)}-${String(sample.model ?? index)}`}
-                              header={`${String(sample.respondent_id ?? `Resp ${index + 1}`)} • ${String(sample.model ?? "model")}`}
-                              body={formatAnswer(sample.answer)}
-                              subtext={String(sample.segment_label ?? "Unsegmented")}
-                            />
-                          ))
-                        ) : (
-                          <EmptyState message="No open-text responses match the active filters." />
-                        )}
-                      </div>
-                    </div>
-                  </GlassPanel>
-
-                  <GlassPanel className="p-5 sm:p-6">
-                    <div className="rounded-[1.55rem] border border-app-border [background:var(--theme-panel-gradient)] p-5">
-                      <div className="flex flex-wrap items-center gap-3">
-                        <BadgeChip tone="gold">Run Notes</BadgeChip>
-                      </div>
-
-                      <div className="mt-5 space-y-3">
-                        {runWarnings.length > 0 ? (
-                          <EvidenceList
-                            title="Run notes"
-                            items={runWarnings}
-                            tone="gold"
-                          />
-                        ) : null}
-                        {surveyWarnings.length > 0 ? (
-                          <EvidenceList
-                            title="Survey parsing notes"
-                            items={surveyWarnings}
-                            tone="neutral"
-                          />
-                        ) : null}
-                        {runWarnings.length === 0 && surveyWarnings.length === 0 ? (
-                          <EmptyState message="No run notes or survey parsing notes were attached to the latest result." />
-                        ) : null}
-                      </div>
-                    </div>
-                  </GlassPanel>
                 </div>
-              </RevealOnScroll>
+              </div>
 
-              <RevealOnScroll delay={0.18}>
+              <div className="grid gap-5 xl:grid-cols-2">
+                {questions.length > 0 ? (
+                  questions.map((question) => (
+                    <QuestionDashboardCard
+                      key={question.question_id}
+                      question={question}
+                    />
+                  ))
+                ) : (
+                  <GlassPanel className="p-5 sm:p-6 xl:col-span-2">
+                    <div className="rounded-[1.55rem] border border-app-border [background:var(--theme-panel-gradient)] p-6 text-sm leading-7 text-app-muted">
+                      No question-level analysis is available for this run yet.
+                    </div>
+                  </GlassPanel>
+                )}
+              </div>
+
+              <RevealOnScroll delay={0.08}>
                 <GlassPanel className="p-5 sm:p-6">
                   <div className="rounded-[1.55rem] border border-app-border [background:var(--theme-panel-gradient)] p-5">
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                      <div>
-                        <div className="flex flex-wrap items-center gap-3">
-                          <BadgeChip tone="gold">Full Records Preview</BadgeChip>
-                          <BadgeChip>{`${recordsTotal} records`}</BadgeChip>
-                        </div>
-                        <p className="mt-3 text-sm leading-6 text-app-muted">
-                          Use this as raw evidence from the latest run result. For interpretation and decisions, continue to Insights.
-                        </p>
+                      <div className="flex flex-wrap items-center gap-3">
+                        <BadgeChip tone="gold">Stability Check</BadgeChip>
+                        <BadgeChip>Optional</BadgeChip>
                       </div>
-                      <PagerControls
-                        page={recordsPage}
-                        pageCount={recordPageCount}
-                        onPrev={() => setRecordsPage((current) => Math.max(current - 1, 0))}
-                        onNext={() =>
-                          setRecordsPage((current) => Math.min(current + 1, Math.max(recordPageCount - 1, 0)))
-                        }
-                      />
+                      <Button
+                        variant="secondary"
+                        onClick={() => setIsStabilityOpen((current) => !current)}
+                      >
+                        {isStabilityOpen ? "Hide Stability Check" : "Show Stability Check"}
+                      </Button>
                     </div>
 
-                    <div className="mt-5 overflow-x-auto">
-                      <RecordsPreviewTable rows={recordsPreview?.rows ?? []} />
-                    </div>
+                    {isStabilityOpen ? (
+                      <div className="mt-5">
+                        <StabilityCheckPanel studyId={studyId} />
+                      </div>
+                    ) : null}
                   </div>
                 </GlassPanel>
               </RevealOnScroll>
             </>
           )}
         </div>
-
-        <RevealOnScroll delay={0.08} className="min-w-0 lg:sticky lg:top-6 lg:w-full lg:max-w-[22rem] lg:justify-self-end xl:max-w-[24rem] 2xl:max-w-[29rem]">
-          <div className="space-y-5">
-            <GlassPanel className="p-5 sm:p-6">
-              <div className="rounded-[1.55rem] border border-app-border [background:var(--theme-panel-gradient)] p-5">
-                <div className="flex flex-wrap gap-2">
-                  <BadgeChip tone="cyan">Run Snapshot</BadgeChip>
-                  {isLoading ? <BadgeChip>Refreshing</BadgeChip> : null}
-                </div>
-                <div className="mt-5 space-y-3">
-                  <SidebarRow
-                    label="Run ID"
-                    value={run?.run_id ?? "No saved run"}
-                  />
-                  <SidebarRow
-                    label="Status"
-                    value={run?.status ?? "Unavailable"}
-                  />
-                  <SidebarRow
-                    label="Survey"
-                    value={run?.survey_title ?? "Unavailable"}
-                  />
-                  <SidebarRow
-                    label="Generated"
-                    value={
-                      run?.generated_responses !== undefined
-                        ? `${run.generated_responses} responses`
-                        : "Unavailable"
-                    }
-                  />
-                  <SidebarRow
-                    label="Live answers"
-                    value={
-                      runDebugSummary?.truly_live_answers !== undefined &&
-                      runDebugSummary?.total_answers !== undefined
-                        ? `${runDebugSummary.truly_live_answers}/${runDebugSummary.total_answers}`
-                        : "Unavailable"
-                    }
-                  />
-                  <SidebarRow
-                    label="ML completion"
-                    value={
-                      runDebugSummary?.ml_persona_completion_enabled !== undefined
-                        ? runDebugSummary.ml_persona_completion_enabled
-                          ? "Enabled"
-                          : "Disabled"
-                        : "Unavailable"
-                    }
-                  />
-                </div>
-              </div>
-            </GlassPanel>
-
-            <GlassPanel className="p-5 sm:p-6">
-              <div className="rounded-[1.55rem] border border-app-border [background:var(--theme-panel-gradient)] p-5">
-                <div className="flex flex-wrap gap-2">
-                  <BadgeChip tone="gold">Interpretation Frame</BadgeChip>
-                </div>
-                <p className="mt-4 text-sm leading-7 text-app-text">
-                  Use this chapter to move from run output to interpretation: inspect the current question, check trust framing, review evidence, then carry signal into Insights.
-                </p>
-              </div>
-            </GlassPanel>
-          </div>
-        </RevealOnScroll>
       </div>
     </SectionWrapper>
   );
 }
 
-function SelectBlock({
-  label,
-  value,
-  onChange,
-  options,
+function QuestionDashboardCard({
+  question,
 }: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  options: Array<{ label: string; value: string }>;
+  question: AnalysisDashboardQuestion;
 }) {
-  return (
-    <div>
-      <div className="mb-2 text-[0.72rem] uppercase tracking-[0.22em] text-app-muted">
-        {label}
-      </div>
-      <SelectInput value={value} onChange={onChange} options={options} />
-    </div>
-  );
-}
+  const [isVisible, setIsVisible] = useState(false);
+  const containerRef = useRef<HTMLDivElement | null>(null);
 
-function SummaryKpiCard({ label, value }: { label: string; value: string }) {
+  useEffect(() => {
+    if (!containerRef.current || isVisible) {
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setIsVisible(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "240px 0px" }
+    );
+
+    observer.observe(containerRef.current);
+
+    return () => observer.disconnect();
+  }, [isVisible]);
+
   return (
-    <GlassPanel className="p-4 sm:p-5">
-      <div className="rounded-[1.3rem] border border-app-border [background:var(--theme-panel-gradient)] p-4">
-        <div className="text-[0.68rem] uppercase tracking-[0.22em] text-app-muted">
-          {label}
+    <div
+      ref={containerRef}
+      className="min-w-0"
+    >
+      <GlassPanel className="h-full border-app-border/70 p-6 shadow-[0_22px_48px_rgba(0,0,0,0.24)] sm:p-7">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <BadgeChip tone="cyan">{question.question_id}</BadgeChip>
+          <BadgeChip tone="neutral">{formatQuestionType(question.question_type)}</BadgeChip>
+          <BadgeChip tone="neutral">{`${question.response_count} responses`}</BadgeChip>
         </div>
-        <div className="mt-2 text-lg font-medium text-app-text">{value}</div>
-      </div>
-    </GlassPanel>
-  );
-}
 
-function TrustBandCard({
-  title,
-  tone,
-  body,
-  children,
-}: {
-  title: string;
-  tone: "cyan" | "gold" | "neutral";
-  body: string;
-  children?: ReactNode;
-}) {
-  return (
-    <GlassPanel className="p-5 sm:p-6">
-      <div className="rounded-[1.55rem] border border-app-border [background:var(--theme-panel-gradient)] p-5">
-        <div className="flex flex-wrap gap-2">
-          <BadgeChip tone={tone}>{title}</BadgeChip>
-        </div>
-        <p className="mt-4 text-sm leading-7 text-app-text">{body}</p>
-        {children}
-      </div>
-    </GlassPanel>
-  );
-}
+        <h3 className="mt-5 text-xl font-medium leading-8 tracking-tight text-app-text sm:text-[1.9rem] sm:leading-[2.6rem]">
+          {question.question_text}
+        </h3>
 
-function DistributionChart({ rows }: { rows: AnalysisDistributionRow[] }) {
-  const maxCount = rows.reduce((highest, row) => Math.max(highest, row.count), 0);
-
-  return (
-    <div className="rounded-[1.35rem] border border-app-border [background:var(--status-neutral-bg)] p-4">
-      <div className="text-[0.72rem] uppercase tracking-[0.24em] text-app-muted">
-        Answer Distribution
-      </div>
-      <div className="mt-4 space-y-3">
-        {rows.length > 0 ? (
-          rows.map((row) => (
-            <div key={row.answer_display} className="space-y-2">
-              <div className="flex items-center justify-between gap-3 text-sm text-app-text">
-                <span className="truncate">{row.answer_display}</span>
-                <span className="shrink-0 text-app-muted">
-                  {row.count} • {row.percentage}%
-                </span>
-              </div>
-              <div className="h-2 rounded-full bg-white/[0.05]">
-                <div
-                  className="h-2 rounded-full bg-[linear-gradient(90deg,rgba(15,216,255,0.75),rgba(216,186,103,0.8))]"
-                  style={{
-                    width: `${maxCount > 0 ? (row.count / maxCount) * 100 : 0}%`,
-                  }}
-                />
-              </div>
+        <div className="mt-6 rounded-[1.6rem] p-4 sm:p-5 [background:linear-gradient(180deg,rgba(11,16,20,0.9),rgba(8,12,15,0.84))] shadow-[inset_0_0_0_1px_rgba(118,228,255,0.06)]">
+          {isVisible ? (
+            <QuestionChartSwitch question={question} />
+          ) : (
+            <div className="flex min-h-[18rem] items-center justify-center rounded-[1.25rem] text-sm text-app-muted">
+              Preparing chart...
             </div>
-          ))
-        ) : (
-          <EmptyState message="No distribution is available for the current question/filter combination." />
-        )}
-      </div>
+          )}
+        </div>
+      </GlassPanel>
     </div>
   );
 }
 
-function DistributionTable({ rows }: { rows: AnalysisDistributionRow[] }) {
-  return (
-    <div className="rounded-[1.35rem] border border-app-border [background:var(--status-neutral-bg)] p-4">
-      <div className="text-[0.72rem] uppercase tracking-[0.24em] text-app-muted">
-        Answer Summary
-      </div>
-      <div className="mt-4 overflow-hidden rounded-[1rem] border border-app-border">
-        <table className="min-w-full divide-y divide-white/6 text-sm">
-          <thead className="[background:var(--status-neutral-bg)] text-app-muted">
-            <tr>
-              <th className="px-3 py-2 text-left font-medium">Answer</th>
-              <th className="px-3 py-2 text-left font-medium">Count</th>
-              <th className="px-3 py-2 text-left font-medium">Share</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length > 0 ? (
-              rows.map((row) => (
-                <tr key={row.answer_display} className="border-t border-app-border text-app-text">
-                  <td className="px-3 py-2">{row.answer_display}</td>
-                  <td className="px-3 py-2">{row.count}</td>
-                  <td className="px-3 py-2">{row.percentage}%</td>
-                </tr>
-              ))
-            ) : (
-              <tr>
-                <td className="px-3 py-4 text-app-muted" colSpan={3}>
-                  No answer rows available.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
+const MINIMAL_CHART_FRAME_CLASS =
+  "border-0 [background:transparent] p-0 shadow-none [box-shadow:none]";
+const BAR_FILL_CLASS =
+  "bg-[linear-gradient(180deg,rgba(15,216,255,0.92),rgba(68,142,182,0.84))] shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]";
 
-function EvidenceCard({
-  header,
-  body,
-  subtext,
+function QuestionChartSwitch({
+  question,
 }: {
-  header: string;
-  body: string;
-  subtext?: string;
+  question: AnalysisDashboardQuestion;
 }) {
-  return (
-    <div className="rounded-[1.2rem] border border-app-border [background:var(--status-neutral-bg)] p-4">
-      <div className="text-sm font-medium text-app-text">{header}</div>
-      {subtext ? <div className="mt-1 text-sm text-app-muted">{subtext}</div> : null}
-      <p className="mt-3 text-sm leading-7 text-app-text">{body}</p>
-    </div>
-  );
-}
-
-function EvidenceList({
-  title,
-  items,
-  tone,
-}: {
-  title: string;
-  items: string[];
-  tone: "gold" | "neutral";
-}) {
-  return (
-    <div
-      className={cn(
-        "rounded-[1.2rem] border p-4",
-        tone === "gold"
-          ? "border-app-gold/20 bg-[rgba(216,186,103,0.08)]"
-          : "border-app-border [background:var(--status-neutral-bg)]"
-      )}
-    >
-      <div className="text-[0.72rem] uppercase tracking-[0.24em] text-app-muted">
-        {title}
-      </div>
-      <ul className="mt-3 space-y-2 text-sm leading-6 text-app-text">
-        {items.map((item) => (
-          <li key={item}>{item}</li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-function RecordsPreviewTable({ rows }: { rows: AnalysisResponseRecord[] }) {
-  return (
-    <table className="min-w-full divide-y divide-white/6 text-sm">
-      <thead className="text-app-muted">
-        <tr>
-          <th className="px-3 py-2 text-left font-medium">Respondent</th>
-          <th className="px-3 py-2 text-left font-medium">Model</th>
-          <th className="px-3 py-2 text-left font-medium">Question</th>
-          <th className="px-3 py-2 text-left font-medium">Answer</th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.length > 0 ? (
-          rows.map((row, index) => (
-            <tr key={`${String(row.respondent_id ?? index)}-${String(row.question_id ?? index)}-${index}`} className="border-t border-app-border text-app-text">
-              <td className="px-3 py-3 align-top">{String(row.respondent_id ?? "n/a")}</td>
-              <td className="px-3 py-3 align-top">{String(row.model ?? "n/a")}</td>
-              <td className="px-3 py-3 align-top">
-                <div className="font-medium">{String(row.question_id ?? "Q")}</div>
-                <div className="mt-1 max-w-[26rem] text-app-muted">
-                  {prettifyQuestionText(row.question_text) ?? "Question unavailable"}
-                </div>
-              </td>
-              <td className="px-3 py-3 align-top">{formatAnswer(row.answer)}</td>
-            </tr>
-          ))
-        ) : (
-          <tr>
-            <td className="px-3 py-4 text-app-muted" colSpan={4}>
-              No records match the current filters.
-            </td>
-          </tr>
-        )}
-      </tbody>
-    </table>
-  );
-}
-
-function CompactTable({ rows }: { rows: Array<Record<string, unknown>> }) {
-  const columns = rows.length > 0 ? Object.keys(rows[0]) : [];
-
-  if (rows.length === 0) {
-    return <EmptyState message="No detailed rows are available." />;
+  if (question.chart_kind === "word_cloud") {
+    return (
+      <WordCloudQuestionCard
+        terms={question.word_cloud_terms ?? []}
+        quotes={question.quotes ?? []}
+      />
+    );
   }
 
+  if (question.chart_kind === "line") {
+    return <LineQuestionChart points={question.line_points ?? []} />;
+  }
+
+  if (question.chart_kind === "histogram") {
+    return <HistogramQuestionChart bins={question.histogram_bins ?? []} />;
+  }
+
+  if (question.chart_kind === "likert") {
+    return <BarQuestionChart rows={question.distribution ?? []} kind="likert" />;
+  }
+
+  return <BarQuestionChart rows={question.distribution ?? []} kind="categorical" />;
+}
+
+function BarQuestionChart({
+  rows,
+  kind,
+}: {
+  rows: AnalysisDashboardDistributionRow[];
+  kind: "categorical" | "likert";
+}) {
+  const maxValue = rows.reduce((highest, row) => Math.max(highest, row.count), 0);
+  const axis = buildCountAxis(maxValue);
+  const reversedTicks = [...axis.ticks].reverse();
+  const columnTemplate = `repeat(${Math.max(rows.length, 1)}, minmax(0, 1fr))`;
+
   return (
-    <table className="min-w-full divide-y divide-white/6 text-sm">
-      <thead className="text-app-muted">
-        <tr>
-          {columns.map((column) => (
-            <th key={column} className="px-3 py-2 text-left font-medium">
-              {humanizeToken(column)}
-            </th>
+    <ChartFrame
+      title={kind === "likert" ? "Likert distribution" : "Answer distribution"}
+      headerless
+      empty={rows.length === 0}
+      emptyMessage="No response distribution is available for this question."
+      className={MINIMAL_CHART_FRAME_CLASS}
+    >
+      <div className="grid grid-cols-[2.35rem,minmax(0,1fr)] gap-4">
+        <div className="flex h-56 flex-col justify-between pr-1 text-right">
+          {reversedTicks.map((tick) => (
+            <span
+              key={tick}
+              className="text-[0.68rem] font-medium text-app-muted/90"
+            >
+              {formatCountTick(tick)}
+            </span>
           ))}
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((row, index) => (
-          <tr key={index} className="border-t border-app-border text-app-text">
-            {columns.map((column) => (
-              <td key={column} className="px-3 py-3 align-top">
-                {formatAnswer(row[column])}
-              </td>
+        </div>
+
+        <div className="space-y-3">
+          <div className="relative h-56">
+            <div className="pointer-events-none absolute inset-0">
+              {axis.ticks.map((tick) => {
+                const ratio = axis.max > 0 ? tick / axis.max : 0;
+                return (
+                  <div
+                    key={`guide-${tick}`}
+                    className="absolute inset-x-0 border-t border-white/6"
+                    style={{ bottom: `${ratio * 100}%` }}
+                  />
+                );
+              })}
+            </div>
+
+            <div
+              className="relative grid h-full items-end gap-3 pb-1"
+              style={{ gridTemplateColumns: columnTemplate }}
+            >
+              {rows.map((row) => {
+                const barHeight = axis.max > 0 ? (row.count / axis.max) * 100 : 0;
+                return (
+                  <div
+                    key={row.label}
+                    className="flex h-full min-w-0 flex-col justify-end"
+                  >
+                    <div className="flex h-full w-full items-end">
+                      {row.count > 0 ? (
+                        <div
+                          className={cn(
+                            "relative flex w-full items-start justify-center rounded-t-[1rem] rounded-b-[0.2rem] border border-app-border/25 px-2 pt-2.5 transition",
+                            BAR_FILL_CLASS
+                          )}
+                          style={{
+                            height: `${barHeight}%`,
+                          }}
+                        >
+                          <span className="text-sm font-semibold text-white/95">
+                            {row.count}
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="w-full" />
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div
+            className="grid items-start gap-3"
+            style={{ gridTemplateColumns: columnTemplate }}
+          >
+            {rows.map((row) => (
+              <div
+                key={`${row.label}-label`}
+                className="min-w-0 text-center"
+              >
+                <div className="text-sm leading-6 text-app-text">
+                  {row.label}
+                </div>
+                <div className="mt-2 text-xs text-app-muted">{`${row.percentage.toFixed(1)}%`}</div>
+              </div>
             ))}
-          </tr>
-        ))}
-      </tbody>
-    </table>
+          </div>
+        </div>
+      </div>
+    </ChartFrame>
   );
 }
 
-function PagerControls({
-  page,
-  pageCount,
-  onPrev,
-  onNext,
+function HistogramQuestionChart({
+  bins,
 }: {
-  page: number;
-  pageCount: number;
-  onPrev: () => void;
-  onNext: () => void;
+  bins: AnalysisDashboardHistogramBin[];
 }) {
-  return (
-    <div className="inline-flex items-center gap-3 rounded-[1.2rem] border border-app-border [background:var(--status-neutral-bg)] px-3 py-2">
-      <button
-        type="button"
-        onClick={onPrev}
-        disabled={page <= 0}
-        className={cn(
-          "inline-flex h-9 w-9 items-center justify-center rounded-xl border border-app-border [background:var(--control-bg)] text-app-text transition",
-          page <= 0 ? "cursor-not-allowed opacity-40" : "hover:border-app-cyan/25 hover:text-app-cyan"
-        )}
-      >
-        ←
-      </button>
-      <span className="min-w-[4.5rem] text-center text-sm text-app-muted">
-        {pageCount === 0 ? "0 / 0" : `${page + 1} / ${pageCount}`}
-      </span>
-      <button
-        type="button"
-        onClick={onNext}
-        disabled={page >= pageCount - 1}
-        className={cn(
-          "inline-flex h-9 w-9 items-center justify-center rounded-xl border border-app-border [background:var(--control-bg)] text-app-text transition",
-          page >= pageCount - 1
-            ? "cursor-not-allowed opacity-40"
-            : "hover:border-app-cyan/25 hover:text-app-cyan"
-        )}
-      >
-        →
-      </button>
-    </div>
-  );
+  const rows: AnalysisDashboardDistributionRow[] = bins.map((bin) => ({
+    label: bin.label,
+    count: bin.count,
+    percentage: 0,
+  }));
+  const total = rows.reduce((sum, row) => sum + row.count, 0);
+  const withPercentages = rows.map((row) => ({
+    ...row,
+    percentage: total > 0 ? (row.count / total) * 100 : 0,
+  }));
+  return <BarQuestionChart rows={withPercentages} kind="categorical" />;
 }
 
-function MetaMiniCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-[1rem] border border-app-border [background:var(--control-bg)] p-3">
-      <div className="text-[0.68rem] uppercase tracking-[0.22em] text-app-muted">{label}</div>
-      <div className="mt-2 text-sm text-app-text">{value}</div>
-    </div>
-  );
-}
+function LineQuestionChart({
+  points,
+}: {
+  points: AnalysisDashboardLinePoint[];
+}) {
+  const maxValue = points.reduce((highest, point) => Math.max(highest, point.count), 0);
+  const minValue = 0;
+  const chartWidth = 720;
+  const chartHeight = 220;
+  const xStep = points.length > 1 ? chartWidth / (points.length - 1) : chartWidth / 2;
+  const linePoints = points
+    .map((point, index) => {
+      const x = points.length > 1 ? index * xStep : chartWidth / 2;
+      const ratio = maxValue > minValue ? (point.count - minValue) / (maxValue - minValue) : 1;
+      const y = chartHeight - ratio * (chartHeight - 24) - 12;
+      return `${x},${y}`;
+    })
+    .join(" ");
 
-function SidebarRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-[1.1rem] border border-app-border [background:var(--status-neutral-bg)] p-3">
-      <div className="text-[0.68rem] uppercase tracking-[0.22em] text-app-muted">{label}</div>
-      <div className="mt-2 text-sm text-app-text">{value}</div>
-    </div>
-  );
-}
-
-function ContextSummaryCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-[1.1rem] border border-app-border [background:var(--status-neutral-bg)] p-4">
-      <div className="text-[0.68rem] uppercase tracking-[0.22em] text-app-muted">{label}</div>
-      <div className="mt-2 text-sm leading-6 text-app-text">{value}</div>
-    </div>
-  );
-}
-
-function StatusBanner({ tone, message }: { tone: StatusTone; message: string }) {
-  return (
-    <div
-      className={cn(
-        "rounded-[1.35rem] border px-5 py-4 text-sm leading-6",
-        tone === "success" && "[border-color:var(--status-success-border)] [background:var(--status-success-bg)] [color:var(--status-success-text)]",
-        tone === "warning" && "[border-color:var(--status-warning-border)] [background:var(--status-warning-bg)] [color:var(--status-warning-text)]",
-        tone === "error" && "[border-color:var(--status-warning-border)] [background:var(--status-warning-bg)] [color:var(--status-warning-text)]",
-        tone === "neutral" && "border-app-border [background:var(--status-neutral-bg)] text-app-muted"
-      )}
+    <ChartFrame
+      title="Trend over ordered values"
+      headerless
+      empty={points.length === 0}
+      emptyMessage="No ordered trend data is available for this question."
+      className={MINIMAL_CHART_FRAME_CLASS}
     >
-      {message}
-    </div>
+      <div className="space-y-4">
+        <svg
+          viewBox={`0 0 ${chartWidth} ${chartHeight}`}
+          className="h-60 w-full overflow-visible"
+          preserveAspectRatio="none"
+        >
+          <polyline
+            fill="none"
+            stroke="rgba(224,229,234,0.92)"
+            strokeWidth="4"
+            strokeLinejoin="round"
+            strokeLinecap="round"
+            points={linePoints}
+          />
+          {points.map((point, index) => {
+            const x = points.length > 1 ? index * xStep : chartWidth / 2;
+            const ratio = maxValue > minValue ? (point.count - minValue) / (maxValue - minValue) : 1;
+            const y = chartHeight - ratio * (chartHeight - 24) - 12;
+            return (
+              <circle
+                key={`${point.label}-${index}`}
+                cx={x}
+                cy={y}
+                r="6"
+                fill="rgba(180,186,194,1)"
+                stroke="rgba(255,255,255,0.7)"
+                strokeWidth="2"
+              />
+            );
+          })}
+        </svg>
+
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          {points.map((point) => (
+            <div
+              key={point.label}
+              className="rounded-[1rem] border border-app-border [background:var(--status-neutral-bg)] px-3 py-3"
+            >
+              <div className="text-[0.68rem] uppercase tracking-[0.22em] text-app-muted">
+                {point.label}
+              </div>
+              <div className="mt-2 text-sm text-app-text">{point.count}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </ChartFrame>
   );
 }
 
-function EmptyState({ message }: { message: string }) {
+function WordCloudQuestionCard({
+  terms,
+  quotes,
+}: {
+  terms: AnalysisDashboardWordCloudTerm[];
+  quotes: AnalysisDashboardQuote[];
+}) {
+  const [showDetails, setShowDetails] = useState(false);
+  const palette = [
+    "text-[#6d7d1f]",
+    "text-[#f0a400]",
+    "text-[#c85f1a]",
+    "text-[#5d1f4e]",
+    "text-[#d9dde3]",
+    "text-[#8a6f33]",
+  ];
+  const cloudTerms = [...terms]
+    .sort((left, right) => right.weight - left.weight)
+    .slice(0, WORD_CLOUD_SLOTS.length);
+
   return (
-    <div className="rounded-[1.2rem] border border-dashed border-app-border [background:var(--control-bg)] px-4 py-6 text-sm leading-6 text-app-muted">
-      {message}
-    </div>
+    <ChartFrame
+      title="Themes and example quotes"
+      headerless
+      empty={terms.length === 0 && quotes.length === 0}
+      emptyMessage="No open-text responses are available for this question."
+      className={MINIMAL_CHART_FRAME_CLASS}
+    >
+      <div className="space-y-5">
+        <div className="relative h-56 overflow-hidden rounded-[1.15rem] border border-white/6 [background:radial-gradient(circle_at_50%_46%,rgba(255,255,255,0.03),rgba(10,14,18,0.88)_70%)] p-4">
+          {cloudTerms.map((term, index) => {
+            const slot = WORD_CLOUD_SLOTS[index % WORD_CLOUD_SLOTS.length];
+            const fontSize = Math.max(
+              0.72,
+              0.78 + term.weight * 1.65 - Math.max(term.term.length - 10, 0) * 0.02
+            );
+            return (
+              <span
+                key={term.term}
+                className={cn(
+                  "absolute whitespace-nowrap font-semibold transition",
+                  palette[index % palette.length]
+                )}
+                style={{
+                  left: `${slot.x}%`,
+                  top: `${slot.y}%`,
+                  transform: `translate(-50%, -50%) rotate(${slot.rotate}deg)`,
+                  fontSize: `${fontSize}rem`,
+                  lineHeight: 1,
+                  opacity: 0.94,
+                }}
+              >
+                {term.term}
+              </span>
+            );
+          })}
+        </div>
+
+        {quotes.length > 0 ? (
+          <div className="flex justify-end">
+            <Button
+              variant="secondary"
+              onClick={() => setShowDetails((current) => !current)}
+            >
+              {showDetails ? "Hide Details" : "Detail Responses"}
+            </Button>
+          </div>
+        ) : null}
+
+        {showDetails ? (
+          <div className="grid gap-3 lg:grid-cols-2">
+            {quotes.map((quote, index) => (
+              <div
+                key={`${quote.text}-${index}`}
+                className="rounded-[1rem] border border-white/6 [background:var(--status-neutral-bg)] p-4"
+              >
+                <div className="text-sm leading-7 text-app-text">“{quote.text}”</div>
+                {(quote.model || quote.respondent_id) ? (
+                  <div className="mt-3 text-xs uppercase tracking-[0.18em] text-app-muted">
+                    {[quote.model, quote.respondent_id].filter(Boolean).join(" • ")}
+                  </div>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </ChartFrame>
   );
 }
 
-function formatMode(mode?: string | null) {
-  if (mode === "split") return "Split Sample";
-  if (mode === "mirror") return "Mirror Sample";
-  if (mode === "stability") return "Stability Sample";
-  return mode || "Unknown";
+function buildCountAxis(maxValue: number) {
+  const safeMax = Math.max(1, maxValue);
+  const step = Math.max(1, getNiceStep(safeMax / 4));
+  const axisMax = Math.max(step, Math.ceil(safeMax / step) * step);
+  const ticks: number[] = [];
+
+  for (let value = 0; value <= axisMax; value += step) {
+    ticks.push(value);
+  }
+
+  if (ticks[ticks.length - 1] !== axisMax) {
+    ticks.push(axisMax);
+  }
+
+  return {
+    max: axisMax,
+    ticks,
+  };
 }
 
-function formatQuestionType(questionType?: string | null) {
-  if (!questionType) {
-    return "Unknown";
+function getNiceStep(value: number) {
+  if (!Number.isFinite(value) || value <= 1) {
+    return 1;
   }
-  return humanizeToken(questionType);
+
+  const exponent = Math.floor(Math.log10(value));
+  const magnitude = 10 ** exponent;
+  const fraction = value / magnitude;
+
+  if (fraction <= 1) {
+    return magnitude;
+  }
+  if (fraction <= 2) {
+    return 2 * magnitude;
+  }
+  if (fraction <= 5) {
+    return 5 * magnitude;
+  }
+  return 10 * magnitude;
 }
 
-function buildRealismSummary(summary?: Record<string, unknown> | null) {
-  if (!summary) {
-    return "No realism summary is available.";
-  }
-  return `Realism score: ${String(summary.realism_score_0_to_100 ?? summary.realism_score ?? "n/a")} out of 100 across ${String(summary.questions_scored ?? 0)} questions. Distribution distance metrics: TV ${String(summary.weighted_tv_distance ?? "n/a")}, JS ${String(summary.weighted_js_divergence ?? "n/a")}.`;
+function formatCountTick(value: number) {
+  return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }
 
-function confidenceTone(label?: string | null): "cyan" | "gold" | "neutral" {
-  if (label === "High confidence" || label === "Moderate confidence") {
-    return "cyan";
-  }
-  if (label) {
-    return "gold";
-  }
-  return "neutral";
-}
-
-function agreementTone(label?: string | null): "cyan" | "gold" | "neutral" {
-  if (label === "Agreement") {
-    return "cyan";
-  }
-  if (label) {
-    return "gold";
-  }
-  return "neutral";
-}
-
-function buildAudienceAnchor(value?: Record<string, unknown> | null) {
-  if (!value) {
-    return "Audience not configured yet.";
-  }
-
-  const geography = [value.state, value.metro, value.zip_code]
-    .filter((entry) => typeof entry === "string" && entry.trim())
-    .join(" • ");
-  const ageMin = typeof value.age_min === "number" ? value.age_min : null;
-  const ageMax = typeof value.age_max === "number" ? value.age_max : null;
-  const ageRange =
-    ageMin !== null || ageMax !== null
-      ? `Ages ${ageMin ?? "any"}-${ageMax ?? "any"}`
-      : "All ages";
-
-  return [geography || "All geographies", ageRange].join(" • ");
-}
-
-function buildProductMarketAnchor(study: any) {
-  const product = [
-    toOptionalString(study?.product?.value?.product_name),
-    toOptionalString(study?.product?.value?.product_type),
-  ]
+function formatQuestionType(questionType?: string) {
+  const normalized = String(questionType || "unknown").replaceAll("_", " ");
+  return normalized
+    .split(" ")
     .filter(Boolean)
-    .join(" • ");
-  const market = [
-    toOptionalString(study?.market?.value?.category),
-    Array.isArray(study?.market?.value?.direct_competitors)
-      ? `${study.market.value.direct_competitors.length} competitors`
-      : null,
-  ]
-    .filter(Boolean)
-    .join(" • ");
-
-  return [product || "No product", market || "No market context"].join(" | ");
-}
-
-function prettifyQuestionText(value: unknown) {
-  const text = toOptionalString(value);
-  if (!text) {
-    return null;
-  }
-  return text.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/\s+/g, " ").trim();
-}
-
-function humanizeToken(value: string) {
-  return value
-    .replaceAll("_", " ")
-    .replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
-
-function toOptionalString(value: unknown) {
-  if (typeof value !== "string") {
-    return null;
-  }
-  const trimmed = value.trim();
-  return trimmed ? trimmed : null;
-}
-
-function formatAnswer(answer: unknown) {
-  if (Array.isArray(answer)) {
-    return answer.map((entry) => String(entry)).join(" • ");
-  }
-  if (answer === null || typeof answer === "undefined" || answer === "") {
-    return "n/a";
-  }
-  return String(answer);
+    .map((token) => token.charAt(0).toUpperCase() + token.slice(1))
+    .join(" ");
 }

@@ -4,6 +4,7 @@ from collections import Counter
 from datetime import datetime, timezone
 import inspect
 from pathlib import Path
+import re
 from typing import Any, Dict, List, Optional
 
 import pandas as pd
@@ -13,6 +14,99 @@ from src.adapters.legacy_backend.runtime import load_module, load_service_accoun
 from src.adapters.legacy_backend.survey_docx_fallback import parse_aytm_style_docx_to_validated_schema
 from src.config.settings import AppSettings
 from src.services.exceptions import LegacyModuleApiError, ProviderUnavailableApiError, ValidationApiError
+
+
+_ANALYSIS_STOP_WORDS = {
+    "about",
+    "again",
+    "also",
+    "always",
+    "among",
+    "and",
+    "any",
+    "are",
+    "because",
+    "been",
+    "being",
+    "both",
+    "but",
+    "can",
+    "could",
+    "does",
+    "doing",
+    "each",
+    "else",
+    "for",
+    "from",
+    "had",
+    "has",
+    "have",
+    "having",
+    "her",
+    "here",
+    "him",
+    "his",
+    "how",
+    "into",
+    "its",
+    "just",
+    "like",
+    "make",
+    "more",
+    "most",
+    "much",
+    "not",
+    "now",
+    "our",
+    "out",
+    "really",
+    "same",
+    "she",
+    "should",
+    "some",
+    "such",
+    "than",
+    "that",
+    "the",
+    "their",
+    "them",
+    "then",
+    "there",
+    "these",
+    "they",
+    "this",
+    "those",
+    "too",
+    "use",
+    "very",
+    "want",
+    "was",
+    "were",
+    "what",
+    "when",
+    "with",
+    "would",
+    "you",
+    "your",
+}
+
+_LIKERT_ORDER = {
+    "1": 1,
+    "strongly disagree": 1,
+    "disagree": 2,
+    "somewhat disagree": 3,
+    "neutral": 4,
+    "neither agree nor disagree": 4,
+    "somewhat agree": 5,
+    "agree": 6,
+    "strongly agree": 7,
+    "2": 2,
+    "3": 3,
+    "4": 4,
+    "5": 5,
+    "6": 6,
+    "7": 7,
+}
 
 
 def validate_audience(payload: dict, legacy_root: Path) -> dict:
@@ -599,6 +693,7 @@ def build_analysis_view(
     settings: AppSettings,
     study_mode: Optional[str],
     latest_run_payload: Optional[Dict[str, Any]],
+    survey_payload: Optional[Dict[str, Any]],
     question_id: Optional[str],
     model: Optional[str],
     segment: Optional[str],
@@ -636,7 +731,7 @@ def build_analysis_view(
     summary = _compute_dataset_summary(df)
     model_options = ["All", *_list_models(df)]
     segment_options = ["All", *_list_segments(df)]
-    question_options = _build_question_options(df)
+    question_options = _build_question_options(df, survey_payload=survey_payload)
 
     selected_model = model if model in model_options else "All"
     selected_segment = segment if segment in segment_options else "All"
@@ -701,6 +796,11 @@ def build_analysis_view(
         records=records,
         realism_module=realism,
     )
+    dashboard_questions = _build_analysis_dashboard_questions(
+        filtered_df=filtered_df,
+        question_options=question_options,
+        open_text_limit=open_text_limit,
+    )
 
     return {
         "available": True,
@@ -727,6 +827,11 @@ def build_analysis_view(
             "selected_model": selected_model,
             "selected_segment": selected_segment,
             "filtered_record_count": int(len(filtered_df)),
+        },
+        "dashboard": {
+            "model_options": model_options,
+            "selected_model": selected_model,
+            "questions": dashboard_questions,
         },
         "run_debug_summary": latest_run_payload.get("run_debug_summary"),
         "benchmark_snapshot": benchmark_snapshot,
@@ -848,6 +953,26 @@ def build_insights_view(
         segment_notes=segment_notes,
         segment_heatmap=segment_heatmap,
     )
+    context_notes = {
+        "model_notes": model_notes,
+        "segment_notes": segment_notes,
+        "run_warnings": list(latest_run_payload.get("warnings") or []),
+        "survey_parse_warnings": list(latest_run_payload.get("survey_parse_warnings") or []),
+    }
+    evidence_package = _build_insights_evidence_package(
+        latest_run_payload=latest_run_payload,
+        executive_summary=executive_summary,
+        trust_snapshot=trust_snapshot,
+        top_findings=top_findings,
+        charts={
+            "barrier_ranking": barrier_ranking,
+            "message_performance": message_performance,
+            "use_case_share": use_case_share,
+            "model_difference": model_difference_chart,
+        },
+        segment_story=segment_story,
+        context_notes=context_notes,
+    )
 
     return {
         "available": True,
@@ -875,12 +1000,224 @@ def build_insights_view(
         },
         "segment_story": segment_story,
         "recommendations": recommendations,
-        "context_notes": {
-            "model_notes": model_notes,
-            "segment_notes": segment_notes,
-            "run_warnings": list(latest_run_payload.get("warnings") or []),
-            "survey_parse_warnings": list(latest_run_payload.get("survey_parse_warnings") or []),
-        },
+        "context_notes": context_notes,
+        "evidence_package": evidence_package,
+    }
+
+
+def _build_insights_evidence_package(
+    *,
+    latest_run_payload: Dict[str, Any],
+    executive_summary: dict[str, Any],
+    trust_snapshot: dict[str, Any],
+    top_findings: list[dict[str, Any]],
+    charts: dict[str, dict[str, Any]],
+    segment_story: dict[str, Any],
+    context_notes: dict[str, Any],
+) -> dict[str, Any]:
+    run_context = {
+        "run_id": latest_run_payload.get("run_id"),
+        "survey_title": latest_run_payload.get("survey_title"),
+        "experiment_mode": latest_run_payload.get("experiment_mode"),
+        "models_used": list(latest_run_payload.get("models_used") or []),
+        "respondent_count": executive_summary.get("records_summary", {}).get("unique_respondents"),
+        "question_count": executive_summary.get("records_summary", {}).get("questions"),
+    }
+    debug_summary = latest_run_payload.get("run_debug_summary") or {}
+    items: list[dict[str, Any]] = []
+
+    def add_item(
+        evidence_id: str,
+        category: str,
+        title: str,
+        summary: str,
+        *,
+        metrics: Optional[dict[str, Any]] = None,
+    ) -> None:
+        item: dict[str, Any] = {
+            "id": evidence_id,
+            "category": category,
+            "title": title,
+            "summary": summary,
+        }
+        if metrics:
+            item["metrics"] = metrics
+        items.append(item)
+
+    top_use_case = executive_summary.get("top_use_case") or {}
+    if top_use_case.get("label"):
+        add_item(
+            "exec_top_use_case",
+            "executive_metric",
+            "Top use case",
+            f"{top_use_case.get('label')} is the strongest surfaced use case in this run.",
+            metrics={"share": top_use_case.get("share")},
+        )
+
+    average_interest = executive_summary.get("average_interest")
+    if average_interest is not None:
+        add_item(
+            "exec_average_interest",
+            "executive_metric",
+            "Average interest",
+            "Average interest reflects the directional purchase-oriented score across the latest run.",
+            metrics={"average_interest": average_interest},
+        )
+
+    strongest_segment = executive_summary.get("strongest_segment")
+    if strongest_segment:
+        add_item(
+            "exec_strongest_segment",
+            "executive_metric",
+            "Strongest segment",
+            f"{strongest_segment} currently shows the strongest overall interest-oriented pattern.",
+        )
+
+    model_difference = executive_summary.get("model_difference") or {}
+    if model_difference.get("status"):
+        add_item(
+            "exec_model_difference",
+            "executive_metric",
+            "Model difference",
+            str(model_difference.get("note") or "Model spread is summarized for the latest run."),
+            metrics={
+                "status": model_difference.get("status"),
+                "differing_questions": model_difference.get("differing_questions"),
+            },
+        )
+
+    for index, finding in enumerate(top_findings[:5], start=1):
+        add_item(
+            f"finding_{index}",
+            "top_finding",
+            str(finding.get("title") or f"Finding {index}"),
+            f"{finding.get('headline') or ''} {finding.get('summary') or ''}".strip(),
+            metrics={
+                "confidence_label": finding.get("confidence_label"),
+                "agreement_label": finding.get("agreement_label"),
+            },
+        )
+
+    for index, row in enumerate((charts.get("barrier_ranking") or {}).get("rows") or [], start=1):
+        if index > 3:
+            break
+        add_item(
+            f"barrier_{index}",
+            "barrier",
+            str(row.get("label") or f"Barrier {index}"),
+            f"{row.get('label') or 'Barrier'} is one of the strongest reported friction points in the latest run.",
+            metrics={"value": row.get("value"), "question_id": row.get("question_id")},
+        )
+
+    for index, row in enumerate((charts.get("use_case_share") or {}).get("rows") or [], start=1):
+        if index > 3:
+            break
+        add_item(
+            f"use_case_{index}",
+            "use_case",
+            str(row.get("label") or f"Use case {index}"),
+            f"{row.get('label') or 'Use case'} represents a meaningful share of intended usage.",
+            metrics={"count": row.get("count"), "share": row.get("share")},
+        )
+
+    for index, row in enumerate((charts.get("message_performance") or {}).get("rows") or [], start=1):
+        if index > 3:
+            break
+        add_item(
+            f"concept_{index}",
+            "message_performance",
+            str(row.get("label") or f"Concept {index}"),
+            f"{row.get('label') or 'Concept'} is benchmarked on appeal and purchase-oriented response.",
+            metrics={
+                "appeal_avg": row.get("appeal_avg"),
+                "purchase_avg": row.get("purchase_avg"),
+            },
+        )
+
+    for index, note in enumerate((segment_story.get("notes") or [])[:3], start=1):
+        add_item(
+            f"segment_note_{index}",
+            "segment_story",
+            f"Segment note {index}",
+            str(note),
+        )
+
+    confidence_summary = (trust_snapshot.get("confidence_summary") or {}).get("dominant_label")
+    if confidence_summary:
+        add_item(
+            "trust_confidence",
+            "trust",
+            "Confidence summary",
+            f"The dominant confidence label for the current findings is {confidence_summary}.",
+            metrics={"counts": (trust_snapshot.get("confidence_summary") or {}).get("counts")},
+        )
+
+    agreement_summary = (trust_snapshot.get("agreement_summary") or {}).get("dominant_label")
+    if agreement_summary:
+        add_item(
+            "trust_agreement",
+            "trust",
+            "Agreement summary",
+            f"The dominant agreement label for the current findings is {agreement_summary}.",
+            metrics={"counts": (trust_snapshot.get("agreement_summary") or {}).get("counts")},
+        )
+
+    realism_snapshot = trust_snapshot.get("realism_snapshot") or {}
+    if realism_snapshot.get("label"):
+        add_item(
+            "realism_snapshot",
+            "realism",
+            "Realism snapshot",
+            str(realism_snapshot.get("detail") or realism_snapshot.get("label")),
+            metrics={"label": realism_snapshot.get("label")},
+        )
+
+    benchmark_snapshot = trust_snapshot.get("benchmark_snapshot") or {}
+    if benchmark_snapshot.get("label"):
+        add_item(
+            "benchmark_snapshot",
+            "benchmark",
+            "Benchmark snapshot",
+            str(benchmark_snapshot.get("detail") or benchmark_snapshot.get("label")),
+            metrics={"label": benchmark_snapshot.get("label")},
+        )
+
+    if debug_summary:
+        add_item(
+            "run_debug_summary",
+            "run_caveat",
+            "Run debug summary",
+            "Live-path execution diagnostics for the latest run.",
+            metrics={
+                "live_answer_rate": debug_summary.get("live_answer_rate"),
+                "truly_live_answers": debug_summary.get("truly_live_answers"),
+                "fallback_answers": debug_summary.get("fallback_answers"),
+                "provider_error_count": debug_summary.get("provider_error_count"),
+                "malformed_json_count": debug_summary.get("malformed_json_count"),
+            },
+        )
+
+    for index, warning in enumerate((context_notes.get("run_warnings") or [])[:3], start=1):
+        add_item(
+            f"run_warning_{index}",
+            "run_caveat",
+            f"Run warning {index}",
+            str(warning),
+        )
+
+    for index, warning in enumerate((context_notes.get("survey_parse_warnings") or [])[:2], start=1):
+        add_item(
+            f"survey_warning_{index}",
+            "survey_caveat",
+            f"Survey warning {index}",
+            str(warning),
+        )
+
+    return {
+        "version": "simulation_insights_evidence_v1",
+        "from_run_id": latest_run_payload.get("run_id"),
+        "run_context": run_context,
+        "items": items,
     }
 
 
@@ -926,28 +1263,416 @@ def _ml_completion_enabled(*, personas: list[Any], prior_notes: list[dict[str, A
     return False
 
 
-def _build_question_options(df: pd.DataFrame) -> list[dict[str, Any]]:
+def _build_question_options(
+    df: pd.DataFrame,
+    *,
+    survey_payload: Optional[Dict[str, Any]] = None,
+) -> list[dict[str, Any]]:
+    options: list[dict[str, Any]] = []
+    seen_question_ids: set[str] = set()
+    response_counts: dict[str, int] = {}
+    response_meta_by_question_id: dict[str, dict[str, Any]] = {}
+
+    if not df.empty and "question_id" in df.columns:
+        response_counts = (
+            df["question_id"]
+            .astype(str)
+            .value_counts()
+            .to_dict()
+        )
+    if not df.empty and {"question_id", "question_text", "question_type"}.issubset(df.columns):
+        response_meta = (
+            df[["question_id", "question_text", "question_type"]]
+            .drop_duplicates()
+            .to_dict(orient="records")
+        )
+        response_meta_by_question_id = {
+            str(row.get("question_id") or ""): row
+            for row in response_meta
+            if str(row.get("question_id") or "").strip()
+        }
+
+    survey_questions = list((survey_payload or {}).get("questions") or [])
+    for index, question in enumerate(survey_questions):
+        question_id = str(question.get("id") or "").strip()
+        if not question_id:
+            continue
+        if response_counts and question_id not in response_counts:
+            continue
+        seen_question_ids.add(question_id)
+        response_meta = response_meta_by_question_id.get(question_id) or {}
+        options.append(
+            {
+                "id": question_id,
+                "text": str(response_meta.get("question_text") or question.get("text") or question_id),
+                "question_type": str(response_meta.get("question_type") or question.get("question_type") or ""),
+                "response_count": int(response_counts.get(question_id, 0)),
+                "question_order": index + 1,
+                "option_values": _extract_question_option_values(question),
+            }
+        )
+
     if df.empty or not {"question_id", "question_text", "question_type"}.issubset(df.columns):
-        return []
+        return options
 
     question_meta = (
         df[["question_id", "question_text", "question_type"]]
         .drop_duplicates()
-        .sort_values("question_id")
+        .to_dict(orient="records")
+    )
+    question_meta.sort(
+        key=lambda row: _question_sort_key(
+            str(row.get("question_id") or ""),
+            str(row.get("question_text") or ""),
+        )
     )
 
-    options: list[dict[str, Any]] = []
-    for _, row in question_meta.iterrows():
+    next_order = len(options) + 1
+    for row in question_meta:
         question_id = str(row["question_id"])
+        if question_id in seen_question_ids:
+            continue
         options.append(
             {
                 "id": question_id,
                 "text": str(row["question_text"]),
                 "question_type": str(row["question_type"]),
-                "response_count": int((df["question_id"].astype(str) == question_id).sum()),
+                "response_count": int(response_counts.get(question_id, 0)),
+                "question_order": next_order,
+                "option_values": [],
             }
         )
+        next_order += 1
     return options
+
+
+def _extract_question_option_values(question: dict[str, Any]) -> list[str]:
+    raw_options = question.get("options")
+    if isinstance(raw_options, list):
+        option_values = [str(option).strip() for option in raw_options if str(option).strip()]
+        if option_values:
+            return option_values
+
+    min_value = question.get("min_value")
+    max_value = question.get("max_value")
+    if isinstance(min_value, (int, float)) and isinstance(max_value, (int, float)):
+        minimum = int(min_value)
+        maximum = int(max_value)
+        if minimum <= maximum and maximum - minimum <= 20:
+            return [str(value) for value in range(minimum, maximum + 1)]
+
+    return []
+
+
+def _question_sort_key(question_id: str, question_text: str) -> tuple[str, int, str]:
+    candidate = question_id or question_text
+    match = re.search(r"(\d+)", candidate)
+    prefix = re.sub(r"\d+", "", candidate).strip().lower()
+    return (prefix, int(match.group(1)) if match else 10**9, candidate.lower())
+
+
+def _build_analysis_dashboard_questions(
+    *,
+    filtered_df: pd.DataFrame,
+    question_options: list[dict[str, Any]],
+    open_text_limit: int,
+) -> list[dict[str, Any]]:
+    questions: list[dict[str, Any]] = []
+
+    for option in question_options:
+        question_id = str(option.get("id") or "")
+        question_df = (
+            filtered_df[filtered_df["question_id"].astype(str) == question_id].copy()
+            if not filtered_df.empty and "question_id" in filtered_df.columns
+            else pd.DataFrame()
+        )
+        question_type = str(option.get("question_type") or _safe_first_value(question_df, "question_type") or "")
+        chart_kind = _resolve_dashboard_chart_kind(question_df, question_type)
+        question_payload: dict[str, Any] = {
+            "question_id": question_id,
+            "question_text": str(option.get("text") or _safe_first_value(question_df, "question_text") or question_id),
+            "question_type": question_type,
+            "question_order": int(option.get("question_order") or 0),
+            "response_count": int(len(question_df)),
+            "chart_kind": chart_kind,
+        }
+
+        if chart_kind in {"categorical_bar", "likert"}:
+            distribution_df = _compute_question_answer_distribution(question_df, question_id)
+            question_payload["distribution"] = _shape_distribution_rows(
+                distribution_df,
+                chart_kind=chart_kind,
+                declared_options=list(option.get("option_values") or []),
+            )
+        elif chart_kind == "histogram":
+            question_payload["histogram_bins"] = _compute_histogram_bins(question_df)
+        elif chart_kind == "line":
+            question_payload["line_points"] = _compute_time_series_points(question_df)
+        elif chart_kind == "word_cloud":
+            question_payload["word_cloud_terms"] = _build_word_cloud_terms(question_df)
+            question_payload["quotes"] = _build_open_text_quotes(
+                question_df,
+                limit=min(max(open_text_limit, 3), 5),
+            )
+
+        questions.append(question_payload)
+
+    return questions
+
+
+def _resolve_dashboard_chart_kind(question_df: pd.DataFrame, question_type: str) -> str:
+    normalized = str(question_type or "").strip().lower()
+
+    if normalized == "open_text":
+        return "word_cloud"
+    if normalized == "likert":
+        return "likert"
+    if normalized in {"single_choice", "multi_choice"}:
+        return "categorical_bar"
+    if normalized in {"numeric", "number", "continuous", "slider"}:
+        return "line" if _answers_are_time_like(question_df) else "histogram"
+
+    if _answers_are_time_like(question_df):
+        return "line"
+    if _answers_are_numeric(question_df):
+        return "histogram"
+    return "categorical_bar"
+
+
+def _shape_distribution_rows(
+    distribution_df: pd.DataFrame,
+    *,
+    chart_kind: str,
+    declared_options: Optional[list[str]] = None,
+) -> list[dict[str, Any]]:
+    if distribution_df.empty and not declared_options:
+        return []
+
+    rows = _dataframe_to_records(distribution_df)
+    total = sum(int(row.get("count") or 0) for row in rows)
+
+    if declared_options:
+        counts_by_label = {
+            str(row.get("answer_display") or "No answer"): int(row.get("count") or 0)
+            for row in rows
+        }
+        ordered_rows = []
+        seen_labels: set[str] = set()
+        for option in declared_options:
+            label = str(option or "").strip()
+            if not label:
+                continue
+            seen_labels.add(label)
+            count = counts_by_label.get(label, 0)
+            ordered_rows.append(
+                {
+                    "label": label,
+                    "count": count,
+                    "percentage": round((count / total * 100), 1) if total else 0.0,
+                }
+            )
+
+        extras = [
+            {
+                "label": str(row.get("answer_display") or "No answer"),
+                "count": int(row.get("count") or 0),
+                "percentage": float(row.get("percentage") or 0),
+            }
+            for row in rows
+            if str(row.get("answer_display") or "No answer") not in seen_labels
+        ]
+        if chart_kind == "likert":
+            extras.sort(key=lambda row: _likert_sort_key(str(row.get("label") or "")))
+        else:
+            extras.sort(
+                key=lambda row: (
+                    -int(row.get("count") or 0),
+                    str(row.get("label") or "").lower(),
+                )
+            )
+        return ordered_rows + extras
+
+    if chart_kind == "likert":
+        rows.sort(key=lambda row: _likert_sort_key(str(row.get("answer_display") or "")))
+    else:
+        rows.sort(
+            key=lambda row: (
+                -int(row.get("count") or 0),
+                str(row.get("answer_display") or "").lower(),
+            )
+        )
+
+    return [
+        {
+            "label": str(row.get("answer_display") or "No answer"),
+            "count": int(row.get("count") or 0),
+            "percentage": float(row.get("percentage") or 0),
+        }
+        for row in rows
+    ]
+
+
+def _likert_sort_key(label: str) -> tuple[int, str]:
+    normalized = str(label or "").strip().lower()
+    if normalized in _LIKERT_ORDER:
+        return (_LIKERT_ORDER[normalized], normalized)
+
+    try:
+        return (int(float(normalized)), normalized)
+    except ValueError:
+        return (10**6, normalized)
+
+
+def _answers_are_numeric(question_df: pd.DataFrame) -> bool:
+    if question_df.empty or "answer" not in question_df.columns:
+        return False
+    numeric = pd.to_numeric(question_df["answer"], errors="coerce")
+    return bool(numeric.notna().any())
+
+
+def _answers_are_time_like(question_df: pd.DataFrame) -> bool:
+    if question_df.empty or "answer" not in question_df.columns:
+        return False
+
+    answer_series = question_df["answer"].dropna().astype(str)
+    if answer_series.empty:
+        return False
+
+    string_like_ratio = answer_series.str.contains(
+        r"[-/]|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec",
+        case=False,
+        regex=True,
+    ).mean()
+    parsed = pd.to_datetime(answer_series, errors="coerce")
+    parsed_ratio = parsed.notna().mean()
+    return bool(parsed_ratio >= 0.8 and string_like_ratio >= 0.4)
+
+
+def _compute_histogram_bins(question_df: pd.DataFrame) -> list[dict[str, Any]]:
+    if question_df.empty or "answer" not in question_df.columns:
+        return []
+
+    numeric = pd.to_numeric(question_df["answer"], errors="coerce").dropna()
+    if numeric.empty:
+        return []
+
+    unique_count = int(numeric.nunique())
+    if unique_count <= 6:
+        counts = numeric.value_counts().sort_index()
+        return [
+            {
+                "label": _format_numeric_value_label(value),
+                "count": int(count),
+                "start": float(value),
+                "end": float(value),
+            }
+            for value, count in counts.items()
+        ]
+
+    bin_count = min(6, max(4, unique_count))
+    histogram = pd.cut(numeric, bins=bin_count, include_lowest=True, duplicates="drop")
+    counts = histogram.value_counts().sort_index()
+    bins: list[dict[str, Any]] = []
+    for interval, count in counts.items():
+        left = float(interval.left)
+        right = float(interval.right)
+        bins.append(
+            {
+                "label": f"{_format_numeric_value_label(left)}–{_format_numeric_value_label(right)}",
+                "count": int(count),
+                "start": left,
+                "end": right,
+            }
+        )
+    return bins
+
+
+def _compute_time_series_points(question_df: pd.DataFrame) -> list[dict[str, Any]]:
+    if question_df.empty or "answer" not in question_df.columns:
+        return []
+
+    parsed = pd.to_datetime(question_df["answer"], errors="coerce")
+    if parsed.dropna().empty:
+        return []
+
+    series_df = question_df.copy()
+    series_df["parsed_answer"] = parsed
+    series_df = series_df.dropna(subset=["parsed_answer"])
+    if series_df.empty:
+        return []
+
+    grouped = (
+        series_df.groupby(series_df["parsed_answer"].dt.normalize())
+        .size()
+        .reset_index(name="count")
+        .sort_values("parsed_answer")
+    )
+    return [
+        {
+            "label": value.strftime("%Y-%m-%d"),
+            "count": int(count),
+            "value": value.isoformat(),
+        }
+        for value, count in grouped.itertuples(index=False, name=None)
+    ]
+
+
+def _build_word_cloud_terms(question_df: pd.DataFrame) -> list[dict[str, Any]]:
+    if question_df.empty or "answer" not in question_df.columns:
+        return []
+
+    counter: Counter[str] = Counter()
+    for raw_answer in question_df["answer"].dropna().astype(str):
+        normalized = re.sub(r"[^a-z0-9\s]", " ", raw_answer.lower())
+        for token in normalized.split():
+            if len(token) < 3 or token.isdigit() or token in _ANALYSIS_STOP_WORDS:
+                continue
+            counter[token] += 1
+
+    if not counter:
+        return []
+
+    terms = counter.most_common(24)
+    highest = max(count for _, count in terms)
+    return [
+        {
+            "term": term,
+            "count": int(count),
+            "weight": round(count / highest, 3) if highest else 0,
+        }
+        for term, count in terms
+    ]
+
+
+def _build_open_text_quotes(question_df: pd.DataFrame, *, limit: int) -> list[dict[str, Any]]:
+    if question_df.empty or "answer" not in question_df.columns:
+        return []
+
+    quotes_df = question_df.copy()
+    quotes_df["answer"] = quotes_df["answer"].astype(str)
+    quotes_df = quotes_df[quotes_df["answer"].str.strip().astype(bool)]
+    if quotes_df.empty:
+        return []
+
+    subset_columns = [column for column in ["answer"] if column in quotes_df.columns]
+    quotes_df = quotes_df.drop_duplicates(subset=subset_columns).head(limit)
+    quotes: list[dict[str, Any]] = []
+    for _, row in quotes_df.iterrows():
+        quotes.append(
+            {
+                "text": str(row.get("answer") or ""),
+                "respondent_id": str(row.get("respondent_id") or "") or None,
+                "model": str(row.get("model") or "") or None,
+            }
+        )
+    return quotes
+
+
+def _format_numeric_value_label(value: float) -> str:
+    rounded = round(float(value), 2)
+    if rounded.is_integer():
+        return str(int(rounded))
+    return f"{rounded:.2f}".rstrip("0").rstrip(".")
 
 
 def _compute_dataset_summary(df: pd.DataFrame) -> dict[str, Any]:
@@ -1064,6 +1789,10 @@ def _resolve_selected_question_id(
         )
         if question_id and question_id in filtered_question_ids:
             return question_id
+        for option in all_question_options:
+            option_id = str(option.get("id") or "")
+            if option_id in filtered_question_ids:
+                return option_id
         if filtered_question_ids:
             return filtered_question_ids[0]
 

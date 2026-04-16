@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
+import re
+import time
 from typing import Any, Dict, List, Optional
 
+import requests
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -58,6 +62,10 @@ from src.services.workflow_service import build_workflow
 SECTION_KEYS = ("study_mode", "audience", "product", "market", "survey", "experiment")
 IMAGE_EXTENSIONS = {"jpg", "jpeg", "png"}
 SURVEY_EXTENSIONS = {"md", "docx", "pdf"}
+INSIGHTS_SUMMARY_MODEL = "openai/gpt-4o-mini"
+INSIGHTS_SUMMARY_TIMEOUT_SECONDS = 30
+INSIGHTS_SUMMARY_MAX_ATTEMPTS = 2
+INSIGHTS_SUMMARY_CACHE_VERSION = "v3"
 
 
 def utcnow() -> datetime:
@@ -767,11 +775,14 @@ def get_analysis_view(
 ) -> Dict[str, Any]:
     latest_run = _latest_job(session, study.id, "simulation_run")
     latest_run_payload = latest_run.result_json if latest_run and latest_run.status == "completed" else None
+    sections = _get_sections(session, study)
+    survey_payload = sections["survey"].value_json if sections.get("survey") else None
 
     return build_analysis_view(
         settings=settings,
         study_mode=study.study_mode,
         latest_run_payload=latest_run_payload,
+        survey_payload=survey_payload,
         question_id=question_id,
         model=model,
         segment=segment,
@@ -789,11 +800,28 @@ def get_insights_view(
     latest_run = _latest_job(session, study.id, "simulation_run")
     latest_run_payload = latest_run.result_json if latest_run and latest_run.status == "completed" else None
 
-    return build_insights_view(
+    insights = build_insights_view(
         settings=settings,
         study_mode=study.study_mode,
         latest_run_payload=latest_run_payload,
     )
+    if not insights.get("available"):
+        return insights
+
+    run_id = str(
+        (latest_run_payload or {}).get("run_id")
+        or getattr(latest_run, "public_id", "")
+        or "latest_simulation_run"
+    ).strip()
+    evidence_package = insights.get("evidence_package") or {}
+    insights["llm_summary"] = _load_or_generate_insights_summary(
+        session=session,
+        settings=settings,
+        study=study,
+        run_id=run_id,
+        evidence_package=evidence_package,
+    )
+    return insights
 
 
 def _validate_study_mode(study_mode: str) -> None:
@@ -866,6 +894,37 @@ def _get_sections(session: Session, study: Study) -> Dict[str, StudySectionState
     return mapping
 
 
+def _get_section_or_none(session: Session, study: Study, key: str) -> Optional[StudySectionState]:
+    return session.scalar(
+        select(StudySectionState).where(
+            StudySectionState.study_id == study.id,
+            StudySectionState.section_key == key,
+        )
+    )
+
+
+def _upsert_ephemeral_section(session: Session, study: Study, key: str, value: Dict[str, Any]) -> None:
+    row = _get_section_or_none(session, study, key)
+    if row is None:
+        row = StudySectionState(
+            study_id=study.id,
+            section_key=key,
+            status="not_started",
+            value_json=None,
+            saved_at=None,
+            updated_at=utcnow(),
+        )
+        session.add(row)
+        session.flush()
+
+    row.status = "saved"
+    row.value_json = value
+    row.saved_at = row.saved_at or utcnow()
+    row.updated_at = utcnow()
+    session.add(row)
+    session.commit()
+
+
 def _latest_enrichment(session: Session, study_id, enrichment_type: str) -> Optional[StudyProductEnrichment]:
     return session.scalar(
         select(StudyProductEnrichment)
@@ -889,6 +948,385 @@ def _latest_job(session: Session, study_id, job_type: str) -> Optional[Job]:
         .where(Job.study_id == study_id, Job.job_type == job_type)
         .order_by(Job.queued_at.desc())
     )
+
+
+def _load_or_generate_insights_summary(
+    *,
+    session: Session,
+    settings: AppSettings,
+    study: Study,
+    run_id: str,
+    evidence_package: Dict[str, Any],
+) -> Dict[str, Any]:
+    cached_summary = _get_cached_insights_summary(session, study, run_id)
+    if cached_summary is not None:
+        return cached_summary
+
+    if not settings.openrouter_api_key:
+        return {
+            "available": False,
+            "message": "LLM summary is unavailable because OPENROUTER_API_KEY is not configured.",
+            "model": INSIGHTS_SUMMARY_MODEL,
+            "from_run_id": run_id,
+            "cached": False,
+        }
+
+    if not evidence_package or not (evidence_package.get("items") or []):
+        return {
+            "available": False,
+            "message": "LLM summary is unavailable because no evidence package was built for this run.",
+            "model": INSIGHTS_SUMMARY_MODEL,
+            "from_run_id": run_id,
+            "cached": False,
+        }
+
+    summary = _generate_llm_insights_summary(
+        settings=settings,
+        run_id=run_id,
+        evidence_package=evidence_package,
+    )
+    if summary.get("available"):
+        _upsert_ephemeral_section(
+            session,
+            study,
+            _insights_summary_cache_key(run_id),
+            summary,
+        )
+    return summary
+
+
+def _get_cached_insights_summary(
+    session: Session,
+    study: Study,
+    run_id: str,
+) -> Optional[Dict[str, Any]]:
+    row = _get_section_or_none(session, study, _insights_summary_cache_key(run_id))
+    if row is None or row.status != "saved" or not row.value_json:
+        return None
+
+    payload = dict(row.value_json)
+    payload["cached"] = True
+    payload["from_run_id"] = payload.get("from_run_id") or run_id
+    payload["overview"] = _normalize_insights_overview_lead(payload.get("overview"))
+    return payload
+
+
+def _insights_summary_cache_key(run_id: str) -> str:
+    return f"simulation_insights_summary_{INSIGHTS_SUMMARY_CACHE_VERSION}_{run_id}"
+
+
+def _generate_llm_insights_summary(
+    *,
+    settings: AppSettings,
+    run_id: str,
+    evidence_package: Dict[str, Any],
+) -> Dict[str, Any]:
+    response = _request_llm_insights_summary(
+        settings=settings,
+        evidence_package=evidence_package,
+    )
+    if not response.get("ok"):
+        return {
+            "available": False,
+            "message": response.get("message") or "LLM summary generation failed.",
+            "model": INSIGHTS_SUMMARY_MODEL,
+            "from_run_id": run_id,
+            "generated_at": utcnow().isoformat(),
+            "cached": False,
+        }
+
+    parsed = response.get("parsed") or {}
+    valid_evidence_ids = {
+        str(item.get("id"))
+        for item in (evidence_package.get("items") or [])
+        if isinstance(item, dict) and item.get("id")
+    }
+    key_findings: list[Dict[str, Any]] = []
+    for item in parsed.get("key_findings") or []:
+        if not isinstance(item, dict):
+            continue
+        evidence_ids = [
+            evidence_id
+            for evidence_id in item.get("evidence_ids") or []
+            if isinstance(evidence_id, str) and evidence_id in valid_evidence_ids
+        ]
+        key_findings.append(
+            {
+                "title": str(item.get("title") or "").strip(),
+                "summary": str(item.get("summary") or "").strip(),
+                "why_it_matters": str(item.get("why_it_matters") or "").strip(),
+                "evidence_ids": evidence_ids,
+            }
+        )
+    key_findings = [
+        item
+        for item in key_findings
+        if item["title"] and item["summary"] and item["why_it_matters"] and item["evidence_ids"]
+    ][:5]
+    if len(key_findings) < 5:
+        key_findings = _backfill_key_findings_from_evidence(
+            key_findings=key_findings,
+            evidence_package=evidence_package,
+        )
+
+    reliability_payload = parsed.get("result_reliability") if isinstance(parsed.get("result_reliability"), dict) else {}
+    reliability_evidence_ids = [
+        evidence_id
+        for evidence_id in (reliability_payload.get("evidence_ids") or [])
+        if isinstance(evidence_id, str) and evidence_id in valid_evidence_ids
+    ]
+    result_reliability = {
+        "level": str(reliability_payload.get("level") or "").strip(),
+        "summary": str(reliability_payload.get("summary") or "").strip(),
+        "reason": str(reliability_payload.get("reason") or "").strip(),
+        "evidence_ids": reliability_evidence_ids,
+    }
+    if not (
+        result_reliability["level"]
+        and result_reliability["summary"]
+        and result_reliability["reason"]
+        and result_reliability["evidence_ids"]
+    ):
+        result_reliability = None
+
+    return {
+        "available": True,
+        "overview": _normalize_insights_overview_lead(parsed.get("overview")),
+        "key_findings": key_findings,
+        "result_reliability": result_reliability,
+        "recommended_next_steps": [
+            str(item).strip()
+            for item in (parsed.get("recommended_next_steps") or [])
+            if str(item).strip()
+        ][:5],
+        "researcher_note": str(parsed.get("researcher_note") or "").strip(),
+        "model": INSIGHTS_SUMMARY_MODEL,
+        "from_run_id": run_id,
+        "generated_at": utcnow().isoformat(),
+        "cached": False,
+    }
+
+
+def _normalize_insights_overview_lead(value: Any) -> str:
+    overview = str(value or "").strip()
+    if not overview:
+        return overview
+
+    survey_lead_pattern = re.compile(r"^The\s+.+?\s+Survey\s+reveals\s+", re.IGNORECASE)
+    if survey_lead_pattern.search(overview):
+        return survey_lead_pattern.sub("The result reveals ", overview, count=1)
+
+    return overview
+
+
+def _request_llm_insights_summary(
+    *,
+    settings: AppSettings,
+    evidence_package: Dict[str, Any],
+) -> Dict[str, Any]:
+    endpoint = f"{settings.openrouter_base_url.rstrip('/')}/chat/completions"
+    output_contract = {
+        "overview": "string",
+        "key_findings": [
+            {
+                "title": "string",
+                "summary": "string",
+                "why_it_matters": "string",
+                "evidence_ids": ["evidence_id"],
+            }
+        ],
+        "result_reliability": {
+            "level": "\"Very low\" | \"Low\" | \"Medium\" | \"High\"",
+            "summary": "string",
+            "reason": "string",
+            "evidence_ids": ["evidence_id"],
+        },
+        "recommended_next_steps": ["string"],
+        "researcher_note": "string",
+    }
+    system_prompt = (
+        "You are a senior market research analyst. Use only the supplied evidence package from one completed "
+        "synthetic survey run. Do not invent numbers, do not contradict the evidence, and state uncertainty when "
+        "confidence is limited. Every key finding must cite valid evidence_ids from the package. Also rate how "
+        "reliable the result appears overall and explain why, using only the provided evidence package. Return exactly five key findings whenever the evidence package supports them. Return strict JSON only."
+    )
+    user_prompt = (
+        "Review the evidence package and write an executive-ready research summary.\n\n"
+        f"EVIDENCE_PACKAGE_JSON:\n{json.dumps(evidence_package, ensure_ascii=False, indent=2)}\n\n"
+        "Return JSON matching this contract exactly:\n"
+        f"{json.dumps(output_contract, ensure_ascii=False, indent=2)}"
+    )
+    headers = {
+        "Authorization": f"Bearer {settings.openrouter_api_key}",
+        "Content-Type": "application/json",
+    }
+    body = {
+        "model": INSIGHTS_SUMMARY_MODEL,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        "temperature": 0.2,
+        "max_tokens": 1400,
+        "response_format": {"type": "json_object"},
+    }
+
+    for attempt in range(INSIGHTS_SUMMARY_MAX_ATTEMPTS):
+        try:
+            response = requests.post(
+                endpoint,
+                headers=headers,
+                json=body,
+                timeout=INSIGHTS_SUMMARY_TIMEOUT_SECONDS,
+            )
+        except requests.Timeout:
+            if attempt + 1 < INSIGHTS_SUMMARY_MAX_ATTEMPTS:
+                time.sleep(0.6)
+                continue
+            return {"ok": False, "message": "LLM summary request timed out."}
+        except requests.RequestException as exc:
+            if attempt + 1 < INSIGHTS_SUMMARY_MAX_ATTEMPTS:
+                time.sleep(0.6)
+                continue
+            return {"ok": False, "message": f"LLM summary request failed: {exc}"}
+
+        if response.status_code >= 400:
+            is_retryable = response.status_code in {408, 409, 429} or response.status_code >= 500
+            if is_retryable and attempt + 1 < INSIGHTS_SUMMARY_MAX_ATTEMPTS:
+                time.sleep(0.6)
+                continue
+            return {
+                "ok": False,
+                "message": f"LLM summary request failed with HTTP {response.status_code}.",
+            }
+
+        try:
+            payload = response.json()
+        except ValueError:
+            return {"ok": False, "message": "LLM summary provider returned non-JSON HTTP payload."}
+
+        raw_text = _extract_openrouter_message_text(payload)
+        parsed = _parse_json_object_strict(raw_text)
+        if parsed is None:
+            return {"ok": False, "message": "LLM summary output was malformed JSON."}
+        return {"ok": True, "parsed": parsed}
+
+    return {"ok": False, "message": "LLM summary request failed."}
+
+
+def _extract_openrouter_message_text(payload: Dict[str, Any]) -> str:
+    try:
+        choices = payload.get("choices") or []
+        first = choices[0] if choices else {}
+        message = first.get("message") or {}
+        content = message.get("content")
+        if isinstance(content, str):
+            return content.strip()
+        if isinstance(content, list):
+            parts: list[str] = []
+            for item in content:
+                if isinstance(item, str):
+                    parts.append(item)
+                    continue
+                if isinstance(item, dict):
+                    text = item.get("text")
+                    if isinstance(text, str) and text.strip():
+                        parts.append(text.strip())
+            return "\n".join(parts).strip()
+    except Exception:
+        return ""
+    return ""
+
+
+def _parse_json_object_strict(raw_text: str) -> Optional[Dict[str, Any]]:
+    text = (raw_text or "").strip()
+    if not text:
+        return None
+    if text.startswith("```"):
+        lines = [line for line in text.splitlines() if not line.strip().startswith("```")]
+        text = "\n".join(lines).strip()
+    try:
+        parsed = json.loads(text)
+    except Exception:
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
+def _backfill_key_findings_from_evidence(
+    *,
+    key_findings: List[Dict[str, Any]],
+    evidence_package: Dict[str, Any],
+) -> List[Dict[str, Any]]:
+    if len(key_findings) >= 5:
+        return key_findings[:5]
+
+    used_evidence_ids = {
+        evidence_id
+        for finding in key_findings
+        for evidence_id in (finding.get("evidence_ids") or [])
+        if isinstance(evidence_id, str)
+    }
+
+    category_titles = {
+        "executive_metric": "Executive Signal",
+        "top_finding": "Finding",
+        "barrier": "Barrier Signal",
+        "use_case": "Use Case Signal",
+        "message_performance": "Positioning Signal",
+        "segment_story": "Segment Signal",
+        "trust": "Trust Signal",
+        "realism": "Realism Signal",
+        "benchmark": "Benchmark Signal",
+        "run_caveat": "Run Caveat",
+        "survey_caveat": "Survey Caveat",
+    }
+
+    for item in evidence_package.get("items") or []:
+        if not isinstance(item, dict):
+            continue
+        evidence_id = str(item.get("id") or "").strip()
+        summary = str(item.get("summary") or "").strip()
+        if not evidence_id or not summary or evidence_id in used_evidence_ids:
+            continue
+
+        title = str(item.get("title") or "").strip() or category_titles.get(
+            str(item.get("category") or "").strip().lower(),
+            "Supporting Signal",
+        )
+        metrics = item.get("metrics") if isinstance(item.get("metrics"), dict) else {}
+        why_it_matters = _build_backfill_reason(
+            category=str(item.get("category") or "").strip().lower(),
+            metrics=metrics,
+        )
+        key_findings.append(
+            {
+                "title": title,
+                "summary": summary,
+                "why_it_matters": why_it_matters,
+                "evidence_ids": [evidence_id],
+            }
+        )
+        used_evidence_ids.add(evidence_id)
+        if len(key_findings) >= 5:
+            break
+
+    return key_findings[:5]
+
+
+def _build_backfill_reason(*, category: str, metrics: Dict[str, Any]) -> str:
+    if category == "barrier":
+        return "This matters because a strong objection can directly suppress purchase intent unless the product, messaging, or offer addresses it."
+    if category == "use_case":
+        return "This matters because concentrated use-case demand helps sharpen who the product is really for and how it should be positioned."
+    if category == "message_performance":
+        return "This matters because stronger concept performance can translate into clearer positioning and more testable go-to-market direction."
+    if category == "segment_story":
+        return "This matters because segment concentration tells you whether the signal is broad-based or strongest within a narrower audience slice."
+    if category in {"trust", "realism", "benchmark", "run_caveat", "survey_caveat"}:
+        return "This matters because reliability and caveat signals determine how strongly you should trust the current readout before acting on it."
+    if category == "executive_metric" and metrics.get("average_interest") is not None:
+        return "This matters because overall interest level is a fast directional read on how receptive the current audience looks."
+    return "This matters because it captures one of the clearest supporting signals in the current evidence package."
 
 
 def _section_value_or_none(section: StudySectionState, key: str) -> Any:
