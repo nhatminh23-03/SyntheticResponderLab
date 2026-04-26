@@ -33,8 +33,8 @@ def _patch_grounded_personas(monkeypatch, settings, sample_size: int):
     prior_sampler = load_module("backend.grounding.prior_sampler", settings.legacy_app_root)
 
     personas = [
-        schemas.PersonaProfile(persona_id="PERS_001", segment_label="Remote Professionals", fit_tier="high"),
-        schemas.PersonaProfile(persona_id="PERS_002", segment_label="Budget-Conscious Owners", fit_tier="medium"),
+        schemas.PersonaProfile(persona_id="PERS_001", segment_label="Remote Professionals", fit_tier="strong"),
+        schemas.PersonaProfile(persona_id="PERS_002", segment_label="Budget-Conscious Owners", fit_tier="soft"),
     ][:sample_size]
 
     monkeypatch.setattr(persona_generator, "grounded_priors_available", lambda: True)
@@ -114,7 +114,7 @@ def test_execute_simulation_run_requires_openrouter_key(test_settings):
 
 def test_execute_simulation_run_uses_live_selected_models(test_settings, monkeypatch):
     settings = _settings_with_openrouter(test_settings)
-    payloads = _base_run_payloads(sample_size=2, experiment_mode="split")
+    payloads = _base_run_payloads(sample_size=2, experiment_mode="mirror")
     _patch_grounded_personas(monkeypatch, settings, sample_size=2)
 
     llm_client = load_module("backend.simulation.llm_client", settings.legacy_app_root)
@@ -143,26 +143,28 @@ def test_execute_simulation_run_uses_live_selected_models(test_settings, monkeyp
 
     assert result["generation_mode"] == "openrouter_live"
     assert result["provider_model_name"] is None
-    assert result["total_generated_responses"] == 4
+    assert result["total_generated_responses"] == 2
     assert set(result["models_used"]) == {"openai/gpt-4o-mini", "google/gemini-2.0-flash-001"}
+    assert len(result["response_records"]) == 8
     assert {record["model"] for record in result["response_records"]} == {
         "openai/gpt-4o-mini",
         "google/gemini-2.0-flash-001",
     }
     assert result["generation_debug"]["questions_fallback_to_mock"] == 0
-    assert result["generation_debug"]["questions_parsed_from_live"] == 4
+    assert result["generation_debug"]["questions_parsed_from_live"] == 8
     assert result["generation_debug"]["provider_error_count"] == 0
     assert result["generation_debug"]["malformed_json_count"] == 0
     assert result["run_debug_summary"]["primary_live_path"] is True
-    assert result["run_debug_summary"]["truly_live_answers"] == 4
+    assert result["run_debug_summary"]["truly_live_answers"] == 8
     assert result["run_debug_summary"]["fallback_answers"] == 0
     assert result["run_debug_summary"]["ml_persona_completion_enabled"] is False
 
 
 def test_execute_simulation_run_applies_custom_prompt_template(test_settings, monkeypatch):
     settings = _settings_with_openrouter(test_settings)
-    payloads = _base_run_payloads(sample_size=1, experiment_mode="split")
+    payloads = _base_run_payloads(sample_size=1, experiment_mode="stability")
     payloads["experiment_payload"]["selected_models"] = ["openai/gpt-4o-mini"]
+    payloads["experiment_payload"]["reruns_per_persona"] = 2
     _patch_grounded_personas(monkeypatch, settings, sample_size=1)
 
     llm_client = load_module("backend.simulation.llm_client", settings.legacy_app_root)
@@ -201,8 +203,9 @@ def test_execute_simulation_run_applies_custom_prompt_template(test_settings, mo
 
 def test_execute_simulation_run_reports_temporary_fallback_usage(test_settings, monkeypatch):
     settings = _settings_with_openrouter(test_settings)
-    payloads = _base_run_payloads(sample_size=1, experiment_mode="split")
+    payloads = _base_run_payloads(sample_size=1, experiment_mode="stability")
     payloads["experiment_payload"]["selected_models"] = ["openai/gpt-4o-mini"]
+    payloads["experiment_payload"]["reruns_per_persona"] = 2
     _patch_grounded_personas(monkeypatch, settings, sample_size=1)
 
     llm_client = load_module("backend.simulation.llm_client", settings.legacy_app_root)
@@ -229,15 +232,16 @@ def test_execute_simulation_run_reports_temporary_fallback_usage(test_settings, 
 
     assert q1_record["answer"] in {"Yes", "No"}
     assert q2_record["answer"] == "I still like the concept overall."
-    assert result["generation_debug"]["questions_fallback_to_mock"] == 1
-    assert result["generation_debug"]["questions_parsed_from_live"] == 1
+    assert result["generation_debug"]["questions_fallback_to_mock"] == 2
+    assert result["generation_debug"]["questions_parsed_from_live"] == 2
     assert any("Temporary migration fallback was used" in warning for warning in result["warnings"])
 
 
 def test_execute_simulation_run_counts_malformed_json_fallbacks(test_settings, monkeypatch):
     settings = _settings_with_openrouter(test_settings)
-    payloads = _base_run_payloads(sample_size=1, experiment_mode="split")
+    payloads = _base_run_payloads(sample_size=1, experiment_mode="stability")
     payloads["experiment_payload"]["selected_models"] = ["openai/gpt-4o-mini"]
+    payloads["experiment_payload"]["reruns_per_persona"] = 2
     _patch_grounded_personas(monkeypatch, settings, sample_size=1)
 
     llm_client = load_module("backend.simulation.llm_client", settings.legacy_app_root)
@@ -257,18 +261,19 @@ def test_execute_simulation_run_counts_malformed_json_fallbacks(test_settings, m
         geography_context=None,
     )
 
-    assert result["generation_debug"]["request_errors"] == 1
+    assert result["generation_debug"]["request_errors"] == 2
     assert result["generation_debug"]["provider_error_count"] == 0
-    assert result["generation_debug"]["malformed_json_count"] == 1
-    assert result["generation_debug"]["questions_fallback_to_mock"] == 2
-    assert result["run_debug_summary"]["fallback_answers"] == 2
+    assert result["generation_debug"]["malformed_json_count"] == 2
+    assert result["generation_debug"]["questions_fallback_to_mock"] == 4
+    assert result["run_debug_summary"]["fallback_answers"] == 4
     assert any("malformed JSON" in warning for warning in result["warnings"])
 
 
 def test_execute_simulation_run_fails_fast_on_openrouter_401(test_settings, monkeypatch):
     settings = _settings_with_openrouter(test_settings)
-    payloads = _base_run_payloads(sample_size=1, experiment_mode="split")
+    payloads = _base_run_payloads(sample_size=1, experiment_mode="stability")
     payloads["experiment_payload"]["selected_models"] = ["openai/gpt-4o-mini"]
+    payloads["experiment_payload"]["reruns_per_persona"] = 2
     _patch_grounded_personas(monkeypatch, settings, sample_size=1)
 
     llm_client = load_module("backend.simulation.llm_client", settings.legacy_app_root)

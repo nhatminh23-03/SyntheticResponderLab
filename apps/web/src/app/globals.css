@@ -6,7 +6,7 @@
 
 :root {
   color-scheme: dark;
-  --nav-height: 5.5rem;
+  --nav-height: 8.25rem;
   --font-display: "Manrope";
   --font-body: "Plus Jakarta Sans";
   --color-background: #0a0f13;
@@ -167,6 +167,18 @@
   --hero-signal-card-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
   --metric-pill-bg: rgba(255, 255, 255, 0.03);
   --metric-pill-border: rgba(255, 255, 255, 0.06);
+}
+
+@media (min-width: 640px) {
+  :root {
+    --nav-height: 7rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  :root {
+    --nav-height: 5.5rem;
+  }
 }
 
 [data-theme="light"] {
@@ -492,4 +504,3 @@ body {
 [data-theme="light"] .fine-scrollbar::-webkit-scrollbar-thumb {
   background: rgba(58, 120, 160, 0.22);
 }
-

@@ -334,7 +334,7 @@ export function MarketSection() {
                 title="Market Snapshot"
                 description="Set category context so respondents understand typical options and expectations."
               >
-                <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid gap-4 md:grid-cols-2">
                   <Field label="Category">
                     <TextInput
                       value={draft.category}
@@ -736,7 +736,7 @@ function CompetitorEditorCard({
 
       {expanded ? (
         <div className="mt-5 grid gap-5">
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-4 lg:grid-cols-3">
             <Field label="Name">
               <TextInput
                 value={competitor.name}

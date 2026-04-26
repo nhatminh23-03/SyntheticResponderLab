@@ -299,7 +299,7 @@ export function InterviewSynthesisSection() {
 
   return (
     <SectionWrapper id="interview-synthesis" scrollable contentClassName="relative">
-      <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_22rem]">
+      <div className="grid items-start gap-8 xl:grid-cols-[minmax(0,1fr)_22rem]">
         <div className="min-w-0 space-y-6">
           <RevealOnScroll>
             <SectionHeader
@@ -354,7 +354,7 @@ export function InterviewSynthesisSection() {
 
           {/* Run button */}
           <RevealOnScroll delay={0.08}>
-            <div className="flex items-center gap-4">
+            <div className="flex flex-wrap items-center gap-3 sm:gap-4">
               <button
                 type="button"
                 disabled={isRunning || !studyId}
@@ -433,7 +433,7 @@ export function InterviewSynthesisSection() {
         </div>
 
         {/* Sidebar */}
-        <div className="space-y-4 lg:sticky lg:top-[calc(var(--nav-height)+1.5rem)]">
+        <div className="space-y-4 xl:sticky xl:top-[calc(var(--nav-height)+1.5rem)]">
           <RevealOnScroll delay={0.1}>
             <GlassPanel className="p-5">
               <p className="mb-3 text-xs uppercase tracking-[0.14em] text-app-muted">How it works</p>

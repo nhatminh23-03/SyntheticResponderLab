@@ -606,14 +606,14 @@ def test_persona_preview_happy_path_updates_canonical_study(client, monkeypatch)
                 {
                     "persona_id": "neo-001",
                     "segment_label": "Backyard office homeowners",
-                    "fit_tier": "high",
+                    "fit_tier": "strong",
                     "age_band": "35-44",
                     "income_band": "$75k-$124k",
                 },
                 {
                     "persona_id": "neo-002",
                     "segment_label": "Wellness-minded suburban households",
-                    "fit_tier": "medium",
+                    "fit_tier": "soft",
                     "age_band": "45-54",
                     "income_band": "$125k-$199k",
                 },
@@ -698,6 +698,126 @@ def test_product_provider_gaps_fail_clearly(client):
     assert "Google Vision credentials are required" in image_response.json()["error"]["message"]
 
 
+def test_product_url_autofill_rejects_private_network_targets(client):
+    created = client.post("/api/v1/studies", json={}).json()["data"]["study"]
+    study_id = created["study_id"]
+
+    response = client.post(
+        f"/api/v1/studies/{study_id}/product/url-autofill",
+        json={"url": "http://127.0.0.1/internal", "apply_to_product": False},
+    )
+
+    assert response.status_code == 400
+    assert "private-network URLs are not allowed" in response.json()["error"]["message"]
+
+
+def test_product_url_autofill_accepts_public_https_url(client, monkeypatch):
+    created = client.post("/api/v1/studies", json={}).json()["data"]["study"]
+    study_id = created["study_id"]
+
+    monkeypatch.setattr(
+        "src.services.study_service.product_url_autofill",
+        lambda **kwargs: {
+            "input_url": kwargs["url"],
+            "page_text": "Public product page copy",
+            "product_patch": {
+                "business_name": "Example Co",
+                "product_name": "Example Product",
+                "product_description": "Autofilled from a public product page.",
+            },
+        },
+    )
+
+    response = client.post(
+        f"/api/v1/studies/{study_id}/product/url-autofill",
+        json={"url": "https://example.com/product", "apply_to_product": False},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["enrichment"]["input_url"] == "https://example.com/product"
+
+
+def test_survey_upload_rejects_oversized_payload(client):
+    created = client.post("/api/v1/studies", json={}).json()["data"]["study"]
+    study_id = created["study_id"]
+    client.app.state.settings.max_survey_upload_bytes = 16
+
+    response = client.post(
+        f"/api/v1/studies/{study_id}/survey/upload",
+        files={"file": ("survey.md", b"x" * 17, "text/markdown")},
+    )
+
+    assert response.status_code == 413
+    assert "Survey upload exceeds" in response.json()["error"]["message"]
+
+
+def test_survey_upload_rejects_unsupported_extension_before_read(client):
+    created = client.post("/api/v1/studies", json={}).json()["data"]["study"]
+    study_id = created["study_id"]
+
+    response = client.post(
+        f"/api/v1/studies/{study_id}/survey/upload",
+        files={"file": ("survey.txt", b"hello", "text/plain")},
+    )
+
+    assert response.status_code == 415
+    assert "Unsupported survey file type" in response.json()["error"]["message"]
+
+
+def test_product_image_analysis_rejects_oversized_payload(client):
+    created = client.post("/api/v1/studies", json={}).json()["data"]["study"]
+    study_id = created["study_id"]
+    client.app.state.settings.max_product_image_upload_bytes = 8
+
+    response = client.post(
+        f"/api/v1/studies/{study_id}/product/image-analysis",
+        files={"file": ("product.png", b"123456789", "image/png")},
+    )
+
+    assert response.status_code == 413
+    assert "Product image upload exceeds" in response.json()["error"]["message"]
+
+
+def test_product_image_analysis_rejects_unsupported_extension_before_read(client):
+    created = client.post("/api/v1/studies", json={}).json()["data"]["study"]
+    study_id = created["study_id"]
+
+    response = client.post(
+        f"/api/v1/studies/{study_id}/product/image-analysis",
+        files={"file": ("product.gif", b"GIF89a", "image/gif")},
+    )
+
+    assert response.status_code == 415
+    assert "Unsupported image type" in response.json()["error"]["message"]
+
+
+def test_product_image_analysis_accepts_small_png_upload(client, monkeypatch):
+    created = client.post("/api/v1/studies", json={}).json()["data"]["study"]
+    study_id = created["study_id"]
+
+    monkeypatch.setattr(
+        "src.api.studies.handle_product_image_analysis",
+        lambda db, settings, study, filename, content_type, file_bytes, apply_to_product: {
+            "image_analysis": {
+                "status": "completed",
+                "source_asset_id": "asset_demo",
+                "analysis": {"labels": ["studio"]},
+                "proposed_product_patch": None,
+                "warnings": [],
+                "applied_to_product": apply_to_product,
+            }
+        },
+    )
+
+    response = client.post(
+        f"/api/v1/studies/{study_id}/product/image-analysis",
+        files={"file": ("product.png", b"\x89PNG\r\n\x1a\nsmall", "image/png")},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["image_analysis"]["status"] == "completed"
+
+
 def test_model_catalog_endpoint_returns_fallback_when_provider_missing(client):
     response = client.get("/api/v1/models")
 
@@ -732,7 +852,7 @@ def test_start_simulation_run_endpoint_returns_saved_job(client, monkeypatch):
                 {
                     "persona_id": "neo-001",
                     "segment_label": "Backyard office homeowners",
-                    "fit_tier": "high",
+                    "fit_tier": "strong",
                 }
             ],
             "response_record_preview": [
@@ -1005,9 +1125,9 @@ def test_analysis_endpoint_returns_summary_and_question_explorer(client, monkeyp
     )
     assert first_question["question_id"] == "S3"
     assert first_question["distribution"] == [
-        {"label": "1", "count": 0, "percentage": 0.0},
-        {"label": "2", "count": 0, "percentage": 0.0},
-        {"label": "3", "count": 0, "percentage": 0.0},
+        {"label": "Yes", "count": 0, "percentage": 0.0},
+        {"label": "I'm not sure, but possibly", "count": 0, "percentage": 0.0},
+        {"label": "No", "count": 0, "percentage": 0.0},
         {"label": "4", "count": 1, "percentage": 50.0},
         {"label": "5", "count": 1, "percentage": 50.0},
     ]

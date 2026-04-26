@@ -815,29 +815,51 @@ function QuestionTablePreview({ questions }: { questions: SurveyQuestionPayload[
   }
 
   return (
-    <div className="overflow-hidden rounded-[1.35rem] border border-app-border [background:var(--status-neutral-bg)]">
-      <div className="grid grid-cols-[6.5rem_7.5rem_minmax(0,1fr)_6.5rem] gap-3 border-b border-app-border px-4 py-3 text-[0.68rem] uppercase tracking-[0.22em] text-app-muted">
-        <div>ID</div>
-        <div>Type</div>
-        <div>Question</div>
-        <div>Options</div>
-      </div>
-      {questions.map((question) => (
-        <div
-          key={question.id}
-          className="grid grid-cols-[6.5rem_7.5rem_minmax(0,1fr)_6.5rem] gap-3 border-b border-app-border px-4 py-3 text-sm text-app-text last:border-b-0"
-        >
-          <div>{question.id}</div>
-          <div className="text-app-muted">{humanizeQuestionType(question.question_type)}</div>
-          <div className="min-w-0 truncate">{question.text}</div>
-          <div className="text-app-muted">
-            {question.question_type === "likert"
-              ? `${question.min_value ?? "?"}-${question.max_value ?? "?"}`
-              : String(question.options?.length ?? 0)}
+    <>
+      <div className="space-y-3 md:hidden">
+        {questions.map((question) => (
+          <div
+            key={question.id}
+            className="rounded-[1.25rem] border border-app-border [background:var(--status-neutral-bg)] p-4"
+          >
+            <div className="flex flex-wrap items-center gap-2">
+              <BadgeChip tone="cyan">{question.id}</BadgeChip>
+              <BadgeChip>{humanizeQuestionType(question.question_type)}</BadgeChip>
+              <BadgeChip>
+                {question.question_type === "likert"
+                  ? `${question.min_value ?? "?"}-${question.max_value ?? "?"}`
+                  : `${question.options?.length ?? 0} options`}
+              </BadgeChip>
+            </div>
+            <div className="mt-3 text-sm leading-6 text-app-text">{question.text}</div>
           </div>
+        ))}
+      </div>
+
+      <div className="hidden overflow-hidden rounded-[1.35rem] border border-app-border [background:var(--status-neutral-bg)] md:block">
+        <div className="grid grid-cols-[6.5rem_7.5rem_minmax(0,1fr)_6.5rem] gap-3 border-b border-app-border px-4 py-3 text-[0.68rem] uppercase tracking-[0.22em] text-app-muted">
+          <div>ID</div>
+          <div>Type</div>
+          <div>Question</div>
+          <div>Options</div>
         </div>
-      ))}
-    </div>
+        {questions.map((question) => (
+          <div
+            key={question.id}
+            className="grid grid-cols-[6.5rem_7.5rem_minmax(0,1fr)_6.5rem] gap-3 border-b border-app-border px-4 py-3 text-sm text-app-text last:border-b-0"
+          >
+            <div>{question.id}</div>
+            <div className="text-app-muted">{humanizeQuestionType(question.question_type)}</div>
+            <div className="min-w-0 truncate">{question.text}</div>
+            <div className="text-app-muted">
+              {question.question_type === "likert"
+                ? `${question.min_value ?? "?"}-${question.max_value ?? "?"}`
+                : String(question.options?.length ?? 0)}
+            </div>
+          </div>
+        ))}
+      </div>
+    </>
   );
 }
 

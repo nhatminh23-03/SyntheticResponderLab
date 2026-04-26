@@ -55,10 +55,26 @@ from src.schemas.study import (
     MarketState,
     SurveyState,
 )
-from src.services.exceptions import ConflictApiError, NotFoundApiError, UnsupportedMediaTypeApiError, ValidationApiError
+from src.services.exceptions import (
+    ConflictApiError,
+    ForbiddenApiError,
+    NotFoundApiError,
+    UnsupportedMediaTypeApiError,
+    ValidationApiError,
+)
 from src.services.demo_interview_fixtures import ensure_demo_interview_run
 from src.services.ids import make_public_id
 from src.services.interview_service import save_research_brief
+from src.services.url_security import validate_public_http_url
+from src.services.usage_limits import (
+    METRIC_PRODUCT_IMAGE_ANALYSIS,
+    METRIC_SIMULATION_RUN,
+    METRIC_STABILITY_CHECK,
+    METRIC_STUDY_CREATE,
+    METRIC_SURVEY_UPLOAD,
+    assert_no_in_flight_provider_job,
+    consume_daily_quota,
+)
 from src.services.workflow_service import build_workflow
 
 
@@ -229,8 +245,15 @@ def create_study(
     *,
     study_mode: Optional[str],
     owner_user_id: Optional[str],
-    owner_org_id: Optional[str],
+    owner_org_id: Optional[str] = None,
 ) -> CanonicalStudy:
+    if owner_user_id:
+        consume_daily_quota(
+            session,
+            settings,
+            owner_user_id=owner_user_id,
+            metric_key=METRIC_STUDY_CREATE,
+        )
     study = Study(
         public_id=make_public_id("std"),
         owner_user_id=owner_user_id,
@@ -271,6 +294,39 @@ def get_study_or_404(session: Session, public_id: str) -> Study:
     study = session.scalar(select(Study).where(Study.public_id == public_id))
     if study is None:
         raise NotFoundApiError("Study not found.")
+    return study
+
+
+def assert_study_access(study: Study, current_user) -> None:
+    """Enforce that `current_user` owns the study, or is an admin.
+
+    Accepts any object with ``user_id`` and ``is_admin`` attributes, plus an
+    optional ``is_dev_fallback`` flag for dev/test fallback users.
+
+    Unowned studies (NULL owner) are treated as inaccessible unless the user
+    is an admin or the dev-fallback synthetic user.
+    """
+    if current_user is None:
+        raise ForbiddenApiError("You do not have access to this study.")
+
+    is_admin = bool(getattr(current_user, "is_admin", False))
+    is_dev_fallback = bool(getattr(current_user, "is_dev_fallback", False))
+    user_id = getattr(current_user, "user_id", None)
+
+    if is_admin or is_dev_fallback:
+        return
+
+    owner_id = study.owner_user_id
+    if owner_id is None:
+        raise ForbiddenApiError("You do not have access to this study.")
+
+    if owner_id != user_id:
+        raise ForbiddenApiError("You do not have access to this study.")
+
+
+def get_owned_study_or_404(session: Session, public_id: str, current_user) -> Study:
+    study = get_study_or_404(session, public_id)
+    assert_study_access(study, current_user)
     return study
 
 
@@ -452,7 +508,8 @@ def handle_product_url_autofill(
     url: str,
     apply_to_product: bool,
 ) -> Dict[str, Any]:
-    result = product_url_autofill(settings=settings, url=url)
+    safe_url = validate_public_http_url(url)
+    result = product_url_autofill(settings=settings, url=safe_url)
 
     text_asset = _create_asset_from_bytes(
         session,
@@ -469,7 +526,7 @@ def handle_product_url_autofill(
         study_id=study.id,
         enrichment_type="product_url_autofill",
         status="completed",
-        input_url=url,
+        input_url=safe_url,
         source_asset_id=text_asset.id,
         request_json={"apply_to_product": apply_to_product},
         result_json={
@@ -508,6 +565,13 @@ def handle_product_image_analysis(
     extension = _extension_from_name(filename)
     if extension not in IMAGE_EXTENSIONS:
         raise UnsupportedMediaTypeApiError("Unsupported image type. Please upload jpg, jpeg, or png.")
+    if study.owner_user_id:
+        consume_daily_quota(
+            session,
+            settings,
+            owner_user_id=study.owner_user_id,
+            metric_key=METRIC_PRODUCT_IMAGE_ANALYSIS,
+        )
 
     image_asset = _create_asset_from_bytes(
         session,
@@ -570,6 +634,13 @@ def handle_survey_upload(
     extension = _extension_from_name(filename)
     if extension not in SURVEY_EXTENSIONS:
         raise UnsupportedMediaTypeApiError("Unsupported survey file type. Please upload .md, .docx, or .pdf.")
+    if study.owner_user_id:
+        consume_daily_quota(
+            session,
+            settings,
+            owner_user_id=study.owner_user_id,
+            metric_key=METRIC_SURVEY_UPLOAD,
+        )
 
     asset = _create_asset_from_bytes(
         session,
@@ -806,6 +877,15 @@ def start_simulation_run(
     if not experiment:
         raise ConflictApiError("Experiment plan must be saved before running the study.")
 
+    assert_no_in_flight_provider_job(session, owner_user_id=study.owner_user_id)
+    if study.owner_user_id:
+        consume_daily_quota(
+            session,
+            settings,
+            owner_user_id=study.owner_user_id,
+            metric_key=METRIC_SIMULATION_RUN,
+        )
+
     normalized_prompt_override = (prompt_user_template_override or "").strip() or None
 
     geography_context = None
@@ -908,6 +988,15 @@ def start_stability_check(
 
     if not audience or not survey or not experiment:
         raise ConflictApiError("Audience, survey, and experiment must be saved before running a stability check.")
+
+    assert_no_in_flight_provider_job(session, owner_user_id=study.owner_user_id)
+    if study.owner_user_id:
+        consume_daily_quota(
+            session,
+            settings,
+            owner_user_id=study.owner_user_id,
+            metric_key=METRIC_STABILITY_CHECK,
+        )
 
     geography_context = None
     zip_code = audience.get("zip_code")

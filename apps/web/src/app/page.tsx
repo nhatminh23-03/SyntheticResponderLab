@@ -1,3 +1,5 @@
+import { SignedIn, SignedOut } from "@clerk/nextjs";
+
 import { AnalysisSection } from "@/components/sections/analysis-section";
 import { AudienceSection } from "@/components/sections/audience-section";
 import { ExperimentSection } from "@/components/sections/experiment-section";
@@ -11,10 +13,13 @@ import { ResearchBriefSection } from "@/components/sections/research-brief-secti
 import { RunSimulationSection } from "@/components/sections/run-simulation-section";
 import { StudyModeSection } from "@/components/sections/study-mode-section";
 import { SurveySection } from "@/components/sections/survey-section";
+import { BackendReadinessGate } from "@/components/ui/backend-readiness";
 import { AppShell } from "@/components/ui/app-shell";
+import { PublicLandingShell } from "@/components/ui/public-landing-shell";
 import { AppProviders } from "@/providers/app-providers";
+import { isClerkConfigured } from "@/lib/server-env";
 
-export default function HomePage() {
+function AuthenticatedApp() {
   return (
     <AppProviders>
       <AppShell>
@@ -33,5 +38,28 @@ export default function HomePage() {
         <InterviewInsightsSection />
       </AppShell>
     </AppProviders>
+  );
+}
+
+export default function HomePage() {
+  if (!isClerkConfigured()) {
+    return (
+      <BackendReadinessGate>
+        <AuthenticatedApp />
+      </BackendReadinessGate>
+    );
+  }
+
+  return (
+    <>
+      <SignedOut>
+        <PublicLandingShell />
+      </SignedOut>
+      <SignedIn>
+        <BackendReadinessGate>
+          <AuthenticatedApp />
+        </BackendReadinessGate>
+      </SignedIn>
+    </>
   );
 }

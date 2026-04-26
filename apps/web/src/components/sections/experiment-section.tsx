@@ -442,7 +442,7 @@ export function ExperimentSection() {
         className={cn(
           "grid items-start gap-6",
           showExperimentSidebar &&
-            "lg:grid-cols-[minmax(0,1fr)_20rem] xl:grid-cols-[minmax(0,1.02fr)_22rem] 2xl:grid-cols-[minmax(0,1.03fr)_28rem]"
+            "xl:grid-cols-[minmax(0,1fr)_20rem] 2xl:grid-cols-[minmax(0,1.02fr)_24rem]"
         )}
       >
         <div className="min-w-0 space-y-6">
@@ -479,10 +479,10 @@ export function ExperimentSection() {
                 </div>
 
                 <div className="mt-5 space-y-6">
-                  <div className="grid items-start gap-5 lg:grid-cols-4">
+                  <div className="grid items-start gap-5 xl:grid-cols-4">
                     <Field
                       label="Sample Size"
-                      className="lg:col-span-1"
+                      className="xl:col-span-1"
                     >
                       <NumericControl
                         value={draft.sample_size}
@@ -496,10 +496,10 @@ export function ExperimentSection() {
 
                     <Field
                       label="Select Model(s)"
-                      className="lg:col-span-2"
+                      className="xl:col-span-2"
                     >
                       <div className="relative">
-                        <div className="grid gap-3 lg:grid-cols-3">
+                        <div className="grid gap-3 xl:grid-cols-3">
                           {draft.selected_models.length > 0 ? (
                             draft.selected_models.map((model) => (
                               <button
@@ -623,7 +623,7 @@ export function ExperimentSection() {
                       </div>
                     </Field>
 
-                    <div className="relative lg:col-span-1">
+                    <div className="relative xl:col-span-1">
                       <div className="mb-2 flex items-center gap-2">
                         <span className="text-sm font-medium text-app-text">
                           Reruns Per Persona
@@ -669,7 +669,7 @@ export function ExperimentSection() {
                     <div className="mb-3 text-sm font-medium text-app-text">
                       Experiment Mode
                     </div>
-                    <div className="grid gap-3 lg:grid-cols-3">
+                    <div className="grid gap-3 xl:grid-cols-3">
                       {EXPERIMENT_MODE_OPTIONS.map((option) => {
                         const selected = draft.experiment_mode === option.value;
                         return (
@@ -736,7 +736,7 @@ export function ExperimentSection() {
         </div>
 
         {showExperimentSidebar ? (
-          <div className="min-w-0 lg:sticky lg:top-6 lg:w-full lg:max-w-[20rem] lg:justify-self-end xl:max-w-[22rem] 2xl:max-w-[28rem]">
+          <div className="min-w-0 xl:sticky xl:top-6 xl:w-full xl:max-w-[20rem] xl:justify-self-end 2xl:max-w-[24rem]">
             <div className="space-y-5">
               {SHOW_EXPERIMENT_SUMMARY_CARD ? (
                 <GlassPanel className="p-5 sm:p-6">

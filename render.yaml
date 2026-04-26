@@ -1,0 +1,67 @@
+services:
+  - type: web
+    name: synthetic-responder-api
+    runtime: docker
+    dockerfilePath: ./apps/api/Dockerfile
+    dockerContext: .
+    plan: starter
+    region: oregon
+    autoDeployTrigger: commit
+    healthCheckPath: /api/v1/health
+    maxShutdownDelaySeconds: 120
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: APP_DEBUG
+        value: "false"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: synthetic-responder-db
+          property: connectionString
+      - key: ARTIFACTS_ROOT
+        value: /var/data/artifacts
+      - key: LEGACY_APP_ROOT
+        value: /app/NeoSmart-Hackathon-App
+      - key: DEPLOYMENT_SHARED_SECRET
+        sync: false
+      - key: CORS_ALLOW_ORIGINS
+        sync: false
+      - key: ADMIN_CLERK_USER_IDS
+        sync: false
+      - key: REQUIRE_AUTHENTICATED_IDENTITY
+        value: "true"
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: OPENROUTER_BASE_URL
+        value: https://openrouter.ai/api/v1
+      - key: GOOGLE_CLOUD_API_KEY
+        sync: false
+      - key: GOOGLE_CLOUD_SERVICE_ACCOUNT_JSON
+        sync: false
+      - key: GOOGLE_CLOUD_SERVICE_ACCOUNT_PATH
+        sync: false
+      - key: HUD_API_TOKEN
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: MAX_SURVEY_UPLOAD_BYTES
+        value: "8388608"
+      - key: MAX_PRODUCT_IMAGE_UPLOAD_BYTES
+        value: "5242880"
+      - key: DAILY_STUDY_CREATE_LIMIT
+        value: "20"
+      - key: DAILY_UPLOAD_LIMIT
+        value: "50"
+      - key: DAILY_PROVIDER_RUN_LIMIT
+        value: "20"
+    disk:
+      name: artifacts
+      mountPath: /var/data
+      sizeGB: 10
+
+databases:
+  - name: synthetic-responder-db
+    plan: basic-256mb
+    databaseName: synthetic_responder
+    user: synthetic_responder
+    region: oregon

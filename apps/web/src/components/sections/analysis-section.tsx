@@ -139,11 +139,11 @@ export function AnalysisSection() {
             </GlassPanel>
           ) : (
             <>
-              <div className="sticky top-0 z-20 -mx-1 bg-[linear-gradient(180deg,rgba(7,11,15,0.96)_0%,rgba(7,11,15,0.88)_78%,rgba(7,11,15,0)_100%)] px-1 pb-5 pt-1">
+              <div className="lg:sticky lg:top-0 z-20 -mx-1 bg-[linear-gradient(180deg,rgba(7,11,15,0.96)_0%,rgba(7,11,15,0.88)_78%,rgba(7,11,15,0)_100%)] px-1 pb-5 pt-1">
                 <div className="rounded-[1.55rem] border border-app-border/70 px-5 py-4 shadow-[0_18px_44px_rgba(0,0,0,0.24)] backdrop-blur-xl [background:linear-gradient(180deg,rgba(16,23,29,0.92),rgba(13,19,24,0.88))] sm:px-6">
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                     <div className="flex flex-wrap items-center gap-3">
-                      <h2 className="text-[1.55rem] font-semibold tracking-tight text-app-text sm:text-[1.75rem]">
+                      <h2 className="text-[1.12rem] font-semibold tracking-tight text-app-text sm:text-[1.22rem] lg:text-[1.35rem]">
                         Result Dashboard
                       </h2>
                       <span className="inline-flex items-center rounded-full border border-app-border/70 px-3.5 py-1.5 text-sm font-medium text-app-muted [background:var(--status-neutral-bg)]">
@@ -251,18 +251,18 @@ function QuestionDashboardCard({
       ref={containerRef}
       className="min-w-0"
     >
-      <GlassPanel className="h-full border-app-border/70 p-6 shadow-[0_22px_48px_rgba(0,0,0,0.24)] sm:p-7">
+      <GlassPanel className="h-full border-app-border/70 p-5 shadow-[0_22px_48px_rgba(0,0,0,0.24)] sm:p-6">
         <div className="flex flex-wrap items-center gap-2.5">
           <BadgeChip tone="cyan">{question.question_id}</BadgeChip>
           <BadgeChip tone="neutral">{formatQuestionType(question.question_type)}</BadgeChip>
           <BadgeChip tone="neutral">{`${question.response_count} responses`}</BadgeChip>
         </div>
 
-        <h3 className="mt-5 text-xl font-medium leading-8 tracking-tight text-app-text sm:text-[1.9rem] sm:leading-[2.6rem]">
+        <h3 className="mt-4 text-[1.02rem] font-medium leading-[1.55] tracking-tight text-app-text sm:text-[1.1rem] sm:leading-[1.6] lg:text-[1.18rem] lg:leading-[1.62] xl:text-[1.24rem]">
           {question.question_text}
         </h3>
 
-        <div className="mt-6 rounded-[1.6rem] p-4 sm:p-5 [background:linear-gradient(180deg,rgba(11,16,20,0.9),rgba(8,12,15,0.84))] shadow-[inset_0_0_0_1px_rgba(118,228,255,0.06)]">
+        <div className="mt-5 rounded-[1.35rem] p-3 sm:p-4 [background:linear-gradient(180deg,rgba(11,16,20,0.9),rgba(8,12,15,0.84))] shadow-[inset_0_0_0_1px_rgba(118,228,255,0.06)]">
           {isVisible ? (
             <QuestionChartSwitch question={question} />
           ) : (
@@ -317,10 +317,23 @@ function BarQuestionChart({
   rows: AnalysisDashboardDistributionRow[];
   kind: "categorical" | "likert";
 }) {
+  const defaultRow = getPrimaryDistributionRow(rows);
+  const [selectedLabel, setSelectedLabel] = useState(defaultRow?.label ?? "");
   const maxValue = rows.reduce((highest, row) => Math.max(highest, row.count), 0);
   const axis = buildCountAxis(maxValue);
   const reversedTicks = [...axis.ticks].reverse();
   const columnTemplate = `repeat(${Math.max(rows.length, 1)}, minmax(0, 1fr))`;
+  const desktopChartMinWidth = Math.max(rows.length * 6.25, 32);
+  const hasLongLabels = rows.some(
+    (row) => row.label.length > 28 || row.label.split(/\s+/).length > 4
+  );
+  const selectedRow = rows.find((row) => row.label === selectedLabel) ?? defaultRow ?? null;
+
+  useEffect(() => {
+    if (!selectedRow && defaultRow) {
+      setSelectedLabel(defaultRow.label);
+    }
+  }, [defaultRow, selectedRow]);
 
   return (
     <ChartFrame
@@ -330,7 +343,30 @@ function BarQuestionChart({
       emptyMessage="No response distribution is available for this question."
       className={MINIMAL_CHART_FRAME_CLASS}
     >
-      <div className="grid grid-cols-[2.35rem,minmax(0,1fr)] gap-4">
+      <div className="space-y-4 md:hidden">
+        {rows.map((row) => (
+          <div
+            key={`${row.label}-mobile`}
+            className="rounded-[1rem] border border-app-border [background:var(--hero-signal-card-bg)] p-3.5"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-sm leading-6 text-app-text">{row.label}</div>
+                <div className="mt-1 text-xs text-app-muted">{`${row.percentage.toFixed(1)}%`}</div>
+              </div>
+              <div className="shrink-0 text-sm font-semibold text-app-text">{row.count}</div>
+            </div>
+            <div className="mt-3 h-3 rounded-full border border-app-border [background:var(--status-neutral-bg)] p-[2px]">
+              <div
+                className={cn("h-full rounded-full", BAR_FILL_CLASS)}
+                style={{ width: `${axis.max > 0 ? (row.count / axis.max) * 100 : 0}%` }}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="hidden md:grid md:grid-cols-[2.35rem,minmax(0,1fr)] md:gap-4">
         <div className="flex h-56 flex-col justify-between pr-1 text-right">
           {reversedTicks.map((tick) => (
             <span
@@ -342,72 +378,116 @@ function BarQuestionChart({
           ))}
         </div>
 
-        <div className="space-y-3">
-          <div className="relative h-56">
-            <div className="pointer-events-none absolute inset-0">
-              {axis.ticks.map((tick) => {
-                const ratio = axis.max > 0 ? tick / axis.max : 0;
-                return (
-                  <div
-                    key={`guide-${tick}`}
-                    className="absolute inset-x-0 border-t border-white/6"
-                    style={{ bottom: `${ratio * 100}%` }}
-                  />
-                );
-              })}
-            </div>
+        <div className="min-w-0 overflow-x-auto pb-1">
+          <div
+            className="space-y-4 pr-2"
+            style={{ minWidth: `${desktopChartMinWidth}rem` }}
+          >
+            <div className="relative h-56">
+              <div className="pointer-events-none absolute inset-0">
+                {axis.ticks.map((tick) => {
+                  const ratio = axis.max > 0 ? tick / axis.max : 0;
+                  return (
+                    <div
+                      key={`guide-${tick}`}
+                      className="absolute inset-x-0 border-t border-white/6"
+                      style={{ bottom: `${ratio * 100}%` }}
+                    />
+                  );
+                })}
+              </div>
 
-            <div
-              className="relative grid h-full items-end gap-3 pb-1"
-              style={{ gridTemplateColumns: columnTemplate }}
-            >
-              {rows.map((row) => {
-                const barHeight = axis.max > 0 ? (row.count / axis.max) * 100 : 0;
-                return (
-                  <div
-                    key={row.label}
-                    className="flex h-full min-w-0 flex-col justify-end"
-                  >
-                    <div className="flex h-full w-full items-end">
-                      {row.count > 0 ? (
-                        <div
-                          className={cn(
-                            "relative flex w-full items-start justify-center rounded-t-[1rem] rounded-b-[0.2rem] border border-app-border/25 px-2 pt-2.5 transition",
-                            BAR_FILL_CLASS
-                          )}
-                          style={{
-                            height: `${barHeight}%`,
-                          }}
-                        >
-                          <span className="text-sm font-semibold text-white/95">
-                            {row.count}
-                          </span>
-                        </div>
+              <div
+                className="relative grid h-full items-end gap-4 pb-1"
+                style={{ gridTemplateColumns: columnTemplate }}
+              >
+                {rows.map((row) => {
+                  const barHeight = axis.max > 0 ? (row.count / axis.max) * 100 : 0;
+                  const isSelected = row.label === selectedLabel;
+                  return (
+                    <button
+                      key={row.label}
+                      type="button"
+                      onClick={() => setSelectedLabel(row.label)}
+                      className="flex h-full min-w-0 flex-col justify-end rounded-[0.9rem] text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-app-cyan/40"
+                      aria-pressed={isSelected}
+                    >
+                      <div className="flex h-full w-full items-end">
+                        {row.count > 0 ? (
+                          <div
+                            className={cn(
+                              "relative flex w-full items-start justify-center rounded-t-[1rem] rounded-b-[0.2rem] border px-2 pt-2.5 transition",
+                              isSelected
+                                ? "border-app-cyan/45 shadow-[0_0_0_1px_rgba(118,228,255,0.16)]"
+                                : "border-app-border/25",
+                              BAR_FILL_CLASS
+                            )}
+                            style={{
+                              height: `${barHeight}%`,
+                            }}
+                          >
+                            <span className="text-sm font-semibold text-white/95">
+                              {row.count}
+                            </span>
+                          </div>
                       ) : (
                         <div className="w-full" />
                       )}
                     </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          <div
-            className="grid items-start gap-3"
-            style={{ gridTemplateColumns: columnTemplate }}
-          >
-            {rows.map((row) => (
-              <div
-                key={`${row.label}-label`}
-                className="min-w-0 text-center"
-              >
-                <div className="text-sm leading-6 text-app-text">
-                  {row.label}
-                </div>
-                <div className="mt-2 text-xs text-app-muted">{`${row.percentage.toFixed(1)}%`}</div>
+                    </button>
+                  );
+                })}
               </div>
-            ))}
+            </div>
+
+            <div
+              className="grid items-start gap-4"
+              style={{ gridTemplateColumns: columnTemplate }}
+            >
+              {rows.map((row) => (
+                <button
+                  key={`${row.label}-label`}
+                  type="button"
+                  onClick={() => setSelectedLabel(row.label)}
+                  className={cn(
+                    "min-w-0 rounded-[0.95rem] border px-2.5 py-2 text-center transition focus:outline-none focus-visible:ring-2 focus-visible:ring-app-cyan/40",
+                    row.label === selectedLabel
+                      ? "border-app-cyan/35 bg-app-cyan/10"
+                      : "border-transparent bg-transparent hover:border-app-border/60 hover:bg-white/[0.02]"
+                  )}
+                  aria-pressed={row.label === selectedLabel}
+                >
+                  <div
+                    className="text-[0.8rem] leading-5 text-app-text lg:text-[0.84rem]"
+                    style={{
+                      display: "-webkit-box",
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: "vertical",
+                      overflow: "hidden",
+                      minHeight: "2.5rem",
+                    }}
+                  >
+                    {row.label}
+                  </div>
+                  <div className="mt-2 text-xs text-app-muted">{`${row.percentage.toFixed(1)}%`}</div>
+                </button>
+              ))}
+            </div>
+
+            {hasLongLabels && selectedRow ? (
+              <div className="rounded-[1rem] border border-app-border [background:var(--hero-signal-card-bg)] px-4 py-3.5">
+                <div className="text-[0.62rem] uppercase tracking-[0.22em] text-app-muted">
+                  Selected answer detail
+                </div>
+                <div className="mt-2 text-sm leading-6 text-app-text">
+                  {selectedRow.label}
+                </div>
+                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-app-muted">
+                  <span>{`${selectedRow.count} responses`}</span>
+                  <span>{`${selectedRow.percentage.toFixed(1)}% share`}</span>
+                </div>
+              </div>
+            ) : null}
           </div>
         </div>
       </div>
@@ -644,6 +724,16 @@ function getNiceStep(value: number) {
 
 function formatCountTick(value: number) {
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
+}
+
+function getPrimaryDistributionRow(rows: AnalysisDashboardDistributionRow[]) {
+  return [...rows].sort((left, right) => {
+    if (right.count !== left.count) {
+      return right.count - left.count;
+    }
+
+    return left.label.localeCompare(right.label);
+  })[0] ?? null;
 }
 
 function formatQuestionType(questionType?: string) {

@@ -38,6 +38,7 @@ venv/
 # Local agent/tool state
 .codex
 .codex/
+.cursor/
 
 # Local cloud/service credentials
 *service-account*.json
@@ -63,6 +64,7 @@ tmp_api_artifacts/
 # Generated artifacts
 artifacts/
 apps/api/artifacts/
+apps/api/tmp_artifacts/
 
 # Legacy local environments / caches
 NeoSmart-Hackathon-App/venv/

@@ -1,26 +1,55 @@
-const DEFAULT_API_BASE_URL = "http://localhost:8000";
-
 function getApiBaseUrl() {
-  return process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ?? DEFAULT_API_BASE_URL;
+  return "/api/backend";
 }
 
 type ApiErrorResponse = {
   error?: {
+    code?: string;
     message?: string;
   };
 };
 
+export function getDisplayApiErrorMessage(
+  status: number,
+  code: string | undefined,
+  fallback: string,
+  message?: string
+) {
+  if (code === "quota_exceeded") {
+    return "You’ve reached today’s limit for this action. Please try again tomorrow or contact support.";
+  }
+
+  if (code === "provider_run_in_flight") {
+    return "You already have a run in progress. Wait for it to finish before starting another.";
+  }
+
+  if (status === 401 || status === 403) {
+    return "Your session has expired or you no longer have access. Please sign in again and retry.";
+  }
+
+  if (status === 429) {
+    return "Too many requests right now. Please wait a moment and try again.";
+  }
+
+  return message || fallback;
+}
+
 async function readApiErrorMessage(response: Response, fallback: string) {
   const body = await response.text();
   if (!body) {
-    return fallback;
+    return getDisplayApiErrorMessage(response.status, undefined, fallback);
   }
 
   try {
     const payload = JSON.parse(body) as ApiErrorResponse;
-    return payload.error?.message || body;
+    return getDisplayApiErrorMessage(
+      response.status,
+      payload.error?.code,
+      fallback,
+      payload.error?.message
+    );
   } catch {
-    return body;
+    return getDisplayApiErrorMessage(response.status, undefined, fallback, body);
   }
 }
 
@@ -1008,7 +1037,12 @@ export async function createStudy() {
   });
 
   if (!response.ok) {
-    throw new Error(`Study bootstrap failed with status ${response.status}`);
+    throw new Error(
+      await readApiErrorMessage(
+        response,
+        `Study bootstrap failed with status ${response.status}`
+      )
+    );
   }
 
   const payload = (await response.json()) as CreateStudyResponse;
@@ -1032,7 +1066,12 @@ export async function getStudy(studyId: string) {
   });
 
   if (!response.ok) {
-    throw new Error(`Study load failed with status ${response.status}`);
+    throw new Error(
+      await readApiErrorMessage(
+        response,
+        `Study load failed with status ${response.status}`
+      )
+    );
   }
 
   const payload = (await response.json()) as GetStudyResponse;
@@ -1056,7 +1095,12 @@ export async function getStudyDetails(studyId: string) {
   });
 
   if (!response.ok) {
-    throw new Error(`Study detail load failed with status ${response.status}`);
+    throw new Error(
+      await readApiErrorMessage(
+        response,
+        `Study detail load failed with status ${response.status}`
+      )
+    );
   }
 
   const payload = (await response.json()) as GetStudyResponse;
@@ -1083,7 +1127,12 @@ export async function saveStudyMode(studyId: string, studyMode: "neo_smart" | "g
   });
 
   if (!response.ok) {
-    throw new Error(`Study mode save failed with status ${response.status}`);
+    throw new Error(
+      await readApiErrorMessage(
+        response,
+        `Study mode save failed with status ${response.status}`
+      )
+    );
   }
 
   const payload = (await response.json()) as PatchStudyModeResponse;

@@ -23,6 +23,11 @@ from src.persistence.models import Job, PersonaPreviewRun, Study, StudySectionSt
 from src.services.demo_interview_fixtures import ensure_demo_interview_run
 from src.services.exceptions import ConflictApiError, ValidationApiError
 from src.services.ids import make_public_id
+from src.services.usage_limits import (
+    METRIC_INTERVIEW_RUN,
+    assert_no_in_flight_provider_job,
+    consume_daily_quota,
+)
 from src.simulation.interview_runner import (
     DEFAULT_MODEL_A,
     DEFAULT_MODEL_B,
@@ -156,6 +161,15 @@ def start_interview_run(
     if not latest_preview or not latest_preview.personas:
         raise ConflictApiError(
             "No persona preview found. Run Personas Preview first before generating interviews."
+        )
+
+    assert_no_in_flight_provider_job(session, owner_user_id=study.owner_user_id)
+    if study.owner_user_id:
+        consume_daily_quota(
+            session,
+            settings,
+            owner_user_id=study.owner_user_id,
+            metric_key=METRIC_INTERVIEW_RUN,
         )
 
     custom_questions = payload.get("questions") or config.get("questions") or None

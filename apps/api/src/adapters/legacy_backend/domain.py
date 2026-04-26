@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import Counter
 from datetime import datetime, timezone
 import inspect
+import json
 from pathlib import Path
 import re
 from typing import Any, Dict, List, Optional
@@ -240,6 +241,287 @@ def _run_simulation_compat(run_manager: Any, **kwargs: Any) -> Any:
     )
 
 
+def _build_prompt_override_sections(
+    *,
+    persona: Any,
+    survey_schema: Any,
+    business_product_context: Any,
+    market_context: Any,
+    audience_filter: Any,
+) -> Dict[str, str]:
+    survey_lines = [f"- Title: {survey_schema.survey_title}"]
+    for index, question in enumerate(survey_schema.questions, start=1):
+        survey_lines.append(
+            f"{index}. {question.id} [{question.question_type}] {question.text}"
+        )
+        options = list(getattr(question, "options", []) or [])
+        if options:
+            survey_lines.append(f"   Options: {', '.join(str(option) for option in options)}")
+
+    persona_lines = [
+        f"- Persona ID: {getattr(persona, 'persona_id', '')}",
+        f"- Segment: {getattr(persona, 'segment_label', '') or 'General Segment'}",
+        f"- Fit tier: {getattr(persona, 'fit_tier', '') or 'unspecified'}",
+    ]
+    likely_use_case = getattr(persona, "likely_use_case", None)
+    if likely_use_case:
+        persona_lines.append(f"- Likely use case: {likely_use_case}")
+    likely_barrier = getattr(persona, "likely_barrier", None)
+    if likely_barrier:
+        persona_lines.append(f"- Likely barrier: {likely_barrier}")
+
+    audience_lines: List[str] = []
+    if audience_filter is not None:
+        audience_dump = audience_filter.model_dump(exclude_none=True)
+        for key, value in audience_dump.items():
+            audience_lines.append(f"- {key}: {value}")
+
+    product_lines: List[str] = []
+    if business_product_context is not None:
+        product_dump = business_product_context.model_dump(exclude_none=True)
+        for key, value in product_dump.items():
+            if isinstance(value, list):
+                if value:
+                    product_lines.append(f"- {key}: {', '.join(str(item) for item in value)}")
+            elif value not in (None, "", []):
+                product_lines.append(f"- {key}: {value}")
+
+    market_lines: List[str] = []
+    if market_context is not None:
+        market_dump = market_context.model_dump(exclude_none=True)
+        for key, value in market_dump.items():
+            if key == "direct_competitors" and value:
+                market_lines.append("- Direct competitors:")
+                for competitor in value:
+                    name = competitor.get("name") or "Unnamed competitor"
+                    product_type = competitor.get("product_type") or "Unknown type"
+                    market_lines.append(f"  - {name} ({product_type})")
+                continue
+            if isinstance(value, list):
+                if value:
+                    market_lines.append(f"- {key}: {', '.join(str(item) for item in value)}")
+            elif value not in (None, "", []):
+                market_lines.append(f"- {key}: {value}")
+
+    output_contract = json.dumps(
+        {
+            "answers": [
+                {
+                    "question_id": "<question id>",
+                    "answer": "<answer value matching question type>",
+                }
+            ]
+        },
+        ensure_ascii=False,
+    )
+
+    return {
+        "persona_section": "Persona\n" + "\n".join(persona_lines),
+        "survey_section": "Survey\n" + "\n".join(survey_lines),
+        "audience_section": "Audience\n" + ("\n".join(audience_lines) if audience_lines else "- None provided"),
+        "product_section": "Product\n" + ("\n".join(product_lines) if product_lines else "- None provided"),
+        "market_section": "Market\n" + ("\n".join(market_lines) if market_lines else "- None provided"),
+        "return_format": (
+            "Return strict JSON only.\n"
+            "Output requirements:\n"
+            "1) Return one answer per question id.\n"
+            "2) For single_choice, answer must be one listed option exactly.\n"
+            "3) For multi_choice, answer must be a JSON array of listed options.\n"
+            "4) For likert/numeric, answer must be numeric and within min/max when provided.\n"
+            "5) For open_text, answer must be a concise string.\n"
+            f"6) Match this contract:\n{output_contract}"
+        ),
+    }
+
+
+def _build_prompt_payload_with_override(
+    *,
+    prompt_builder: Any,
+    prompt_user_template_override: Optional[str],
+    persona: Any,
+    survey_schema: Any,
+    business_product_context: Any,
+    market_context: Any,
+    audience_filter: Any,
+) -> Dict[str, Any]:
+    payload = prompt_builder.build_openrouter_prompt_payload(
+        persona=persona,
+        survey_schema=survey_schema,
+        business_product_context=business_product_context,
+        market_context=market_context,
+        audience_filter=audience_filter,
+    )
+    if not prompt_user_template_override:
+        return payload
+
+    sections = _build_prompt_override_sections(
+        persona=persona,
+        survey_schema=survey_schema,
+        business_product_context=business_product_context,
+        market_context=market_context,
+        audience_filter=audience_filter,
+    )
+    user_instruction = prompt_user_template_override
+    for key, value in sections.items():
+        user_instruction = user_instruction.replace(f"{{{{{key}}}}}", value)
+
+    messages = list(payload.get("messages", []))
+    if len(messages) >= 2 and isinstance(messages[1], dict):
+        messages[1] = {**messages[1], "content": user_instruction}
+    else:
+        messages = [
+            {"role": "system", "content": "Return strict JSON only with no prose or markdown."},
+            {"role": "user", "content": user_instruction},
+        ]
+    return {
+        **payload,
+        "messages": messages,
+    }
+
+
+def _extract_provider_error_detail(result: Dict[str, Any]) -> str:
+    raw_text = str(result.get("raw_text") or "").strip()
+    if raw_text:
+        try:
+            parsed = json.loads(raw_text)
+            if isinstance(parsed, dict):
+                error_value = parsed.get("error")
+                if isinstance(error_value, dict):
+                    message = str(error_value.get("message") or "").strip()
+                    if message:
+                        return message
+                message = str(parsed.get("message") or "").strip()
+                if message:
+                    return message
+        except Exception:
+            pass
+        return raw_text[:500]
+    return str(result.get("error") or "Unknown provider error").strip()
+
+
+def _generate_live_response_records_with_debug(
+    *,
+    schemas: Any,
+    run_manager: Any,
+    llm_client: Any,
+    prompt_builder: Any,
+    config: Any,
+    survey_schema: Any,
+    audience_filter: Any,
+    persona_profiles: List[Any],
+    business_product_context: Any,
+    market_context: Any,
+    prompt_user_template_override: Optional[str],
+    openrouter_timeout_sec: int = 45,
+) -> tuple[List[Any], Dict[str, Any]]:
+    extract_answer_map = getattr(run_manager, "_extract_answer_map_from_openrouter_result")
+    coerce_answer = getattr(run_manager, "_coerce_openrouter_answer_value")
+    generate_mock_answer = getattr(run_manager, "_generate_mock_answer")
+    build_context_signals = getattr(run_manager, "_build_context_signals")
+    build_market_signals = getattr(run_manager, "_build_market_signals")
+
+    context_signals = build_context_signals(business_product_context)
+    market_signals = build_market_signals(market_context, business_product_context)
+
+    respondent_model_pairs: List[tuple[str, str, int, Optional[int]]] = []
+    if config.experiment_mode == "mirror":
+        for respondent_index in range(1, config.sample_size + 1):
+            for model in config.selected_models:
+                respondent_model_pairs.append((f"RESP_{respondent_index:03d}", model, respondent_index, None))
+    elif config.experiment_mode == "stability":
+        model = config.selected_models[0]
+        for respondent_index in range(1, config.sample_size + 1):
+            for rerun in range(1, config.reruns_per_persona + 1):
+                respondent_model_pairs.append((f"RESP_{respondent_index:03d}_R{rerun}", model, respondent_index, rerun))
+    else:
+        for respondent_index in range(1, config.sample_size + 1):
+            model = config.selected_models[(respondent_index - 1) % len(config.selected_models)]
+            respondent_model_pairs.append((f"RESP_{respondent_index:03d}", model, respondent_index, None))
+
+    request_errors = 0
+    provider_error_count = 0
+    malformed_json_count = 0
+    fallback_count = 0
+    parsed_count = 0
+    records: List[Any] = []
+
+    for respondent_id, model_name, respondent_index, rerun in respondent_model_pairs:
+        persona = persona_profiles[(respondent_index - 1) % len(persona_profiles)]
+        segment_label = persona.segment_label or "General Segment"
+        prompt_payload = _build_prompt_payload_with_override(
+            prompt_builder=prompt_builder,
+            prompt_user_template_override=prompt_user_template_override,
+            persona=persona,
+            survey_schema=survey_schema,
+            business_product_context=business_product_context,
+            market_context=market_context,
+            audience_filter=audience_filter,
+        )
+        result = llm_client.generate_survey_response_with_openrouter(
+            model_name=model_name,
+            prompt_payload=prompt_payload,
+            timeout=openrouter_timeout_sec,
+        )
+        if not bool(result.get("ok")):
+            request_errors += 1
+            status_code = result.get("status_code")
+            error_text = str(result.get("error") or "").lower()
+            if status_code in {401, 403}:
+                detail = _extract_provider_error_detail(result)
+                raise LegacyModuleApiError(f"OpenRouter authentication failed: {detail}")
+            if status_code and int(status_code) >= 400:
+                provider_error_count += 1
+            if "json" in error_text:
+                malformed_json_count += 1
+
+        parsed_answers = extract_answer_map(result)
+        for question_index, question in enumerate(survey_schema.questions, start=1):
+            answer_value = parsed_answers.get(question.id)
+            validated_answer = coerce_answer(question, answer_value)
+            if validated_answer is None:
+                fallback_count += 1
+                validated_answer = generate_mock_answer(
+                    question=question,
+                    persona=persona,
+                    model=model_name,
+                    context_signals=context_signals,
+                    market_signals=market_signals,
+                    respondent_index=respondent_index,
+                    question_index=question_index,
+                    rerun=rerun,
+                )
+            else:
+                parsed_count += 1
+
+            records.append(
+                schemas.MockResponseRecord(
+                    respondent_id=respondent_id,
+                    model=model_name,
+                    experiment_mode=config.experiment_mode,
+                    survey_title=config.survey_title,
+                    question_id=question.id,
+                    question_text=question.text,
+                    question_type=question.question_type,
+                    answer=validated_answer,
+                    segment_label=segment_label,
+                    run_id=config.run_id,
+                )
+            )
+
+    generation_debug = {
+        "generation_mode": "openrouter_live",
+        "model": config.selected_models[0] if len(config.selected_models) == 1 else None,
+        "respondents": int(len(respondent_model_pairs)),
+        "questions_total": int(len(records)),
+        "request_errors": int(request_errors),
+        "provider_error_count": int(provider_error_count),
+        "malformed_json_count": int(malformed_json_count),
+        "questions_fallback_to_mock": int(fallback_count),
+        "questions_parsed_from_live": int(parsed_count),
+    }
+    return records, generation_debug
+
+
 def parse_normalize_validate_survey(file_name: str, file_bytes: bytes, legacy_root: Path) -> dict:
     parser = load_module("backend.survey.parser", legacy_root)
     normalizer = load_module("backend.survey.schema_normalizer", legacy_root)
@@ -355,6 +637,7 @@ def execute_simulation_run(
     persona_generator = load_module("backend.simulation.persona_generator", settings.legacy_app_root)
     prior_sampler = load_module("backend.grounding.prior_sampler", settings.legacy_app_root)
     llm_client = load_module("backend.simulation.llm_client", settings.legacy_app_root)
+    prompt_builder = load_module("backend.simulation.prompt_builder", settings.legacy_app_root)
 
     audience = schemas.AudienceFilter(**audience_payload)
     survey_schema = schemas.SurveySchema(**survey_payload)
@@ -425,18 +708,18 @@ def execute_simulation_run(
                 "OPENROUTER_BASE_URL": settings.openrouter_base_url,
             }
         ):
-            records = _generate_response_records_compat(
-                run_manager,
+            records, generation_debug = _generate_live_response_records_with_debug(
+                schemas=schemas,
+                run_manager=run_manager,
+                llm_client=llm_client,
+                prompt_builder=prompt_builder,
                 config=config,
                 survey_schema=survey_schema,
                 audience_filter=audience,
                 persona_profiles=personas,
                 business_product_context=business_product_context,
                 market_context=market_context,
-                generation_mode=generation_mode,
-                openrouter_model_name=None,
-                allow_mock_fallback=True,
-                user_instruction_template_override=prompt_user_template_override,
+                prompt_user_template_override=prompt_user_template_override,
             )
             result = _run_simulation_compat(
                 run_manager,
@@ -445,7 +728,8 @@ def execute_simulation_run(
                 provider_model_name=provider_model_name,
                 records=records,
             )
-            generation_debug = dict(run_manager.get_last_live_generation_debug())
+    except LegacyModuleApiError:
+        raise
     except Exception as exc:
         raise LegacyModuleApiError(f"Simulation execution failed: {exc}") from exc
 
@@ -576,6 +860,7 @@ def execute_stability_check(
     persona_generator = load_module("backend.simulation.persona_generator", settings.legacy_app_root)
     stability = load_module("backend.analysis.stability", settings.legacy_app_root)
     llm_client = load_module("backend.simulation.llm_client", settings.legacy_app_root)
+    prompt_builder = load_module("backend.simulation.prompt_builder", settings.legacy_app_root)
 
     audience = schemas.AudienceFilter(**audience_payload)
     survey_schema = schemas.SurveySchema(**survey_payload)
@@ -644,19 +929,19 @@ def execute_stability_check(
                     "OPENROUTER_BASE_URL": settings.openrouter_base_url,
                 }
             ):
-                records = _generate_response_records_compat(
-                    run_manager,
+                records, generation_debug = _generate_live_response_records_with_debug(
+                    schemas=schemas,
+                    run_manager=run_manager,
+                    llm_client=llm_client,
+                    prompt_builder=prompt_builder,
                     config=config,
                     survey_schema=survey_schema,
                     audience_filter=audience,
                     persona_profiles=personas,
                     business_product_context=business_product_context,
                     market_context=market_context,
-                    generation_mode="openrouter_live",
-                    openrouter_model_name=None,
-                    allow_mock_fallback=True,
+                    prompt_user_template_override=None,
                 )
-                generation_debug = dict(run_manager.get_last_live_generation_debug())
             run_summaries.append(
                 stability.summarize_run_outputs(records=records, personas=personas)
             )
@@ -2544,7 +2829,7 @@ def product_url_autofill(*, settings: AppSettings, url: str) -> dict:
     except RuntimeError as exc:
         raise ProviderUnavailableApiError(str(exc)) from exc
     except Exception as exc:
-        raise LegacyModuleApiError(f"Product URL autofill failed: {exc}") from exc
+        raise LegacyModuleApiError("Product URL autofill failed.") from exc
 
 
 def product_image_analysis(*, settings: AppSettings, file_bytes: bytes) -> dict:
@@ -2562,7 +2847,7 @@ def product_image_analysis(*, settings: AppSettings, file_bytes: bytes) -> dict:
     except RuntimeError as exc:
         raise ProviderUnavailableApiError(str(exc)) from exc
     except Exception as exc:
-        raise LegacyModuleApiError(f"Product image analysis failed: {exc}") from exc
+        raise LegacyModuleApiError("Product image analysis failed.") from exc
 
     colors = []
     for color in analysis.get("colors", []):

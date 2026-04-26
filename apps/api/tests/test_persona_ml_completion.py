@@ -3,7 +3,7 @@ from __future__ import annotations
 from src.adapters.legacy_backend.runtime import load_module
 
 
-def test_persona_generator_adds_ml_completion_trace(test_settings):
+def test_persona_generator_heuristic_mode_stays_prompt_safe(test_settings):
     schemas = load_module("backend.schemas", test_settings.legacy_app_root)
     persona_generator = load_module("backend.simulation.persona_generator", test_settings.legacy_app_root)
     prompt_builder = load_module("backend.simulation.prompt_builder", test_settings.legacy_app_root)
@@ -23,11 +23,9 @@ def test_persona_generator_adds_ml_completion_trace(test_settings):
 
     assert mode == "heuristic_only"
     persona = personas[0]
-    assert persona.ml_inference is not None
-    assert persona.ml_inference["method"] == "weighted_tabular_bayes_v1"
-    assert "affordability_pressure" in persona.ml_inference["predicted_traits"]
-    assert persona.household_size_bucket is not None
-    assert persona.affordability_pressure is not None
+    assert not hasattr(persona, "ml_inference")
+    assert persona.persona_id == "PERS_001"
+    assert persona.segment_label
 
     prompt_payload = prompt_builder.build_openrouter_prompt_payload(
         persona=persona,
@@ -47,16 +45,43 @@ def test_persona_generator_adds_ml_completion_trace(test_settings):
     )
 
     user_prompt = prompt_payload["messages"][1]["content"]
-    assert "CONTEXT_JSON" not in user_prompt
-    assert "Persona" in user_prompt
-    assert "Business and product context" in user_prompt
-    assert "Survey" in user_prompt
+    assert "CONTEXT_JSON" in user_prompt
+    assert '"persona_profile"' in user_prompt
+    assert '"business_product_context": null' in user_prompt
+    assert '"survey"' in user_prompt
     assert "ml_inference" not in user_prompt
 
 
-def test_grounded_persona_generation_reports_ml_completion_note(test_settings):
+def test_grounded_persona_generation_reports_prior_notes_when_priors_load(test_settings, monkeypatch):
     schemas = load_module("backend.schemas", test_settings.legacy_app_root)
     persona_generator = load_module("backend.simulation.persona_generator", test_settings.legacy_app_root)
+    monkeypatch.setattr(
+        persona_generator,
+        "load_grounding_priors",
+        lambda **kwargs: {"age_income": object()},
+    )
+    monkeypatch.setattr(
+        persona_generator,
+        "sample_grounded_trait_bundles",
+        lambda **kwargs: [
+                {
+                    "age_bucket": "35_44",
+                    "income_bucket": "100k_149k",
+                    "ownership_group": "owner",
+                    "home_type_group": "single_family",
+                    "work_mode_hint": "remote",
+                    "household_size_bucket": "2",
+                    "affordability_pressure": "low_pressure",
+                    "housing_burden_proxy": "low",
+                    "spend_intensity_bucket": "balanced",
+                }
+            ],
+        )
+    monkeypatch.setattr(
+        persona_generator,
+        "get_last_prior_loading_notes",
+        lambda: [{"prior_table_name": "age_income"}],
+    )
 
     personas, mode = persona_generator.generate_persona_profiles_with_mode(
         audience_filter=schemas.AudienceFilter(
@@ -72,9 +97,10 @@ def test_grounded_persona_generation_reports_ml_completion_note(test_settings):
     )
 
     assert mode == "grounded_priors"
-    assert personas[0].ml_inference is not None
+    assert personas[0].household_size_bucket is not None
+    assert personas[0].affordability_pressure is not None
     notes = persona_generator.get_last_persona_prior_notes()
-    assert any(note.get("prior_table_name") == "ml_persona_completion" for note in notes)
+    assert any(note.get("prior_table_name") == "age_income" for note in notes)
 
 
 def test_prompt_builder_returns_human_readable_preview(test_settings):
@@ -84,7 +110,7 @@ def test_prompt_builder_returns_human_readable_preview(test_settings):
     persona = schemas.PersonaProfile(
         persona_id="PERS_001",
         segment_label="Remote Professionals",
-        fit_tier="high",
+        fit_tier="strong",
         age_bucket="30-39",
         income_bucket="$100k-$149k",
         ownership="owner",
@@ -93,7 +119,7 @@ def test_prompt_builder_returns_human_readable_preview(test_settings):
         likely_use_case="Home office",
         likely_barrier="Cost",
     )
-    preview = prompt_builder.build_openrouter_prompt_preview(
+    payload = prompt_builder.build_openrouter_prompt_payload(
         persona=persona,
         survey_schema=schemas.SurveySchema(
             survey_title="Prompt Preview Test",
@@ -124,11 +150,11 @@ def test_prompt_builder_returns_human_readable_preview(test_settings):
             age_max=55,
         ),
     )
-
-    assert "System\n" in preview["combined_prompt"]
-    assert "User\n" in preview["combined_prompt"]
-    assert "You are acting as this grounded persona." in preview["user_instruction"]
-    assert "Persona ID: PERS_001" in preview["user_instruction"]
-    assert "Product: Tahoe Mini" in preview["user_instruction"]
-    assert "Category: Backyard prefab studio" in preview["user_instruction"]
-    assert "Q1 [likert] How interested are you?" in preview["user_instruction"]
+    assert payload["messages"][0]["role"] == "system"
+    assert "Return strict JSON only" in payload["messages"][0]["content"]
+    assert payload["messages"][1]["role"] == "user"
+    assert "CONTEXT_JSON" in payload["messages"][1]["content"]
+    assert "PERS_001" in payload["messages"][1]["content"]
+    assert "Tahoe Mini" in payload["messages"][1]["content"]
+    assert "Backyard prefab studio" in payload["messages"][1]["content"]
+    assert '"id": "Q1"' in payload["messages"][1]["content"]

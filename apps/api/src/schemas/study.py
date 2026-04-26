@@ -120,8 +120,6 @@ class CanonicalStudy(BaseModel):
 
 class StudyCreateRequest(BaseModel):
     study_mode: Optional[str] = None
-    owner_user_id: Optional[str] = None
-    owner_org_id: Optional[str] = None
 
 
 class StudyModeUpdateRequest(BaseModel):

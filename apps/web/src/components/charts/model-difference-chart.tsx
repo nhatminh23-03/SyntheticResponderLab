@@ -39,7 +39,7 @@ export function ModelDifferenceChart({
       emptyMessage={emptyMessage}
       note={note}
     >
-      <div className="mb-4 flex flex-wrap items-center gap-4 text-xs text-app-muted">
+      <div className="mb-4 grid gap-2.5 text-xs text-app-muted sm:flex sm:flex-wrap sm:items-center sm:gap-x-5 sm:gap-y-3">
         {models.map((model, index) => (
           <div key={model} className="flex items-center gap-2">
             <span

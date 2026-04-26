@@ -300,7 +300,7 @@ export function InterviewInsightsSection() {
 
   return (
     <SectionWrapper id="interview-insights" scrollable contentClassName="relative">
-      <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_22rem]">
+      <div className="grid items-start gap-8 xl:grid-cols-[minmax(0,1fr)_22rem]">
         <div className="min-w-0 space-y-6">
           <RevealOnScroll>
             <SectionHeader
@@ -374,7 +374,7 @@ export function InterviewInsightsSection() {
                   </button>
                 </div>
 
-                <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,16rem)_minmax(0,1fr)]">
+                <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,16rem)_minmax(0,1fr)]">
                   <div className="space-y-4">
                     <div>
                       <label className="mb-2 block text-[0.68rem] uppercase tracking-[0.12em] text-app-muted">
@@ -523,7 +523,7 @@ export function InterviewInsightsSection() {
           )}
         </div>
 
-        <div className="space-y-4 lg:sticky lg:top-[calc(var(--nav-height)+1.5rem)]">
+        <div className="space-y-4 xl:sticky xl:top-[calc(var(--nav-height)+1.5rem)]">
           {themes.length > 0 && (
             <RevealOnScroll delay={0.06}>
               <GlassPanel className="p-5">

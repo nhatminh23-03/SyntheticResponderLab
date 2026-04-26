@@ -181,7 +181,7 @@ export function StudyModeSection() {
       className="overflow-hidden"
       contentClassName="relative"
     >
-      <div className="grid min-h-[calc(100svh-var(--nav-height)-1rem)] gap-8 lg:grid-cols-[minmax(0,0.7fr)_minmax(0,1.3fr)] lg:items-center">
+      <div className="grid gap-8 lg:min-h-[calc(100svh-var(--nav-height)-1rem)] xl:grid-cols-[minmax(0,0.7fr)_minmax(0,1.3fr)] xl:items-center">
         <RevealOnScroll>
           <SectionHeader
             index={1}
@@ -214,6 +214,7 @@ export function StudyModeSection() {
               variant="secondary"
               onClick={() => scrollToSection("audience")}
               disabled={!selectedMode}
+              className="w-full sm:w-auto"
             >
               Continue to Audience Setup
               <ArrowRightIcon />
@@ -221,7 +222,7 @@ export function StudyModeSection() {
           </div>
         </RevealOnScroll>
 
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid gap-4 md:grid-cols-2">
           {studyModeCards.map((card, index) => {
             const isSelected = selectedMode === card.value;
 
@@ -243,7 +244,7 @@ export function StudyModeSection() {
                         : "hover:[border-color:var(--color-border-strong)] hover:[background:var(--button-secondary-bg-hover)]"
                     )}
                   >
-                    <div className="flex h-full flex-col rounded-[1.45rem] border border-app-border p-5 [background:var(--theme-panel-gradient)]">
+                    <div className="flex h-full flex-col rounded-[1.35rem] border border-app-border p-4 sm:rounded-[1.45rem] sm:p-5 [background:var(--theme-panel-gradient)]">
                       <div className="flex items-start justify-between gap-4">
                         <div>
                           <div className="flex flex-wrap items-center gap-3">
@@ -252,7 +253,7 @@ export function StudyModeSection() {
                               <BadgeChip tone="cyan">Current selection</BadgeChip>
                             ) : null}
                           </div>
-                          <h3 className="mt-4 font-display text-[1.85rem] font-medium tracking-[-0.045em] text-app-text">
+                          <h3 className="mt-4 font-display text-[1.55rem] font-medium tracking-[-0.045em] text-app-text sm:text-[1.7rem] lg:text-[1.85rem]">
                             {card.title}
                           </h3>
                           <p className="mt-3 max-w-2xl text-sm leading-6 text-app-muted">
@@ -262,7 +263,7 @@ export function StudyModeSection() {
 
                         <div
                           className={cn(
-                            "relative flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border",
+                            "relative flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border sm:h-12 sm:w-12",
                             isSelected
                               ? "text-app-cyan [border-color:var(--color-border-strong)] [background:var(--color-brand-primary-soft)]"
                               : "text-app-muted [border-color:var(--status-neutral-border)] [background:var(--status-neutral-bg)]"
@@ -280,7 +281,7 @@ export function StudyModeSection() {
                         {card.bullets.map((bullet) => (
                           <div
                             key={bullet}
-                            className="flex items-start gap-3 rounded-2xl border border-app-border px-3.5 py-3 [background:var(--button-secondary-bg)]"
+                            className="flex items-start gap-3 rounded-2xl border border-app-border px-3 py-3 [background:var(--button-secondary-bg)] sm:px-3.5"
                           >
                             <span
                               className={cn(
@@ -297,7 +298,7 @@ export function StudyModeSection() {
                         ))}
                       </div>
 
-                      <div className="mt-auto flex items-center justify-between gap-4 pt-5">
+                      <div className="mt-auto flex flex-wrap items-center justify-between gap-3 pt-5">
                         <div className="text-[0.72rem] uppercase tracking-[0.24em] text-app-muted">
                           {isBusy
                             ? "Saving mode..."

@@ -498,7 +498,7 @@ export function ProductSection() {
                     Review everything before applying it to your draft.
                 </p>
 
-                <div className="mt-5 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
+                <div className="mt-5 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
                   <TextInput
                     value={urlInput}
                     onChange={setUrlInput}
@@ -524,7 +524,7 @@ export function ProductSection() {
                         Apply Autofill to Draft
                       </Button>
                     </div>
-                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    <div className="mt-4 grid gap-3 md:grid-cols-2">
                       <PreviewField
                         label="Business"
                         value={
@@ -568,7 +568,7 @@ export function ProductSection() {
                 title="Business"
                 description="Basic company context behind this product."
               >
-                <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid gap-4 md:grid-cols-2">
                   <Field label="Business Name">
                     <TextInput
                       value={draft.business_name}
@@ -590,7 +590,7 @@ export function ProductSection() {
                 title="Product"
                 description="The main product respondents will evaluate."
               >
-                <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid gap-4 md:grid-cols-2">
                   <Field label="Product Name">
                     <TextInput
                       value={draft.product_name}
@@ -628,7 +628,7 @@ export function ProductSection() {
                       placeholder="Homeowners with usable backyard/property space"
                     />
                   </Field>
-                  <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="grid gap-4 md:grid-cols-2">
                     <Field label="Price Range">
                       <TextInput
                         value={draft.price_range}
@@ -752,7 +752,7 @@ export function ProductSection() {
                     </label>
                   ) : (
                     <div className="mt-5 space-y-5">
-                      <div className="grid gap-4 md:grid-cols-[minmax(0,0.88fr)_minmax(0,1.12fr)]">
+                      <div className="grid gap-4 lg:grid-cols-[minmax(0,0.88fr)_minmax(0,1.12fr)]">
                         <div className="overflow-hidden rounded-[1.35rem] border border-app-border [background:var(--status-neutral-bg)]">
                           {uploadedImagePreviewUrl ? (
                             <img
@@ -822,7 +822,7 @@ export function ProductSection() {
                         </div>
                       </div>
 
-                      <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="grid gap-3 md:grid-cols-2">
                         <Button
                           variant="secondary"
                           onClick={handleGenerateVisualSummary}

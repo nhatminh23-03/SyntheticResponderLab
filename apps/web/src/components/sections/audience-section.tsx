@@ -398,7 +398,7 @@ export function AudienceSection() {
                 title="Demographics"
                 description="Leave numeric fields blank to keep the audience broad."
               >
-                <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid gap-4 md:grid-cols-2">
                   <Field label="Age Min" error={fieldErrors.age_min}>
                     <TextInput
                       value={draft.age_min}
