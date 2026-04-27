@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from collections import Counter
 from datetime import datetime, timezone
+import inspect
+import json
 from pathlib import Path
+import re
 from typing import Any, Dict, List, Optional
 
 import pandas as pd
@@ -12,6 +15,99 @@ from src.adapters.legacy_backend.runtime import load_module, load_service_accoun
 from src.adapters.legacy_backend.survey_docx_fallback import parse_aytm_style_docx_to_validated_schema
 from src.config.settings import AppSettings
 from src.services.exceptions import LegacyModuleApiError, ProviderUnavailableApiError, ValidationApiError
+
+
+_ANALYSIS_STOP_WORDS = {
+    "about",
+    "again",
+    "also",
+    "always",
+    "among",
+    "and",
+    "any",
+    "are",
+    "because",
+    "been",
+    "being",
+    "both",
+    "but",
+    "can",
+    "could",
+    "does",
+    "doing",
+    "each",
+    "else",
+    "for",
+    "from",
+    "had",
+    "has",
+    "have",
+    "having",
+    "her",
+    "here",
+    "him",
+    "his",
+    "how",
+    "into",
+    "its",
+    "just",
+    "like",
+    "make",
+    "more",
+    "most",
+    "much",
+    "not",
+    "now",
+    "our",
+    "out",
+    "really",
+    "same",
+    "she",
+    "should",
+    "some",
+    "such",
+    "than",
+    "that",
+    "the",
+    "their",
+    "them",
+    "then",
+    "there",
+    "these",
+    "they",
+    "this",
+    "those",
+    "too",
+    "use",
+    "very",
+    "want",
+    "was",
+    "were",
+    "what",
+    "when",
+    "with",
+    "would",
+    "you",
+    "your",
+}
+
+_LIKERT_ORDER = {
+    "1": 1,
+    "strongly disagree": 1,
+    "disagree": 2,
+    "somewhat disagree": 3,
+    "neutral": 4,
+    "neither agree nor disagree": 4,
+    "somewhat agree": 5,
+    "agree": 6,
+    "strongly agree": 7,
+    "2": 2,
+    "3": 3,
+    "4": 4,
+    "5": 5,
+    "6": 6,
+    "7": 7,
+}
 
 
 def validate_audience(payload: dict, legacy_root: Path) -> dict:
@@ -93,6 +189,337 @@ def list_model_catalog(*, settings: AppSettings) -> dict:
         "models": fallback_models,
         "warning": result.get("error") or "OpenRouter model catalog unavailable.",
     }
+
+
+def _generate_response_records_compat(run_manager: Any, **kwargs: Any) -> List[Any]:
+    """Call legacy run_manager.generate_response_records across signature variants.
+
+    The legacy app in this repository can drift independently from the API adapter.
+    Some versions accept optional kwargs like allow_mock_fallback or
+    user_instruction_template_override, while older versions do not.
+    """
+
+    generate_records = run_manager.generate_response_records
+
+    return _call_with_supported_kwargs(generate_records, **kwargs)
+
+
+def _call_with_supported_kwargs(function: Any, **kwargs: Any) -> Any:
+    """Call a function while safely dropping unsupported keyword arguments."""
+
+    try:
+        signature = inspect.signature(function)
+        accepts_var_kwargs = any(
+            parameter.kind is inspect.Parameter.VAR_KEYWORD
+            for parameter in signature.parameters.values()
+        )
+
+        if accepts_var_kwargs:
+            return function(**kwargs)
+
+        filtered_kwargs = {
+            key: value for key, value in kwargs.items() if key in signature.parameters
+        }
+        return function(**filtered_kwargs)
+    except (TypeError, ValueError):
+        return function(**kwargs)
+
+
+def _run_simulation_compat(run_manager: Any, **kwargs: Any) -> Any:
+    """Call whichever simulation entrypoint exists in the loaded legacy run manager."""
+
+    run_simulation = getattr(run_manager, "run_simulation", None)
+    if callable(run_simulation):
+        return _call_with_supported_kwargs(run_simulation, **kwargs)
+
+    run_mock_simulation = getattr(run_manager, "run_mock_simulation", None)
+    if callable(run_mock_simulation):
+        return _call_with_supported_kwargs(run_mock_simulation, **kwargs)
+
+    raise AttributeError(
+        "Legacy run_manager exposes neither run_simulation nor run_mock_simulation."
+    )
+
+
+def _build_prompt_override_sections(
+    *,
+    persona: Any,
+    survey_schema: Any,
+    business_product_context: Any,
+    market_context: Any,
+    audience_filter: Any,
+) -> Dict[str, str]:
+    survey_lines = [f"- Title: {survey_schema.survey_title}"]
+    for index, question in enumerate(survey_schema.questions, start=1):
+        survey_lines.append(
+            f"{index}. {question.id} [{question.question_type}] {question.text}"
+        )
+        options = list(getattr(question, "options", []) or [])
+        if options:
+            survey_lines.append(f"   Options: {', '.join(str(option) for option in options)}")
+
+    persona_lines = [
+        f"- Persona ID: {getattr(persona, 'persona_id', '')}",
+        f"- Segment: {getattr(persona, 'segment_label', '') or 'General Segment'}",
+        f"- Fit tier: {getattr(persona, 'fit_tier', '') or 'unspecified'}",
+    ]
+    likely_use_case = getattr(persona, "likely_use_case", None)
+    if likely_use_case:
+        persona_lines.append(f"- Likely use case: {likely_use_case}")
+    likely_barrier = getattr(persona, "likely_barrier", None)
+    if likely_barrier:
+        persona_lines.append(f"- Likely barrier: {likely_barrier}")
+
+    audience_lines: List[str] = []
+    if audience_filter is not None:
+        audience_dump = audience_filter.model_dump(exclude_none=True)
+        for key, value in audience_dump.items():
+            audience_lines.append(f"- {key}: {value}")
+
+    product_lines: List[str] = []
+    if business_product_context is not None:
+        product_dump = business_product_context.model_dump(exclude_none=True)
+        for key, value in product_dump.items():
+            if isinstance(value, list):
+                if value:
+                    product_lines.append(f"- {key}: {', '.join(str(item) for item in value)}")
+            elif value not in (None, "", []):
+                product_lines.append(f"- {key}: {value}")
+
+    market_lines: List[str] = []
+    if market_context is not None:
+        market_dump = market_context.model_dump(exclude_none=True)
+        for key, value in market_dump.items():
+            if key == "direct_competitors" and value:
+                market_lines.append("- Direct competitors:")
+                for competitor in value:
+                    name = competitor.get("name") or "Unnamed competitor"
+                    product_type = competitor.get("product_type") or "Unknown type"
+                    market_lines.append(f"  - {name} ({product_type})")
+                continue
+            if isinstance(value, list):
+                if value:
+                    market_lines.append(f"- {key}: {', '.join(str(item) for item in value)}")
+            elif value not in (None, "", []):
+                market_lines.append(f"- {key}: {value}")
+
+    output_contract = json.dumps(
+        {
+            "answers": [
+                {
+                    "question_id": "<question id>",
+                    "answer": "<answer value matching question type>",
+                }
+            ]
+        },
+        ensure_ascii=False,
+    )
+
+    return {
+        "persona_section": "Persona\n" + "\n".join(persona_lines),
+        "survey_section": "Survey\n" + "\n".join(survey_lines),
+        "audience_section": "Audience\n" + ("\n".join(audience_lines) if audience_lines else "- None provided"),
+        "product_section": "Product\n" + ("\n".join(product_lines) if product_lines else "- None provided"),
+        "market_section": "Market\n" + ("\n".join(market_lines) if market_lines else "- None provided"),
+        "return_format": (
+            "Return strict JSON only.\n"
+            "Output requirements:\n"
+            "1) Return one answer per question id.\n"
+            "2) For single_choice, answer must be one listed option exactly.\n"
+            "3) For multi_choice, answer must be a JSON array of listed options.\n"
+            "4) For likert/numeric, answer must be numeric and within min/max when provided.\n"
+            "5) For open_text, answer must be a concise string.\n"
+            f"6) Match this contract:\n{output_contract}"
+        ),
+    }
+
+
+def _build_prompt_payload_with_override(
+    *,
+    prompt_builder: Any,
+    prompt_user_template_override: Optional[str],
+    persona: Any,
+    survey_schema: Any,
+    business_product_context: Any,
+    market_context: Any,
+    audience_filter: Any,
+) -> Dict[str, Any]:
+    payload = prompt_builder.build_openrouter_prompt_payload(
+        persona=persona,
+        survey_schema=survey_schema,
+        business_product_context=business_product_context,
+        market_context=market_context,
+        audience_filter=audience_filter,
+    )
+    if not prompt_user_template_override:
+        return payload
+
+    sections = _build_prompt_override_sections(
+        persona=persona,
+        survey_schema=survey_schema,
+        business_product_context=business_product_context,
+        market_context=market_context,
+        audience_filter=audience_filter,
+    )
+    user_instruction = prompt_user_template_override
+    for key, value in sections.items():
+        user_instruction = user_instruction.replace(f"{{{{{key}}}}}", value)
+
+    messages = list(payload.get("messages", []))
+    if len(messages) >= 2 and isinstance(messages[1], dict):
+        messages[1] = {**messages[1], "content": user_instruction}
+    else:
+        messages = [
+            {"role": "system", "content": "Return strict JSON only with no prose or markdown."},
+            {"role": "user", "content": user_instruction},
+        ]
+    return {
+        **payload,
+        "messages": messages,
+    }
+
+
+def _extract_provider_error_detail(result: Dict[str, Any]) -> str:
+    raw_text = str(result.get("raw_text") or "").strip()
+    if raw_text:
+        try:
+            parsed = json.loads(raw_text)
+            if isinstance(parsed, dict):
+                error_value = parsed.get("error")
+                if isinstance(error_value, dict):
+                    message = str(error_value.get("message") or "").strip()
+                    if message:
+                        return message
+                message = str(parsed.get("message") or "").strip()
+                if message:
+                    return message
+        except Exception:
+            pass
+        return raw_text[:500]
+    return str(result.get("error") or "Unknown provider error").strip()
+
+
+def _generate_live_response_records_with_debug(
+    *,
+    schemas: Any,
+    run_manager: Any,
+    llm_client: Any,
+    prompt_builder: Any,
+    config: Any,
+    survey_schema: Any,
+    audience_filter: Any,
+    persona_profiles: List[Any],
+    business_product_context: Any,
+    market_context: Any,
+    prompt_user_template_override: Optional[str],
+    openrouter_timeout_sec: int = 45,
+) -> tuple[List[Any], Dict[str, Any]]:
+    extract_answer_map = getattr(run_manager, "_extract_answer_map_from_openrouter_result")
+    coerce_answer = getattr(run_manager, "_coerce_openrouter_answer_value")
+    generate_mock_answer = getattr(run_manager, "_generate_mock_answer")
+    build_context_signals = getattr(run_manager, "_build_context_signals")
+    build_market_signals = getattr(run_manager, "_build_market_signals")
+
+    context_signals = build_context_signals(business_product_context)
+    market_signals = build_market_signals(market_context, business_product_context)
+
+    respondent_model_pairs: List[tuple[str, str, int, Optional[int]]] = []
+    if config.experiment_mode == "mirror":
+        for respondent_index in range(1, config.sample_size + 1):
+            for model in config.selected_models:
+                respondent_model_pairs.append((f"RESP_{respondent_index:03d}", model, respondent_index, None))
+    elif config.experiment_mode == "stability":
+        model = config.selected_models[0]
+        for respondent_index in range(1, config.sample_size + 1):
+            for rerun in range(1, config.reruns_per_persona + 1):
+                respondent_model_pairs.append((f"RESP_{respondent_index:03d}_R{rerun}", model, respondent_index, rerun))
+    else:
+        for respondent_index in range(1, config.sample_size + 1):
+            model = config.selected_models[(respondent_index - 1) % len(config.selected_models)]
+            respondent_model_pairs.append((f"RESP_{respondent_index:03d}", model, respondent_index, None))
+
+    request_errors = 0
+    provider_error_count = 0
+    malformed_json_count = 0
+    fallback_count = 0
+    parsed_count = 0
+    records: List[Any] = []
+
+    for respondent_id, model_name, respondent_index, rerun in respondent_model_pairs:
+        persona = persona_profiles[(respondent_index - 1) % len(persona_profiles)]
+        segment_label = persona.segment_label or "General Segment"
+        prompt_payload = _build_prompt_payload_with_override(
+            prompt_builder=prompt_builder,
+            prompt_user_template_override=prompt_user_template_override,
+            persona=persona,
+            survey_schema=survey_schema,
+            business_product_context=business_product_context,
+            market_context=market_context,
+            audience_filter=audience_filter,
+        )
+        result = llm_client.generate_survey_response_with_openrouter(
+            model_name=model_name,
+            prompt_payload=prompt_payload,
+            timeout=openrouter_timeout_sec,
+        )
+        if not bool(result.get("ok")):
+            request_errors += 1
+            status_code = result.get("status_code")
+            error_text = str(result.get("error") or "").lower()
+            if status_code in {401, 403}:
+                detail = _extract_provider_error_detail(result)
+                raise LegacyModuleApiError(f"OpenRouter authentication failed: {detail}")
+            if status_code and int(status_code) >= 400:
+                provider_error_count += 1
+            if "json" in error_text:
+                malformed_json_count += 1
+
+        parsed_answers = extract_answer_map(result)
+        for question_index, question in enumerate(survey_schema.questions, start=1):
+            answer_value = parsed_answers.get(question.id)
+            validated_answer = coerce_answer(question, answer_value)
+            if validated_answer is None:
+                fallback_count += 1
+                validated_answer = generate_mock_answer(
+                    question=question,
+                    persona=persona,
+                    model=model_name,
+                    context_signals=context_signals,
+                    market_signals=market_signals,
+                    respondent_index=respondent_index,
+                    question_index=question_index,
+                    rerun=rerun,
+                )
+            else:
+                parsed_count += 1
+
+            records.append(
+                schemas.MockResponseRecord(
+                    respondent_id=respondent_id,
+                    model=model_name,
+                    experiment_mode=config.experiment_mode,
+                    survey_title=config.survey_title,
+                    question_id=question.id,
+                    question_text=question.text,
+                    question_type=question.question_type,
+                    answer=validated_answer,
+                    segment_label=segment_label,
+                    run_id=config.run_id,
+                )
+            )
+
+    generation_debug = {
+        "generation_mode": "openrouter_live",
+        "model": config.selected_models[0] if len(config.selected_models) == 1 else None,
+        "respondents": int(len(respondent_model_pairs)),
+        "questions_total": int(len(records)),
+        "request_errors": int(request_errors),
+        "provider_error_count": int(provider_error_count),
+        "malformed_json_count": int(malformed_json_count),
+        "questions_fallback_to_mock": int(fallback_count),
+        "questions_parsed_from_live": int(parsed_count),
+    }
+    return records, generation_debug
 
 
 def parse_normalize_validate_survey(file_name: str, file_bytes: bytes, legacy_root: Path) -> dict:
@@ -203,12 +630,14 @@ def execute_simulation_run(
     product_payload: Optional[dict],
     market_payload: Optional[dict],
     geography_context: Optional[Dict[str, Any]],
+    prompt_user_template_override: Optional[str] = None,
 ) -> dict:
     schemas = load_module("backend.schemas", settings.legacy_app_root)
     run_manager = load_module("backend.simulation.run_manager", settings.legacy_app_root)
     persona_generator = load_module("backend.simulation.persona_generator", settings.legacy_app_root)
     prior_sampler = load_module("backend.grounding.prior_sampler", settings.legacy_app_root)
     llm_client = load_module("backend.simulation.llm_client", settings.legacy_app_root)
+    prompt_builder = load_module("backend.simulation.prompt_builder", settings.legacy_app_root)
 
     audience = schemas.AudienceFilter(**audience_payload)
     survey_schema = schemas.SurveySchema(**survey_payload)
@@ -240,8 +669,11 @@ def execute_simulation_run(
         except Exception:
             openrouter_available = False
 
-    generation_mode = "openrouter_live" if openrouter_available else "mock"
-    provider_model_name = experiment.selected_models[0] if experiment.selected_models else "openai/gpt-4o-mini"
+    if not openrouter_available:
+        raise ProviderUnavailableApiError("OPENROUTER_API_KEY is required for live OpenRouter survey generation.")
+
+    generation_mode = "openrouter_live"
+    provider_model_name = experiment.selected_models[0] if len(experiment.selected_models) == 1 else None
     run_id = f"RUN_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
 
     config = schemas.SimulationRunConfig(
@@ -249,7 +681,7 @@ def execute_simulation_run(
         survey_title=survey_schema.survey_title,
         survey_question_count=len(survey_schema.questions),
         sample_size=experiment.sample_size,
-        selected_models=experiment.selected_models or [provider_model_name],
+        selected_models=experiment.selected_models or ["openai/gpt-4o-mini"],
         experiment_mode=experiment.experiment_mode,
         reruns_per_persona=experiment.reruns_per_persona,
         status="pending",
@@ -276,34 +708,66 @@ def execute_simulation_run(
                 "OPENROUTER_BASE_URL": settings.openrouter_base_url,
             }
         ):
-            records = run_manager.generate_mock_response_records(
+            records, generation_debug = _generate_live_response_records_with_debug(
+                schemas=schemas,
+                run_manager=run_manager,
+                llm_client=llm_client,
+                prompt_builder=prompt_builder,
                 config=config,
                 survey_schema=survey_schema,
                 audience_filter=audience,
                 persona_profiles=personas,
                 business_product_context=business_product_context,
                 market_context=market_context,
-                generation_mode=generation_mode,
-                openrouter_model_name=provider_model_name,
+                prompt_user_template_override=prompt_user_template_override,
             )
-            result = run_manager.run_mock_simulation(
+            result = _run_simulation_compat(
+                run_manager,
                 config=config,
                 generation_mode=generation_mode,
                 provider_model_name=provider_model_name,
+                records=records,
             )
-            generation_debug = dict(run_manager.get_last_live_generation_debug())
+    except LegacyModuleApiError:
+        raise
     except Exception as exc:
         raise LegacyModuleApiError(f"Simulation execution failed: {exc}") from exc
 
     warnings: List[str] = []
-    if generation_mode != "openrouter_live":
-        warnings.append("OpenRouter live path unavailable; used mock response generation.")
+    fallback_count = int(generation_debug.get("questions_fallback_to_mock", 0) or 0)
+    parsed_count = int(generation_debug.get("questions_parsed_from_live", 0) or 0)
+    request_errors = int(generation_debug.get("request_errors", 0) or 0)
+    provider_error_count = int(generation_debug.get("provider_error_count", 0) or 0)
+    malformed_json_count = int(generation_debug.get("malformed_json_count", 0) or 0)
+    if provider_error_count > 0:
+        warnings.append(
+            f"OpenRouter returned {provider_error_count} provider-level error(s); temporary deterministic fallback filled the missing answers."
+        )
+    if malformed_json_count > 0:
+        warnings.append(
+            f"OpenRouter returned malformed JSON for {malformed_json_count} respondent request(s); temporary fallback filled the missing answers."
+        )
+    if request_errors > 0 and provider_error_count == 0 and malformed_json_count == 0:
+        warnings.append(
+            "OpenRouter live generation hit provider or parsing errors; temporary deterministic fallback filled the missing answers."
+        )
+    if fallback_count > 0:
+        warnings.append(
+            f"Temporary migration fallback was used for {fallback_count} question(s); {parsed_count} question(s) were parsed from live model output."
+        )
+    if fallback_count > 0 and parsed_count == 0:
+        warnings.append("This run completed with temporary deterministic fallback for every saved answer because no usable live answers were parsed.")
     if persona_generation_mode == "heuristic_fallback":
         warnings.append("Grounded priors unavailable; personas used heuristic fallback.")
     if geography_context and not geography_context.get("puma"):
         warnings.append("Geography context was partial; geo-aware priors may have fallen back to global tables.")
     if not geography_context and audience_payload.get("zip_code"):
         warnings.append("ZIP was provided, but geography context could not be resolved; geo-aware priors stayed global.")
+    run_debug_summary = _build_run_debug_summary(
+        generation_debug=generation_debug,
+        personas=personas,
+        prior_notes=prior_notes,
+    )
 
     return {
         "run_id": result.run_id,
@@ -317,7 +781,7 @@ def execute_simulation_run(
         "notes": result.notes,
         "created_at": result.created_at,
         "generation_mode": generation_mode,
-        "provider_model_name": provider_model_name if generation_mode == "openrouter_live" else None,
+        "provider_model_name": provider_model_name,
         "persona_generation_mode": persona_generation_mode,
         "grounded_priors_available": grounded_priors_available,
         "cex_affordability_available": affordability_priors_available,
@@ -325,6 +789,7 @@ def execute_simulation_run(
         "prior_notes": prior_notes,
         "warnings": warnings,
         "generation_debug": generation_debug,
+        "run_debug_summary": run_debug_summary,
         "run_conditions": {
             "context_influence": {
                 "enabled": True,
@@ -394,6 +859,8 @@ def execute_stability_check(
     run_manager = load_module("backend.simulation.run_manager", settings.legacy_app_root)
     persona_generator = load_module("backend.simulation.persona_generator", settings.legacy_app_root)
     stability = load_module("backend.analysis.stability", settings.legacy_app_root)
+    llm_client = load_module("backend.simulation.llm_client", settings.legacy_app_root)
+    prompt_builder = load_module("backend.simulation.prompt_builder", settings.legacy_app_root)
 
     audience = schemas.AudienceFilter(**audience_payload)
     survey_schema = schemas.SurveySchema(**survey_payload)
@@ -408,6 +875,20 @@ def execute_stability_check(
         grounded_priors_available = bool(persona_generator.grounded_priors_available())
     except Exception:
         grounded_priors_available = False
+
+    with temporary_env(
+        {
+            "OPENROUTER_API_KEY": settings.openrouter_api_key,
+            "OPENROUTER_BASE_URL": settings.openrouter_base_url,
+        }
+    ):
+        try:
+            openrouter_available = bool(llm_client.openrouter_api_key_available())
+        except Exception:
+            openrouter_available = False
+
+    if not openrouter_available:
+        raise ProviderUnavailableApiError("OPENROUTER_API_KEY is required for live OpenRouter stability checks.")
 
     run_summaries: List[dict] = []
     warnings: List[str] = [
@@ -442,17 +923,34 @@ def execute_stability_check(
         )
 
         try:
-            records = run_manager.generate_mock_response_records(
-                config=config,
-                survey_schema=survey_schema,
-                audience_filter=audience,
-                persona_profiles=personas,
-                business_product_context=business_product_context,
-                market_context=market_context,
-            )
+            with temporary_env(
+                {
+                    "OPENROUTER_API_KEY": settings.openrouter_api_key,
+                    "OPENROUTER_BASE_URL": settings.openrouter_base_url,
+                }
+            ):
+                records, generation_debug = _generate_live_response_records_with_debug(
+                    schemas=schemas,
+                    run_manager=run_manager,
+                    llm_client=llm_client,
+                    prompt_builder=prompt_builder,
+                    config=config,
+                    survey_schema=survey_schema,
+                    audience_filter=audience,
+                    persona_profiles=personas,
+                    business_product_context=business_product_context,
+                    market_context=market_context,
+                    prompt_user_template_override=None,
+                )
             run_summaries.append(
                 stability.summarize_run_outputs(records=records, personas=personas)
             )
+            request_errors = int(generation_debug.get("request_errors", 0) or 0)
+            fallback_count = int(generation_debug.get("questions_fallback_to_mock", 0) or 0)
+            if request_errors > 0 or fallback_count > 0:
+                warnings.append(
+                    f"Stability rerun {rerun_index} used temporary deterministic fallback for {fallback_count} question(s) after {request_errors} live request error(s)."
+                )
         except Exception as exc:
             raise LegacyModuleApiError(f"Stability check failed: {exc}") from exc
 
@@ -480,6 +978,7 @@ def build_analysis_view(
     settings: AppSettings,
     study_mode: Optional[str],
     latest_run_payload: Optional[Dict[str, Any]],
+    survey_payload: Optional[Dict[str, Any]],
     question_id: Optional[str],
     model: Optional[str],
     segment: Optional[str],
@@ -517,7 +1016,7 @@ def build_analysis_view(
     summary = _compute_dataset_summary(df)
     model_options = ["All", *_list_models(df)]
     segment_options = ["All", *_list_segments(df)]
-    question_options = _build_question_options(df)
+    question_options = _build_question_options(df, survey_payload=survey_payload)
 
     selected_model = model if model in model_options else "All"
     selected_segment = segment if segment in segment_options else "All"
@@ -582,6 +1081,11 @@ def build_analysis_view(
         records=records,
         realism_module=realism,
     )
+    dashboard_questions = _build_analysis_dashboard_questions(
+        filtered_df=filtered_df,
+        question_options=question_options,
+        open_text_limit=open_text_limit,
+    )
 
     return {
         "available": True,
@@ -609,6 +1113,12 @@ def build_analysis_view(
             "selected_segment": selected_segment,
             "filtered_record_count": int(len(filtered_df)),
         },
+        "dashboard": {
+            "model_options": model_options,
+            "selected_model": selected_model,
+            "questions": dashboard_questions,
+        },
+        "run_debug_summary": latest_run_payload.get("run_debug_summary"),
         "benchmark_snapshot": benchmark_snapshot,
         "realism_scorecard": realism_scorecard,
         "question_explorer": {
@@ -728,6 +1238,26 @@ def build_insights_view(
         segment_notes=segment_notes,
         segment_heatmap=segment_heatmap,
     )
+    context_notes = {
+        "model_notes": model_notes,
+        "segment_notes": segment_notes,
+        "run_warnings": list(latest_run_payload.get("warnings") or []),
+        "survey_parse_warnings": list(latest_run_payload.get("survey_parse_warnings") or []),
+    }
+    evidence_package = _build_insights_evidence_package(
+        latest_run_payload=latest_run_payload,
+        executive_summary=executive_summary,
+        trust_snapshot=trust_snapshot,
+        top_findings=top_findings,
+        charts={
+            "barrier_ranking": barrier_ranking,
+            "message_performance": message_performance,
+            "use_case_share": use_case_share,
+            "model_difference": model_difference_chart,
+        },
+        segment_story=segment_story,
+        context_notes=context_notes,
+    )
 
     return {
         "available": True,
@@ -755,37 +1285,679 @@ def build_insights_view(
         },
         "segment_story": segment_story,
         "recommendations": recommendations,
-        "context_notes": {
-            "model_notes": model_notes,
-            "segment_notes": segment_notes,
-            "run_warnings": list(latest_run_payload.get("warnings") or []),
-            "survey_parse_warnings": list(latest_run_payload.get("survey_parse_warnings") or []),
-        },
+        "context_notes": context_notes,
+        "evidence_package": evidence_package,
     }
 
 
-def _build_question_options(df: pd.DataFrame) -> list[dict[str, Any]]:
+def _build_insights_evidence_package(
+    *,
+    latest_run_payload: Dict[str, Any],
+    executive_summary: dict[str, Any],
+    trust_snapshot: dict[str, Any],
+    top_findings: list[dict[str, Any]],
+    charts: dict[str, dict[str, Any]],
+    segment_story: dict[str, Any],
+    context_notes: dict[str, Any],
+) -> dict[str, Any]:
+    run_context = {
+        "run_id": latest_run_payload.get("run_id"),
+        "survey_title": latest_run_payload.get("survey_title"),
+        "experiment_mode": latest_run_payload.get("experiment_mode"),
+        "models_used": list(latest_run_payload.get("models_used") or []),
+        "respondent_count": executive_summary.get("records_summary", {}).get("unique_respondents"),
+        "question_count": executive_summary.get("records_summary", {}).get("questions"),
+    }
+    debug_summary = latest_run_payload.get("run_debug_summary") or {}
+    items: list[dict[str, Any]] = []
+
+    def add_item(
+        evidence_id: str,
+        category: str,
+        title: str,
+        summary: str,
+        *,
+        metrics: Optional[dict[str, Any]] = None,
+    ) -> None:
+        item: dict[str, Any] = {
+            "id": evidence_id,
+            "category": category,
+            "title": title,
+            "summary": summary,
+        }
+        if metrics:
+            item["metrics"] = metrics
+        items.append(item)
+
+    top_use_case = executive_summary.get("top_use_case") or {}
+    if top_use_case.get("label"):
+        add_item(
+            "exec_top_use_case",
+            "executive_metric",
+            "Top use case",
+            f"{top_use_case.get('label')} is the strongest surfaced use case in this run.",
+            metrics={"share": top_use_case.get("share")},
+        )
+
+    average_interest = executive_summary.get("average_interest")
+    if average_interest is not None:
+        add_item(
+            "exec_average_interest",
+            "executive_metric",
+            "Average interest",
+            "Average interest reflects the directional purchase-oriented score across the latest run.",
+            metrics={"average_interest": average_interest},
+        )
+
+    strongest_segment = executive_summary.get("strongest_segment")
+    if strongest_segment:
+        add_item(
+            "exec_strongest_segment",
+            "executive_metric",
+            "Strongest segment",
+            f"{strongest_segment} currently shows the strongest overall interest-oriented pattern.",
+        )
+
+    model_difference = executive_summary.get("model_difference") or {}
+    if model_difference.get("status"):
+        add_item(
+            "exec_model_difference",
+            "executive_metric",
+            "Model difference",
+            str(model_difference.get("note") or "Model spread is summarized for the latest run."),
+            metrics={
+                "status": model_difference.get("status"),
+                "differing_questions": model_difference.get("differing_questions"),
+            },
+        )
+
+    for index, finding in enumerate(top_findings[:5], start=1):
+        add_item(
+            f"finding_{index}",
+            "top_finding",
+            str(finding.get("title") or f"Finding {index}"),
+            f"{finding.get('headline') or ''} {finding.get('summary') or ''}".strip(),
+            metrics={
+                "confidence_label": finding.get("confidence_label"),
+                "agreement_label": finding.get("agreement_label"),
+            },
+        )
+
+    for index, row in enumerate((charts.get("barrier_ranking") or {}).get("rows") or [], start=1):
+        if index > 3:
+            break
+        add_item(
+            f"barrier_{index}",
+            "barrier",
+            str(row.get("label") or f"Barrier {index}"),
+            f"{row.get('label') or 'Barrier'} is one of the strongest reported friction points in the latest run.",
+            metrics={"value": row.get("value"), "question_id": row.get("question_id")},
+        )
+
+    for index, row in enumerate((charts.get("use_case_share") or {}).get("rows") or [], start=1):
+        if index > 3:
+            break
+        add_item(
+            f"use_case_{index}",
+            "use_case",
+            str(row.get("label") or f"Use case {index}"),
+            f"{row.get('label') or 'Use case'} represents a meaningful share of intended usage.",
+            metrics={"count": row.get("count"), "share": row.get("share")},
+        )
+
+    for index, row in enumerate((charts.get("message_performance") or {}).get("rows") or [], start=1):
+        if index > 3:
+            break
+        add_item(
+            f"concept_{index}",
+            "message_performance",
+            str(row.get("label") or f"Concept {index}"),
+            f"{row.get('label') or 'Concept'} is benchmarked on appeal and purchase-oriented response.",
+            metrics={
+                "appeal_avg": row.get("appeal_avg"),
+                "purchase_avg": row.get("purchase_avg"),
+            },
+        )
+
+    for index, note in enumerate((segment_story.get("notes") or [])[:3], start=1):
+        add_item(
+            f"segment_note_{index}",
+            "segment_story",
+            f"Segment note {index}",
+            str(note),
+        )
+
+    confidence_summary = (trust_snapshot.get("confidence_summary") or {}).get("dominant_label")
+    if confidence_summary:
+        add_item(
+            "trust_confidence",
+            "trust",
+            "Confidence summary",
+            f"The dominant confidence label for the current findings is {confidence_summary}.",
+            metrics={"counts": (trust_snapshot.get("confidence_summary") or {}).get("counts")},
+        )
+
+    agreement_summary = (trust_snapshot.get("agreement_summary") or {}).get("dominant_label")
+    if agreement_summary:
+        add_item(
+            "trust_agreement",
+            "trust",
+            "Agreement summary",
+            f"The dominant agreement label for the current findings is {agreement_summary}.",
+            metrics={"counts": (trust_snapshot.get("agreement_summary") or {}).get("counts")},
+        )
+
+    realism_snapshot = trust_snapshot.get("realism_snapshot") or {}
+    if realism_snapshot.get("label"):
+        add_item(
+            "realism_snapshot",
+            "realism",
+            "Realism snapshot",
+            str(realism_snapshot.get("detail") or realism_snapshot.get("label")),
+            metrics={"label": realism_snapshot.get("label")},
+        )
+
+    benchmark_snapshot = trust_snapshot.get("benchmark_snapshot") or {}
+    if benchmark_snapshot.get("label"):
+        add_item(
+            "benchmark_snapshot",
+            "benchmark",
+            "Benchmark snapshot",
+            str(benchmark_snapshot.get("detail") or benchmark_snapshot.get("label")),
+            metrics={"label": benchmark_snapshot.get("label")},
+        )
+
+    if debug_summary:
+        add_item(
+            "run_debug_summary",
+            "run_caveat",
+            "Run debug summary",
+            "Live-path execution diagnostics for the latest run.",
+            metrics={
+                "live_answer_rate": debug_summary.get("live_answer_rate"),
+                "truly_live_answers": debug_summary.get("truly_live_answers"),
+                "fallback_answers": debug_summary.get("fallback_answers"),
+                "provider_error_count": debug_summary.get("provider_error_count"),
+                "malformed_json_count": debug_summary.get("malformed_json_count"),
+            },
+        )
+
+    for index, warning in enumerate((context_notes.get("run_warnings") or [])[:3], start=1):
+        add_item(
+            f"run_warning_{index}",
+            "run_caveat",
+            f"Run warning {index}",
+            str(warning),
+        )
+
+    for index, warning in enumerate((context_notes.get("survey_parse_warnings") or [])[:2], start=1):
+        add_item(
+            f"survey_warning_{index}",
+            "survey_caveat",
+            f"Survey warning {index}",
+            str(warning),
+        )
+
+    return {
+        "version": "simulation_insights_evidence_v1",
+        "from_run_id": latest_run_payload.get("run_id"),
+        "run_context": run_context,
+        "items": items,
+    }
+
+
+def _build_run_debug_summary(
+    *,
+    generation_debug: dict[str, Any],
+    personas: list[Any],
+    prior_notes: list[dict[str, Any]],
+) -> dict[str, Any]:
+    total_answers = int(generation_debug.get("questions_total", 0) or 0)
+    live_answers = int(
+        generation_debug.get("truly_live_answers", generation_debug.get("questions_parsed_from_live", 0)) or 0
+    )
+    fallback_answers = int(generation_debug.get("questions_fallback_to_mock", 0) or 0)
+    provider_error_count = int(generation_debug.get("provider_error_count", 0) or 0)
+    malformed_json_count = int(generation_debug.get("malformed_json_count", 0) or 0)
+
+    return {
+        "primary_live_path": generation_debug.get("generation_mode") == "openrouter_live",
+        "total_answers": total_answers,
+        "truly_live_answers": live_answers,
+        "fallback_answers": fallback_answers,
+        "provider_error_count": provider_error_count,
+        "malformed_json_count": malformed_json_count,
+        "live_answer_rate": round((live_answers / total_answers), 3) if total_answers > 0 else None,
+        "ml_persona_completion_enabled": _ml_completion_enabled(personas=personas, prior_notes=prior_notes),
+    }
+
+
+def _ml_completion_enabled(*, personas: list[Any], prior_notes: list[dict[str, Any]]) -> bool:
+    for persona in personas:
+        if isinstance(persona, dict) and persona.get("ml_inference"):
+            return True
+        if getattr(persona, "ml_inference", None):
+            return True
+
+    for note in prior_notes:
+        if str(note.get("prior_table_name") or "") != "ml_persona_completion":
+            continue
+        notes_text = str(note.get("notes") or "").lower()
+        if "applied" in notes_text:
+            return True
+    return False
+
+
+def _build_question_options(
+    df: pd.DataFrame,
+    *,
+    survey_payload: Optional[Dict[str, Any]] = None,
+) -> list[dict[str, Any]]:
+    options: list[dict[str, Any]] = []
+    seen_question_ids: set[str] = set()
+    response_counts: dict[str, int] = {}
+    response_meta_by_question_id: dict[str, dict[str, Any]] = {}
+
+    if not df.empty and "question_id" in df.columns:
+        response_counts = (
+            df["question_id"]
+            .astype(str)
+            .value_counts()
+            .to_dict()
+        )
+    if not df.empty and {"question_id", "question_text", "question_type"}.issubset(df.columns):
+        response_meta = (
+            df[["question_id", "question_text", "question_type"]]
+            .drop_duplicates()
+            .to_dict(orient="records")
+        )
+        response_meta_by_question_id = {
+            str(row.get("question_id") or ""): row
+            for row in response_meta
+            if str(row.get("question_id") or "").strip()
+        }
+
+    survey_questions = list((survey_payload or {}).get("questions") or [])
+    for index, question in enumerate(survey_questions):
+        question_id = str(question.get("id") or "").strip()
+        if not question_id:
+            continue
+        if response_counts and question_id not in response_counts:
+            continue
+        seen_question_ids.add(question_id)
+        response_meta = response_meta_by_question_id.get(question_id) or {}
+        options.append(
+            {
+                "id": question_id,
+                "text": str(response_meta.get("question_text") or question.get("text") or question_id),
+                "question_type": str(response_meta.get("question_type") or question.get("question_type") or ""),
+                "response_count": int(response_counts.get(question_id, 0)),
+                "question_order": index + 1,
+                "option_values": _extract_question_option_values(question),
+            }
+        )
+
     if df.empty or not {"question_id", "question_text", "question_type"}.issubset(df.columns):
-        return []
+        return options
 
     question_meta = (
         df[["question_id", "question_text", "question_type"]]
         .drop_duplicates()
-        .sort_values("question_id")
+        .to_dict(orient="records")
+    )
+    question_meta.sort(
+        key=lambda row: _question_sort_key(
+            str(row.get("question_id") or ""),
+            str(row.get("question_text") or ""),
+        )
     )
 
-    options: list[dict[str, Any]] = []
-    for _, row in question_meta.iterrows():
+    next_order = len(options) + 1
+    for row in question_meta:
         question_id = str(row["question_id"])
+        if question_id in seen_question_ids:
+            continue
         options.append(
             {
                 "id": question_id,
                 "text": str(row["question_text"]),
                 "question_type": str(row["question_type"]),
-                "response_count": int((df["question_id"].astype(str) == question_id).sum()),
+                "response_count": int(response_counts.get(question_id, 0)),
+                "question_order": next_order,
+                "option_values": [],
             }
         )
+        next_order += 1
     return options
+
+
+def _extract_question_option_values(question: dict[str, Any]) -> list[str]:
+    raw_options = question.get("options")
+    if isinstance(raw_options, list):
+        option_values = [str(option).strip() for option in raw_options if str(option).strip()]
+        if option_values:
+            return option_values
+
+    min_value = question.get("min_value")
+    max_value = question.get("max_value")
+    if isinstance(min_value, (int, float)) and isinstance(max_value, (int, float)):
+        minimum = int(min_value)
+        maximum = int(max_value)
+        if minimum <= maximum and maximum - minimum <= 20:
+            return [str(value) for value in range(minimum, maximum + 1)]
+
+    return []
+
+
+def _question_sort_key(question_id: str, question_text: str) -> tuple[str, int, str]:
+    candidate = question_id or question_text
+    match = re.search(r"(\d+)", candidate)
+    prefix = re.sub(r"\d+", "", candidate).strip().lower()
+    return (prefix, int(match.group(1)) if match else 10**9, candidate.lower())
+
+
+def _build_analysis_dashboard_questions(
+    *,
+    filtered_df: pd.DataFrame,
+    question_options: list[dict[str, Any]],
+    open_text_limit: int,
+) -> list[dict[str, Any]]:
+    questions: list[dict[str, Any]] = []
+
+    for option in question_options:
+        question_id = str(option.get("id") or "")
+        question_df = (
+            filtered_df[filtered_df["question_id"].astype(str) == question_id].copy()
+            if not filtered_df.empty and "question_id" in filtered_df.columns
+            else pd.DataFrame()
+        )
+        question_type = str(option.get("question_type") or _safe_first_value(question_df, "question_type") or "")
+        chart_kind = _resolve_dashboard_chart_kind(question_df, question_type)
+        question_payload: dict[str, Any] = {
+            "question_id": question_id,
+            "question_text": str(option.get("text") or _safe_first_value(question_df, "question_text") or question_id),
+            "question_type": question_type,
+            "question_order": int(option.get("question_order") or 0),
+            "response_count": int(len(question_df)),
+            "chart_kind": chart_kind,
+        }
+
+        if chart_kind in {"categorical_bar", "likert"}:
+            distribution_df = _compute_question_answer_distribution(question_df, question_id)
+            question_payload["distribution"] = _shape_distribution_rows(
+                distribution_df,
+                chart_kind=chart_kind,
+                declared_options=list(option.get("option_values") or []),
+            )
+        elif chart_kind == "histogram":
+            question_payload["histogram_bins"] = _compute_histogram_bins(question_df)
+        elif chart_kind == "line":
+            question_payload["line_points"] = _compute_time_series_points(question_df)
+        elif chart_kind == "word_cloud":
+            question_payload["word_cloud_terms"] = _build_word_cloud_terms(question_df)
+            question_payload["quotes"] = _build_open_text_quotes(
+                question_df,
+                limit=min(max(open_text_limit, 3), 5),
+            )
+
+        questions.append(question_payload)
+
+    return questions
+
+
+def _resolve_dashboard_chart_kind(question_df: pd.DataFrame, question_type: str) -> str:
+    normalized = str(question_type or "").strip().lower()
+
+    if normalized == "open_text":
+        return "word_cloud"
+    if normalized == "likert":
+        return "likert"
+    if normalized in {"single_choice", "multi_choice"}:
+        return "categorical_bar"
+    if normalized in {"numeric", "number", "continuous", "slider"}:
+        return "line" if _answers_are_time_like(question_df) else "histogram"
+
+    if _answers_are_time_like(question_df):
+        return "line"
+    if _answers_are_numeric(question_df):
+        return "histogram"
+    return "categorical_bar"
+
+
+def _shape_distribution_rows(
+    distribution_df: pd.DataFrame,
+    *,
+    chart_kind: str,
+    declared_options: Optional[list[str]] = None,
+) -> list[dict[str, Any]]:
+    if distribution_df.empty and not declared_options:
+        return []
+
+    rows = _dataframe_to_records(distribution_df)
+    total = sum(int(row.get("count") or 0) for row in rows)
+
+    if declared_options:
+        counts_by_label = {
+            str(row.get("answer_display") or "No answer"): int(row.get("count") or 0)
+            for row in rows
+        }
+        ordered_rows = []
+        seen_labels: set[str] = set()
+        for option in declared_options:
+            label = str(option or "").strip()
+            if not label:
+                continue
+            seen_labels.add(label)
+            count = counts_by_label.get(label, 0)
+            ordered_rows.append(
+                {
+                    "label": label,
+                    "count": count,
+                    "percentage": round((count / total * 100), 1) if total else 0.0,
+                }
+            )
+
+        extras = [
+            {
+                "label": str(row.get("answer_display") or "No answer"),
+                "count": int(row.get("count") or 0),
+                "percentage": float(row.get("percentage") or 0),
+            }
+            for row in rows
+            if str(row.get("answer_display") or "No answer") not in seen_labels
+        ]
+        if chart_kind == "likert":
+            extras.sort(key=lambda row: _likert_sort_key(str(row.get("label") or "")))
+        else:
+            extras.sort(
+                key=lambda row: (
+                    -int(row.get("count") or 0),
+                    str(row.get("label") or "").lower(),
+                )
+            )
+        return ordered_rows + extras
+
+    if chart_kind == "likert":
+        rows.sort(key=lambda row: _likert_sort_key(str(row.get("answer_display") or "")))
+    else:
+        rows.sort(
+            key=lambda row: (
+                -int(row.get("count") or 0),
+                str(row.get("answer_display") or "").lower(),
+            )
+        )
+
+    return [
+        {
+            "label": str(row.get("answer_display") or "No answer"),
+            "count": int(row.get("count") or 0),
+            "percentage": float(row.get("percentage") or 0),
+        }
+        for row in rows
+    ]
+
+
+def _likert_sort_key(label: str) -> tuple[int, str]:
+    normalized = str(label or "").strip().lower()
+    if normalized in _LIKERT_ORDER:
+        return (_LIKERT_ORDER[normalized], normalized)
+
+    try:
+        return (int(float(normalized)), normalized)
+    except ValueError:
+        return (10**6, normalized)
+
+
+def _answers_are_numeric(question_df: pd.DataFrame) -> bool:
+    if question_df.empty or "answer" not in question_df.columns:
+        return False
+    numeric = pd.to_numeric(question_df["answer"], errors="coerce")
+    return bool(numeric.notna().any())
+
+
+def _answers_are_time_like(question_df: pd.DataFrame) -> bool:
+    if question_df.empty or "answer" not in question_df.columns:
+        return False
+
+    answer_series = question_df["answer"].dropna().astype(str)
+    if answer_series.empty:
+        return False
+
+    string_like_ratio = answer_series.str.contains(
+        r"[-/]|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec",
+        case=False,
+        regex=True,
+    ).mean()
+    parsed = pd.to_datetime(answer_series, errors="coerce")
+    parsed_ratio = parsed.notna().mean()
+    return bool(parsed_ratio >= 0.8 and string_like_ratio >= 0.4)
+
+
+def _compute_histogram_bins(question_df: pd.DataFrame) -> list[dict[str, Any]]:
+    if question_df.empty or "answer" not in question_df.columns:
+        return []
+
+    numeric = pd.to_numeric(question_df["answer"], errors="coerce").dropna()
+    if numeric.empty:
+        return []
+
+    unique_count = int(numeric.nunique())
+    if unique_count <= 6:
+        counts = numeric.value_counts().sort_index()
+        return [
+            {
+                "label": _format_numeric_value_label(value),
+                "count": int(count),
+                "start": float(value),
+                "end": float(value),
+            }
+            for value, count in counts.items()
+        ]
+
+    bin_count = min(6, max(4, unique_count))
+    histogram = pd.cut(numeric, bins=bin_count, include_lowest=True, duplicates="drop")
+    counts = histogram.value_counts().sort_index()
+    bins: list[dict[str, Any]] = []
+    for interval, count in counts.items():
+        left = float(interval.left)
+        right = float(interval.right)
+        bins.append(
+            {
+                "label": f"{_format_numeric_value_label(left)}–{_format_numeric_value_label(right)}",
+                "count": int(count),
+                "start": left,
+                "end": right,
+            }
+        )
+    return bins
+
+
+def _compute_time_series_points(question_df: pd.DataFrame) -> list[dict[str, Any]]:
+    if question_df.empty or "answer" not in question_df.columns:
+        return []
+
+    parsed = pd.to_datetime(question_df["answer"], errors="coerce")
+    if parsed.dropna().empty:
+        return []
+
+    series_df = question_df.copy()
+    series_df["parsed_answer"] = parsed
+    series_df = series_df.dropna(subset=["parsed_answer"])
+    if series_df.empty:
+        return []
+
+    grouped = (
+        series_df.groupby(series_df["parsed_answer"].dt.normalize())
+        .size()
+        .reset_index(name="count")
+        .sort_values("parsed_answer")
+    )
+    return [
+        {
+            "label": value.strftime("%Y-%m-%d"),
+            "count": int(count),
+            "value": value.isoformat(),
+        }
+        for value, count in grouped.itertuples(index=False, name=None)
+    ]
+
+
+def _build_word_cloud_terms(question_df: pd.DataFrame) -> list[dict[str, Any]]:
+    if question_df.empty or "answer" not in question_df.columns:
+        return []
+
+    counter: Counter[str] = Counter()
+    for raw_answer in question_df["answer"].dropna().astype(str):
+        normalized = re.sub(r"[^a-z0-9\s]", " ", raw_answer.lower())
+        for token in normalized.split():
+            if len(token) < 3 or token.isdigit() or token in _ANALYSIS_STOP_WORDS:
+                continue
+            counter[token] += 1
+
+    if not counter:
+        return []
+
+    terms = counter.most_common(24)
+    highest = max(count for _, count in terms)
+    return [
+        {
+            "term": term,
+            "count": int(count),
+            "weight": round(count / highest, 3) if highest else 0,
+        }
+        for term, count in terms
+    ]
+
+
+def _build_open_text_quotes(question_df: pd.DataFrame, *, limit: int) -> list[dict[str, Any]]:
+    if question_df.empty or "answer" not in question_df.columns:
+        return []
+
+    quotes_df = question_df.copy()
+    quotes_df["answer"] = quotes_df["answer"].astype(str)
+    quotes_df = quotes_df[quotes_df["answer"].str.strip().astype(bool)]
+    if quotes_df.empty:
+        return []
+
+    subset_columns = [column for column in ["answer"] if column in quotes_df.columns]
+    quotes_df = quotes_df.drop_duplicates(subset=subset_columns).head(limit)
+    quotes: list[dict[str, Any]] = []
+    for _, row in quotes_df.iterrows():
+        quotes.append(
+            {
+                "text": str(row.get("answer") or ""),
+                "respondent_id": str(row.get("respondent_id") or "") or None,
+                "model": str(row.get("model") or "") or None,
+            }
+        )
+    return quotes
+
+
+def _format_numeric_value_label(value: float) -> str:
+    rounded = round(float(value), 2)
+    if rounded.is_integer():
+        return str(int(rounded))
+    return f"{rounded:.2f}".rstrip("0").rstrip(".")
 
 
 def _compute_dataset_summary(df: pd.DataFrame) -> dict[str, Any]:
@@ -902,6 +2074,10 @@ def _resolve_selected_question_id(
         )
         if question_id and question_id in filtered_question_ids:
             return question_id
+        for option in all_question_options:
+            option_id = str(option.get("id") or "")
+            if option_id in filtered_question_ids:
+                return option_id
         if filtered_question_ids:
             return filtered_question_ids[0]
 
@@ -1653,7 +2829,7 @@ def product_url_autofill(*, settings: AppSettings, url: str) -> dict:
     except RuntimeError as exc:
         raise ProviderUnavailableApiError(str(exc)) from exc
     except Exception as exc:
-        raise LegacyModuleApiError(f"Product URL autofill failed: {exc}") from exc
+        raise LegacyModuleApiError("Product URL autofill failed.") from exc
 
 
 def product_image_analysis(*, settings: AppSettings, file_bytes: bytes) -> dict:
@@ -1671,7 +2847,7 @@ def product_image_analysis(*, settings: AppSettings, file_bytes: bytes) -> dict:
     except RuntimeError as exc:
         raise ProviderUnavailableApiError(str(exc)) from exc
     except Exception as exc:
-        raise LegacyModuleApiError(f"Product image analysis failed: {exc}") from exc
+        raise LegacyModuleApiError("Product image analysis failed.") from exc
 
     colors = []
     for color in analysis.get("colors", []):

@@ -1,0 +1,46 @@
+.git
+.github
+.vscode
+.idea
+.DS_Store
+
+# Environment and secrets
+**/.env
+**/.env.local
+**/.env.*.local
+*.pem
+*service-account*.json
+*google-credentials*.json
+
+# Node / Next.js
+**/node_modules
+**/.next
+**/.test-dist
+**/out
+**/.turbo
+
+# Python caches / local envs
+**/__pycache__
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+**/.venv
+**/venv
+**/*.egg-info
+
+# Local databases / runtime state
+**/*.db
+**/*.db-shm
+**/*.db-wal
+**/*.sqlite
+**/*.sqlite3
+**/*.sqlite-shm
+**/*.sqlite-wal
+**/*.sqlite3-shm
+**/*.sqlite3-wal
+
+# Generated artifacts / temp runtime data
+apps/api/artifacts
+apps/api/tmp_artifacts
+coverage
+htmlcov

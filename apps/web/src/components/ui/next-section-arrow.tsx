@@ -22,7 +22,7 @@ export function NextSectionArrow({
       type="button"
       onClick={() => scrollToSection(targetId)}
       className={cn(
-        "group absolute bottom-7 left-1/2 z-20 inline-flex h-14 w-14 -translate-x-1/2 items-center justify-center rounded-full border border-app-border bg-white/[0.03] text-app-text backdrop-blur-xl transition hover:border-app-cyan/35 hover:text-app-cyan",
+        "group absolute bottom-7 left-1/2 z-20 inline-flex h-14 w-14 -translate-x-1/2 items-center justify-center rounded-full border border-app-border text-app-text backdrop-blur-xl transition hover:border-app-cyan/35 hover:text-app-cyan [background:var(--floating-control-secondary-bg)] [box-shadow:var(--floating-control-secondary-shadow)]",
         className
       )}
       animate={{ y: [0, 6, 0] }}

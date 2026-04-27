@@ -42,8 +42,8 @@ export function SectionWrapper({
       ref={sectionRef}
       data-section-id={id}
       className={cn(
-        "relative scroll-mt-[calc(var(--nav-height)+1.25rem)] px-6 md:px-10 lg:px-16",
-        fullHeight && "h-[calc(100svh-var(--nav-height))]",
+        "relative scroll-mt-[calc(var(--nav-height)+1rem)] px-4 sm:px-5 md:px-8 lg:scroll-mt-[calc(var(--nav-height)+0.75rem)] lg:px-12 xl:px-16",
+        fullHeight && "lg:h-[calc(100svh-var(--nav-height))]",
         className
       )}
     >
@@ -51,7 +51,7 @@ export function SectionWrapper({
         <div
           ref={scrollContainerRef}
           className={cn(
-            "fine-scrollbar mx-auto h-full w-full max-w-[88rem] overflow-y-auto overscroll-contain py-6 pr-1 md:py-7",
+            "fine-scrollbar mx-auto w-full max-w-[88rem] overflow-visible py-6 sm:py-8 lg:h-full lg:overflow-y-auto lg:overscroll-contain lg:py-7 lg:pr-1",
             contentClassName
           )}
         >
@@ -60,7 +60,7 @@ export function SectionWrapper({
       ) : (
         <div
           className={cn(
-            "mx-auto flex h-full w-full max-w-[88rem] flex-col justify-center py-6 md:py-7",
+            "mx-auto flex w-full max-w-[88rem] flex-col py-6 sm:py-8 lg:h-full lg:justify-center lg:py-7",
             contentClassName
           )}
         >

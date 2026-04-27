@@ -8,7 +8,6 @@ import {
   runProductImageAnalysis,
   runProductUrlAutofill,
   saveProduct,
-  WorkflowReadiness,
 } from "@/lib/api";
 import { resolveSetupSeedSource } from "@/lib/setup-flow-utils";
 import { cn } from "@/lib/utils";
@@ -72,11 +71,11 @@ const EMPTY_PRODUCT_DRAFT: ProductDraft = {
 
 const NEO_PRODUCT_DEFAULTS: ProductDraft = {
   business_name: "Neo Smart Living",
-  industry: "Factory-built modular backyard structures",
+  industry: "Backyard modular studios",
   product_name: "Tahoe Mini",
-  product_type: "Permit-light modular backyard studio",
+  product_type: "Fast-install modular backyard studio",
   product_description:
-    "Tahoe Mini is a compact ~117 sq ft factory-built backyard unit delivered as flat-pack panels and typically installed in about one day. It is positioned as a non-habitable accessory structure, with no plumbing and no kitchen.",
+    "Tahoe Mini is a compact ~117 sq ft backyard unit delivered as flat-pack panels and usually installed in about a day. It is positioned as a non-habitable accessory structure, with no plumbing and no kitchen.",
   target_customer: "Homeowners with usable backyard/property space",
   price_range: "$23,000 delivered and installed",
   primary_goal: "Validate demand, barriers, and strongest positioning for Tahoe Mini.",
@@ -115,7 +114,7 @@ const NEO_PRODUCT_DEFAULTS: ProductDraft = {
   product_image_labels: ["Prefabricated building", "Modular structure", "Glass door"],
   product_image_objects: [],
   product_image_colors: [],
-  notes: "Preset from Neo Smart Living challenge docs for demo mode.",
+  notes: "Demo preset based on Neo Smart Living materials.",
 };
 
 export function ProductSection() {
@@ -131,11 +130,9 @@ export function ProductSection() {
   const [draft, setDraft] = useState<ProductDraft>(EMPTY_PRODUCT_DRAFT);
   const [savedSnapshot, setSavedSnapshot] = useState<string>("");
   const [studyMode, setStudyMode] = useState<string | null>(null);
-  const [workflow, setWorkflow] = useState<WorkflowReadiness | null>(null);
-  const [audienceSummary, setAudienceSummary] = useState("Audience not configured yet.");
   const [status, setStatus] = useState<ProductStatusState>({
     tone: "neutral",
-    message: "Product context is local until you save it.",
+    message: "No product details saved yet. Save when you're ready.",
   });
   const [isSaving, setIsSaving] = useState(false);
   const [urlInput, setUrlInput] = useState("");
@@ -163,15 +160,13 @@ export function ProductSection() {
           setDraft(EMPTY_PRODUCT_DRAFT);
           setSavedSnapshot("");
           setStudyMode(null);
-          setWorkflow(null);
-          setAudienceSummary("Audience not configured yet.");
           setLatestUrlAutofill(null);
           setUrlAutofillPreview(null);
           setLatestImageAnalysis(null);
           setVisualSummary(null);
           setStatus({
             tone: "neutral",
-            message: "Product context is local until you save it.",
+            message: "No product details saved yet. Save when you're ready.",
           });
         }
         return;
@@ -196,8 +191,6 @@ export function ProductSection() {
             : ""
         );
         setStudyMode(study.study_mode.value);
-        setWorkflow(study.derived?.workflow ?? null);
-        setAudienceSummary(buildAudienceContextSummary(study.audience?.value));
         setLatestUrlAutofill(study.product_enrichments?.latest_url_autofill ?? null);
         setUrlAutofillPreview(
           study.product_enrichments?.latest_url_autofill?.proposed_product_patch ??
@@ -211,10 +204,10 @@ export function ProductSection() {
           tone: seedSource === "saved" ? "success" : "neutral",
           message:
             seedSource === "saved"
-              ? "Saved product context loaded from the current study."
+              ? "Loaded your saved product details."
               : seedSource === "neo_default"
-                ? "Neo defaults loaded locally. Review them and save to persist canonical product state."
-                : "Product context is local until you save it.",
+                ? "Neo demo defaults loaded. Review and save if you want to keep them."
+                : "No product details saved yet. Save when you're ready.",
         });
       }
     }
@@ -230,11 +223,6 @@ export function ProductSection() {
     study?.product?.status,
     study?.study_mode?.value,
   ]);
-
-  useEffect(() => {
-    setWorkflow(study?.derived?.workflow ?? null);
-    setAudienceSummary(buildAudienceContextSummary(study?.audience?.value));
-  }, [study?.derived?.workflow, study?.audience?.updated_at]);
 
   useEffect(() => {
     setLatestUrlAutofill(study?.product_enrichments?.latest_url_autofill ?? null);
@@ -265,10 +253,6 @@ export function ProductSection() {
 
   const draftPayload = useMemo(() => productDraftToPayload(draft), [draft]);
   const isDirty = JSON.stringify(draftPayload) !== savedSnapshot;
-  const previewDescription =
-    draft.product_description.trim() ||
-    "Define the product clearly so respondents react to a concrete offer instead of a vague concept.";
-  const visibleFeatureHighlights = draft.key_features.slice(0, 6);
   const imageSignals = latestImageAnalysis?.analysis as
     | ProductImageAnalysisSignals
     | undefined;
@@ -278,12 +262,6 @@ export function ProductSection() {
     : false;
   const imageAppliedToSaved = imagePatch
     ? isPatchAppliedToSaved(imagePatch, savedSnapshot)
-    : false;
-  const urlPatchAppliedToDraft = urlAutofillPreview
-    ? isPatchAppliedToDraft(urlAutofillPreview, draftPayload)
-    : false;
-  const urlPatchAppliedToSaved = urlAutofillPreview
-    ? isPatchAppliedToSaved(urlAutofillPreview, savedSnapshot)
     : false;
 
   function updateDraft<K extends keyof ProductDraft>(key: K, value: ProductDraft[K]) {
@@ -306,7 +284,7 @@ export function ProductSection() {
     setIsSaving(true);
     setStatus({
       tone: "neutral",
-      message: "Saving business and product context...",
+      message: "Saving product details...",
     });
 
     try {
@@ -316,13 +294,12 @@ export function ProductSection() {
         throw new Error("No study is available yet.");
       }
 
-      const result = await saveProduct(resolvedStudyId, draftPayload);
+      await saveProduct(resolvedStudyId, draftPayload);
       await refreshStudy(resolvedStudyId);
       setSavedSnapshot(JSON.stringify(draftPayload));
-      setWorkflow(result.workflow ?? null);
       setStatus({
         tone: "success",
-        message: "Business & Product Context saved successfully.",
+        message: "Product details saved.",
       });
       scrollToSection("market");
     } catch (error) {
@@ -331,7 +308,7 @@ export function ProductSection() {
         message:
           error instanceof Error
             ? error.message
-            : "Unable to save the product context right now.",
+            : "Unable to save product details right now.",
       });
     } finally {
       setIsSaving(false);
@@ -343,7 +320,7 @@ export function ProductSection() {
     setStatus({
       tone: "warning",
       message:
-        "The form has been reset locally. The backend does not yet support clearing saved product context because a saved product requires at least a name or description.",
+        "Product details were reset locally. Save new details if you want to replace what is currently saved.",
     });
   }
 
@@ -351,7 +328,7 @@ export function ProductSection() {
     setDraft(NEO_PRODUCT_DEFAULTS);
     setStatus({
       tone: "neutral",
-      message: "Neo defaults loaded locally. Review and save to persist them.",
+      message: "Neo demo defaults loaded. Review and save if you want to keep them.",
     });
   }
 
@@ -359,7 +336,7 @@ export function ProductSection() {
     if (!urlInput.trim()) {
       setStatus({
         tone: "error",
-        message: "Enter a product page URL before running autofill.",
+        message: "Add a product page URL first.",
       });
       return;
     }
@@ -367,7 +344,7 @@ export function ProductSection() {
     setIsRunningUrlAutofill(true);
     setStatus({
       tone: "neutral",
-      message: "Running product URL autofill...",
+      message: "Generating draft details from URL...",
     });
 
     try {
@@ -382,8 +359,7 @@ export function ProductSection() {
       setUrlAutofillPreview(result.enrichment?.proposed_product_patch ?? null);
       setStatus({
         tone: "success",
-        message:
-          "Autofill preview generated. Review it carefully before applying it to your draft.",
+        message: "Autofill draft is ready. Review it and apply what you want.",
       });
     } catch (error) {
       setStatus({
@@ -391,7 +367,7 @@ export function ProductSection() {
         message:
           error instanceof Error
             ? error.message
-            : "Unable to run product URL autofill right now.",
+            : "Unable to generate details from URL right now.",
       });
     } finally {
       setIsRunningUrlAutofill(false);
@@ -406,8 +382,7 @@ export function ProductSection() {
     setDraft((current) => mergeProductPatchIntoDraft(current, urlAutofillPreview));
     setStatus({
       tone: "success",
-      message:
-        "URL autofill preview applied to the draft. Save when you are ready to persist it.",
+      message: "Autofill details added to your draft. Save when you're ready.",
     });
   }
 
@@ -415,7 +390,7 @@ export function ProductSection() {
     if (!uploadedImageFile) {
       setStatus({
         tone: "error",
-        message: "Upload a product image before starting analysis.",
+        message: "Upload a product image first.",
       });
       return;
     }
@@ -438,8 +413,7 @@ export function ProductSection() {
       setLatestImageAnalysis(result.enrichment);
       setStatus({
         tone: "success",
-        message:
-          "Image analysis complete. Review the extracted signals before applying them to context.",
+        message: "Image analysis is ready. Review the details before applying them.",
       });
     } catch (error) {
       setStatus({
@@ -458,7 +432,7 @@ export function ProductSection() {
     if (!imageSignals) {
       setStatus({
         tone: "error",
-        message: "Analyze an image before generating a visual summary.",
+        message: "Run image analysis before generating a visual summary.",
       });
       return;
     }
@@ -466,8 +440,7 @@ export function ProductSection() {
     setVisualSummary(generateVisualSummaryFromSignals(imageSignals));
     setStatus({
       tone: "neutral",
-      message:
-        "Visual summary generated from the extracted signals. Review it as a guide, not as source truth.",
+      message: "Visual summary generated. Use it as a draft and refine as needed.",
     });
   }
 
@@ -479,37 +452,35 @@ export function ProductSection() {
     setDraft((current) => mergeProductPatchIntoDraft(current, imagePatch));
     setStatus({
       tone: "success",
-      message:
-        "Visual details applied to the draft. Save the product context to persist them.",
+      message: "Visual details added to your draft. Save to keep them.",
     });
   }
 
   return (
-    <SectionWrapper id="product" scrollable contentClassName="relative">
-      <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_20rem] xl:grid-cols-[minmax(0,1.02fr)_22rem] 2xl:grid-cols-[minmax(0,1.04fr)_28rem]">
+    <SectionWrapper
+      id="product"
+      scrollable
+      contentClassName="relative scrollbar-hidden pr-0"
+    >
+      <div className="grid gap-8">
         <div className="min-w-0 space-y-8">
           <RevealOnScroll>
             <SectionHeader
               index={3}
               eyebrow="Business & Product Context"
-              title="Define what respondents are reacting to."
-              description="This chapter frames the object of reaction: the business, the product, the customer promise, and the visual cues that make the product feel concrete instead of abstract."
+              title="What are people reacting to?"
+              description="Describe your product, who it is for, and why it matters. This gives respondents the context they need to give useful feedback."
             />
-
-            <div className="mt-6 flex flex-wrap gap-3">
-              <BadgeChip tone="gold">Audience Anchor</BadgeChip>
-              <BadgeChip>{audienceSummary}</BadgeChip>
-            </div>
           </RevealOnScroll>
 
           <RevealOnScroll delay={0.04}>
             <div className="flex flex-wrap gap-3">
               <Button variant="secondary" onClick={handleClearSavedContext}>
-                Clear Saved Business & Product Context
+                Reset Product Details
               </Button>
               {studyMode === "neo_smart" ? (
                 <Button variant="secondary" onClick={handleResetToNeoDefaults}>
-                  Reset to Neo Defaults
+                  Load Neo Demo Defaults
                 </Button>
               ) : null}
             </div>
@@ -517,32 +488,29 @@ export function ProductSection() {
 
           <RevealOnScroll delay={0.06}>
             <GlassPanel className="p-4 sm:p-5">
-              <div className="rounded-[1.45rem] border border-white/5 bg-[linear-gradient(180deg,rgba(12,18,22,0.84),rgba(12,18,22,0.58))] p-5">
+              <div className="rounded-[1.45rem] border border-app-border [background:var(--theme-panel-gradient)] p-5">
                 <div className="flex flex-wrap items-center gap-3">
-                  <BadgeChip tone="cyan">URL Autofill</BadgeChip>
-                  <BadgeChip>
-                    Review before applying
-                  </BadgeChip>
+                    <BadgeChip tone="cyan">Website Autofill</BadgeChip>
+                    <BadgeChip>Review before applying</BadgeChip>
                 </div>
                 <p className="mt-4 max-w-2xl text-sm leading-6 text-app-muted">
-                  Paste a product page URL to generate a proposed product context.
-                  The result is AI-assisted from scraped page content and should
-                  always be reviewed before saving.
+                    Paste a product page URL to draft product details automatically.
+                    Review everything before applying it to your draft.
                 </p>
 
-                <div className="mt-5 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
+                <div className="mt-5 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
                   <TextInput
                     value={urlInput}
                     onChange={setUrlInput}
                     placeholder="https://example.com/product"
                   />
                   <Button onClick={handleRunUrlAutofill} disabled={isRunningUrlAutofill}>
-                    {isRunningUrlAutofill ? "Generating..." : "Auto-fill from URL"}
+                    {isRunningUrlAutofill ? "Generating..." : "Autofill from URL"}
                   </Button>
                 </div>
 
                 {urlAutofillPreview ? (
-                  <div className="mt-5 rounded-[1.3rem] border border-white/6 bg-white/[0.03] p-4">
+                  <div className="mt-5 rounded-[1.3rem] border border-app-border [background:var(--status-neutral-bg)] p-4">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div>
                         <div className="text-[0.72rem] uppercase tracking-[0.24em] text-app-muted">
@@ -556,13 +524,13 @@ export function ProductSection() {
                         Apply Autofill to Draft
                       </Button>
                     </div>
-                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    <div className="mt-4 grid gap-3 md:grid-cols-2">
                       <PreviewField
                         label="Business"
                         value={
                           urlAutofillPreview.business_name ||
                           urlAutofillPreview.industry ||
-                          "No business metadata returned"
+                          "No business details found"
                         }
                       />
                       <PreviewField
@@ -570,14 +538,14 @@ export function ProductSection() {
                         value={
                           urlAutofillPreview.product_name ||
                           urlAutofillPreview.product_type ||
-                          "No product identity returned"
+                          "No product name or type found"
                         }
                       />
                       <PreviewField
                         label="Customer"
                         value={
                           urlAutofillPreview.target_customer ||
-                          "No target customer returned"
+                          "No target audience found"
                         }
                       />
                       <PreviewField
@@ -585,7 +553,7 @@ export function ProductSection() {
                         value={
                           [urlAutofillPreview.price_range, urlAutofillPreview.primary_goal]
                             .filter(Boolean)
-                            .join(" • ") || "No positioning fields returned"
+                            .join(" • ") || "No pricing or goal details found"
                         }
                       />
                     </div>
@@ -595,13 +563,12 @@ export function ProductSection() {
             </GlassPanel>
           </RevealOnScroll>
 
-          <RevealOnScroll delay={0.08}>
-            <div className="grid gap-5">
+          <div className="grid gap-5">
               <ProductGroupCard
                 title="Business"
-                description="Context that grounds the business behind the product."
+                description="Basic company context behind this product."
               >
-                <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid gap-4 md:grid-cols-2">
                   <Field label="Business Name">
                     <TextInput
                       value={draft.business_name}
@@ -613,7 +580,7 @@ export function ProductSection() {
                     <TextInput
                       value={draft.industry}
                       onChange={(value) => updateDraft("industry", value)}
-                      placeholder="Factory-built modular backyard structures"
+                      placeholder="Backyard modular studios"
                     />
                   </Field>
                 </div>
@@ -621,9 +588,9 @@ export function ProductSection() {
 
               <ProductGroupCard
                 title="Product"
-                description="The core object respondents will evaluate."
+                description="The main product respondents will evaluate."
               >
-                <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid gap-4 md:grid-cols-2">
                   <Field label="Product Name">
                     <TextInput
                       value={draft.product_name}
@@ -635,7 +602,7 @@ export function ProductSection() {
                     <TextInput
                       value={draft.product_type}
                       onChange={(value) => updateDraft("product_type", value)}
-                      placeholder="Permit-light modular backyard studio"
+                      placeholder="Fast-install modular backyard studio"
                     />
                   </Field>
                 </div>
@@ -643,7 +610,7 @@ export function ProductSection() {
                   <TextAreaInput
                     value={draft.product_description}
                     onChange={(value) => updateDraft("product_description", value)}
-                    placeholder="Describe what the product is, what it includes, and what makes it distinctive."
+                    placeholder="Describe what it is, what is included, and why people choose it."
                     rows={6}
                   />
                 </Field>
@@ -651,7 +618,7 @@ export function ProductSection() {
 
               <ProductGroupCard
                 title="Customer & Positioning"
-                description="Who the product is for and how it is positioned."
+                description="Who this is for and how you position it."
               >
                 <div className="grid gap-4">
                   <Field label="Target Customer">
@@ -661,7 +628,7 @@ export function ProductSection() {
                       placeholder="Homeowners with usable backyard/property space"
                     />
                   </Field>
-                  <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="grid gap-4 md:grid-cols-2">
                     <Field label="Price Range">
                       <TextInput
                         value={draft.price_range}
@@ -673,7 +640,7 @@ export function ProductSection() {
                       <TextInput
                         value={draft.primary_goal}
                         onChange={(value) => updateDraft("primary_goal", value)}
-                        placeholder="Validate demand, barriers, and strongest positioning"
+                        placeholder="Understand demand, concerns, and strongest positioning"
                       />
                     </Field>
                   </div>
@@ -682,7 +649,7 @@ export function ProductSection() {
 
               <ProductGroupCard
                 title="Key Lists"
-                description="Capture the recurring ideas respondents are likely to react to."
+                description="Capture the points respondents are most likely to react to."
               >
                 <div className="grid gap-5">
                   <Field label="Key Features">
@@ -692,329 +659,246 @@ export function ProductSection() {
                       placeholder="Add a feature"
                     />
                   </Field>
-                  <Field label="Main Use Cases">
+                  <Field label="Top Use Cases">
                     <TokenInput
                       value={draft.main_use_cases}
                       onChange={(value) => updateDraft("main_use_cases", value)}
                       placeholder="Add a use case"
                     />
                   </Field>
-                  <Field label="Main Pain Points Solved">
+                  <Field label="Problems Solved">
                     <TokenInput
                       value={draft.main_pain_points_solved}
                       onChange={(value) =>
                         updateDraft("main_pain_points_solved", value)
                       }
-                      placeholder="Add a pain point solved"
+                      placeholder="Add a problem you solve"
                     />
                   </Field>
-                  <Field label="Main Barriers or Concerns">
+                  <Field label="Likely Concerns">
                     <TokenInput
                       value={draft.main_barriers_or_concerns}
                       onChange={(value) =>
                         updateDraft("main_barriers_or_concerns", value)
                       }
-                      placeholder="Add a barrier or concern"
+                      placeholder="Add a likely concern"
                     />
                   </Field>
                 </div>
               </ProductGroupCard>
 
+              <GlassPanel className="p-5 sm:p-6">
+                <div className="rounded-[1.55rem] border border-app-border [background:var(--theme-panel-gradient)] p-5">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <BadgeChip tone="gold">Visual Details</BadgeChip>
+                    <BadgeChip>Optional</BadgeChip>
+                    <BadgeChip tone="cyan">AI image analysis</BadgeChip>
+                    {imageAppliedToSaved ? (
+                      <BadgeChip tone="cyan">Applied to Context</BadgeChip>
+                    ) : imageAppliedToDraft ? (
+                      <BadgeChip tone="cyan">Applied to Draft</BadgeChip>
+                    ) : latestImageAnalysis ? (
+                      <BadgeChip>Ready to apply</BadgeChip>
+                    ) : null}
+                  </div>
+
+                  <p className="mt-4 max-w-2xl text-sm leading-6 text-app-muted">
+                    Optional. Upload a product image to extract labels, objects,
+                    colors, and text. Review everything before applying it to
+                    your draft.
+                  </p>
+
+                  {(draft.product_image_labels.length > 0 ||
+                    draft.product_image_objects.length > 0 ||
+                    draft.product_image_colors.length > 0) ? (
+                    <div className="mt-5 rounded-[1.35rem] border border-app-border [background:var(--status-neutral-bg)] p-4">
+                      <div className="text-[0.72rem] uppercase tracking-[0.24em] text-app-muted">
+                        Saved Visual Details
+                      </div>
+                      <div className="mt-3 space-y-3">
+                        {draft.product_image_labels.length > 0 ? (
+                          <ChipRow title="Labels" items={draft.product_image_labels} />
+                        ) : null}
+                        {draft.product_image_objects.length > 0 ? (
+                          <ChipRow title="Objects" items={draft.product_image_objects} />
+                        ) : null}
+                        {draft.product_image_colors.length > 0 ? (
+                          <ColorRow colors={draft.product_image_colors} />
+                        ) : null}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {!uploadedImagePreviewUrl && !latestImageAnalysis ? (
+                    <label className="mt-5 flex cursor-pointer flex-col items-center justify-center rounded-[1.45rem] border border-dashed border-app-border [background:var(--status-neutral-bg)] px-6 py-10 text-center transition hover:border-app-cyan/25 hover:[background:var(--button-secondary-bg-hover)]">
+                      <div className="text-sm font-medium text-app-text">
+                        Upload Product Image
+                      </div>
+                      <p className="mt-2 max-w-xs text-sm leading-6 text-app-muted">
+                        Upload a product image when you want Google Vision to add
+                        visual cues like labels, objects, colors, and text.
+                      </p>
+                      <div className="mt-3 text-xs uppercase tracking-[0.22em] text-app-muted">
+                        JPG, JPEG, PNG
+                      </div>
+                      <input
+                        type="file"
+                        accept=".jpg,.jpeg,.png,image/png,image/jpeg"
+                        className="hidden"
+                        onChange={(event) =>
+                          setUploadedImageFile(event.target.files?.[0] ?? null)
+                        }
+                      />
+                    </label>
+                  ) : (
+                    <div className="mt-5 space-y-5">
+                      <div className="grid gap-4 lg:grid-cols-[minmax(0,0.88fr)_minmax(0,1.12fr)]">
+                        <div className="overflow-hidden rounded-[1.35rem] border border-app-border [background:var(--status-neutral-bg)]">
+                          {uploadedImagePreviewUrl ? (
+                            <img
+                              src={uploadedImagePreviewUrl}
+                              alt="Uploaded product preview"
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            <div className="flex h-full min-h-56 items-center justify-center px-6 text-center text-sm text-app-muted">
+                              Previous analysis is available below. Upload the
+                              image again if you want to preview it here.
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="space-y-4">
+                          <div className="flex flex-wrap gap-3">
+                            <label className="cursor-pointer">
+                              <span className="inline-flex items-center justify-center rounded-2xl border border-app-border [background:var(--status-neutral-bg)] px-4 py-3 text-sm font-medium text-app-text transition hover:border-app-cyan/30 hover:text-app-cyan">
+                                Upload Product Image
+                              </span>
+                              <input
+                                type="file"
+                                accept=".jpg,.jpeg,.png,image/png,image/jpeg"
+                                className="hidden"
+                                onChange={(event) =>
+                                  setUploadedImageFile(event.target.files?.[0] ?? null)
+                                }
+                              />
+                            </label>
+                            <Button
+                              variant="secondary"
+                              onClick={handleAnalyzeImage}
+                              disabled={!uploadedImageFile || isAnalyzingImage}
+                            >
+                              {isAnalyzingImage ? "Analyzing..." : "Analyze Image"}
+                            </Button>
+                          </div>
+
+                          {imageSignals ? (
+                            <div className="space-y-4">
+                              <ChipRow
+                                title="Labels"
+                                items={toStringArray(imageSignals.labels)}
+                              />
+                              <ChipRow
+                                title="Objects"
+                                items={toStringArray(imageSignals.objects)}
+                              />
+                              <ColorSwatchGrid colors={toColorItems(imageSignals.colors)} />
+                              {String(imageSignals.text ?? "").trim() ? (
+                                <details className="rounded-2xl border border-app-border [background:var(--status-neutral-bg)] p-4 text-sm text-app-muted">
+                                  <summary className="cursor-pointer text-app-text">
+                                    Detected Text
+                                  </summary>
+                                  <p className="mt-3 whitespace-pre-wrap leading-6">
+                                    {String(imageSignals.text)}
+                                  </p>
+                                </details>
+                              ) : null}
+                            </div>
+                          ) : (
+                            <div className="rounded-2xl border border-app-border [background:var(--status-neutral-bg)] p-4 text-sm text-app-muted">
+                              Run image analysis to extract visual details.
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="grid gap-3 md:grid-cols-2">
+                        <Button
+                          variant="secondary"
+                          onClick={handleGenerateVisualSummary}
+                          disabled={!imageSignals}
+                        >
+                          Draft Visual Summary
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          onClick={handleApplyVisualDetailsToDraft}
+                          disabled={!imagePatch}
+                        >
+                          Apply Visual Details to Draft
+                        </Button>
+                      </div>
+
+                      {visualSummary ? (
+                        <div className="rounded-[1.35rem] border border-app-border [background:var(--status-neutral-bg)] p-4">
+                          <div className="text-[0.72rem] uppercase tracking-[0.24em] text-app-muted">
+                            Visual Summary
+                          </div>
+                          <p className="mt-3 text-sm leading-7 text-app-text">
+                            {visualSummary}
+                          </p>
+                        </div>
+                      ) : null}
+                    </div>
+                  )}
+                </div>
+              </GlassPanel>
+
               <ProductGroupCard
                 title="Notes"
-                description="Optional guidance, caveats, or framing for the study."
+                description="Optional notes, caveats, or special context for this study."
               >
                 <Field label="Notes">
                   <TextAreaInput
                     value={draft.notes}
                     onChange={(value) => updateDraft("notes", value)}
-                    placeholder="Add any product framing notes, exclusions, or researcher context."
+                    placeholder="Optional notes about assumptions, exclusions, or edge cases."
                     rows={5}
                   />
                 </Field>
               </ProductGroupCard>
 
-              <RevealOnScroll delay={0.1}>
-                <div className="rounded-[1.55rem] border border-white/8 bg-[rgba(255,255,255,0.03)] p-5">
-                  <div
-                    className={cn(
-                      "rounded-2xl border px-4 py-3 text-sm leading-6",
-                      status.tone === "success" &&
-                        "border-app-cyan/20 bg-[rgba(15,216,255,0.08)] text-app-cyan",
-                      status.tone === "error" &&
-                        "border-app-gold/20 bg-[rgba(216,186,103,0.08)] text-app-gold",
-                      status.tone === "warning" &&
-                        "border-app-gold/20 bg-[rgba(216,186,103,0.08)] text-app-gold",
-                      status.tone === "neutral" &&
-                        "border-white/8 bg-white/[0.03] text-app-muted"
-                    )}
+              <div className="rounded-[1.55rem] border border-app-border [background:var(--status-neutral-bg)] p-5">
+                <div
+                  className={cn(
+                    "rounded-2xl border px-4 py-3 text-sm leading-6",
+                    status.tone === "success" &&
+                      "[border-color:var(--status-success-border)] [background:var(--status-success-bg)] [color:var(--status-success-text)]",
+                    status.tone === "error" &&
+                      "[border-color:var(--status-warning-border)] [background:var(--status-warning-bg)] [color:var(--status-warning-text)]",
+                    status.tone === "warning" &&
+                      "[border-color:var(--status-warning-border)] [background:var(--status-warning-bg)] [color:var(--status-warning-text)]",
+                    status.tone === "neutral" &&
+                      "border-app-border [background:var(--status-neutral-bg)] text-app-muted"
+                  )}
+                >
+                  {status.message}
+                </div>
+
+                <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+                  <Button
+                    onClick={handleSaveProduct}
+                    disabled={isSaving || isCreatingStudy || isHydratingStudy}
                   >
-                    {status.message}
-                  </div>
-
-                  <div className="mt-5 flex flex-col gap-3 sm:flex-row">
-                    <Button
-                      onClick={handleSaveProduct}
-                      disabled={isSaving || isCreatingStudy || isHydratingStudy}
-                    >
-                      {isSaving ? "Saving Product..." : "Save Business & Product Context"}
-                    </Button>
-                    <BadgeChip tone={isDirty ? "gold" : "cyan"}>
-                      {isDirty ? "Unsaved changes" : "Saved state"}
-                    </BadgeChip>
-                  </div>
+                    {isSaving ? "Saving Product..." : "Save Product Details"}
+                  </Button>
+                  <BadgeChip tone={isDirty ? "gold" : "cyan"}>
+                    {isDirty ? "Unsaved edits" : "All changes saved"}
+                  </BadgeChip>
                 </div>
-              </RevealOnScroll>
+              </div>
             </div>
-          </RevealOnScroll>
         </div>
-
-        <RevealOnScroll
-          delay={0.08}
-          className="min-w-0 lg:sticky lg:top-6 lg:w-full lg:max-w-[20rem] lg:justify-self-end xl:max-w-[22rem] 2xl:max-w-[28rem]"
-        >
-          <div className="space-y-5">
-            <GlassPanel className="p-5 sm:p-6">
-              <div className="rounded-[1.55rem] border border-white/5 bg-[linear-gradient(180deg,rgba(12,18,22,0.84),rgba(12,18,22,0.6))] p-5">
-                <div className="flex flex-wrap gap-2">
-                  <BadgeChip tone="cyan">Manual</BadgeChip>
-                  {latestUrlAutofill ? (
-                    <BadgeChip tone={urlPatchAppliedToDraft || urlPatchAppliedToSaved ? "cyan" : "gold"}>
-                      {urlPatchAppliedToSaved
-                        ? "URL Autofill Saved"
-                        : urlPatchAppliedToDraft
-                          ? "URL Autofill Applied"
-                          : "URL Autofill Ready"}
-                    </BadgeChip>
-                  ) : null}
-                  {latestImageAnalysis ? (
-                    <BadgeChip tone={imageAppliedToDraft || imageAppliedToSaved ? "cyan" : "gold"}>
-                      {imageAppliedToSaved
-                        ? "Image Analysis Saved"
-                        : imageAppliedToDraft
-                          ? "Image Analysis Applied"
-                          : "Image Analysis Ready"}
-                    </BadgeChip>
-                  ) : null}
-                </div>
-
-                <div className="mt-5">
-                  <div className="text-[0.72rem] uppercase tracking-[0.24em] text-app-muted">
-                    Product Identity
-                  </div>
-                  <h3 className="mt-2 font-display text-3xl font-medium tracking-[-0.05em] text-app-text">
-                    {draft.product_name.trim() || "Unnamed Product"}
-                  </h3>
-                  <div className="mt-3 flex flex-wrap gap-2 text-sm text-app-muted">
-                    {draft.business_name ? <span>{draft.business_name}</span> : null}
-                    {draft.industry ? <span>• {draft.industry}</span> : null}
-                    {draft.product_type ? <span>• {draft.product_type}</span> : null}
-                  </div>
-                </div>
-
-                <div className="mt-5 rounded-[1.35rem] border border-white/6 bg-white/[0.03] p-4">
-                  <div className="text-[0.72rem] uppercase tracking-[0.24em] text-app-muted">
-                    Respondent Reaction Model
-                  </div>
-                  <p className="mt-3 text-sm leading-7 text-app-text">
-                    {previewDescription}
-                  </p>
-                </div>
-
-                <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                  <MetaCard label="Target Customer" value={draft.target_customer || "Not defined"} />
-                  <MetaCard label="Price Range" value={draft.price_range || "Not defined"} />
-                  <MetaCard label="Primary Goal" value={draft.primary_goal || "Not defined"} />
-                  <MetaCard
-                    label="Workflow"
-                    value={
-                      workflow?.ready_for_persona_preview
-                        ? "Core setup aligned"
-                        : "More setup still required"
-                    }
-                  />
-                </div>
-
-                <div className="mt-5">
-                  <div className="text-[0.72rem] uppercase tracking-[0.24em] text-app-muted">
-                    Key Feature Highlights
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {visibleFeatureHighlights.length > 0 ? (
-                      visibleFeatureHighlights.map((feature) => (
-                        <BadgeChip key={feature}>{feature}</BadgeChip>
-                      ))
-                    ) : (
-                      <span className="text-sm text-app-muted">
-                        Add features on the left to build the respondent reaction model.
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {(draft.product_image_labels.length > 0 ||
-                  draft.product_image_objects.length > 0 ||
-                  draft.product_image_colors.length > 0) ? (
-                  <div className="mt-5 rounded-[1.35rem] border border-white/6 bg-white/[0.03] p-4">
-                    <div className="text-[0.72rem] uppercase tracking-[0.24em] text-app-muted">
-                      Saved Visual Details
-                    </div>
-                    <div className="mt-3 space-y-3">
-                      {draft.product_image_labels.length > 0 ? (
-                        <ChipRow title="Labels" items={draft.product_image_labels} />
-                      ) : null}
-                      {draft.product_image_objects.length > 0 ? (
-                        <ChipRow title="Objects" items={draft.product_image_objects} />
-                      ) : null}
-                      {draft.product_image_colors.length > 0 ? (
-                        <ColorRow colors={draft.product_image_colors} />
-                      ) : null}
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-            </GlassPanel>
-
-            <GlassPanel className="p-5 sm:p-6">
-              <div className="rounded-[1.55rem] border border-white/5 bg-[linear-gradient(180deg,rgba(12,18,22,0.84),rgba(12,18,22,0.6))] p-5">
-                <div className="flex flex-wrap items-center gap-3">
-                  <BadgeChip tone="gold">Visual Details</BadgeChip>
-                  {imageAppliedToSaved ? (
-                    <BadgeChip tone="cyan">Applied to Context</BadgeChip>
-                  ) : imageAppliedToDraft ? (
-                    <BadgeChip tone="cyan">Applied to Draft</BadgeChip>
-                  ) : latestImageAnalysis ? (
-                    <BadgeChip>Not yet applied</BadgeChip>
-                  ) : null}
-                </div>
-
-                {!uploadedImagePreviewUrl && !latestImageAnalysis ? (
-                  <label className="mt-5 flex cursor-pointer flex-col items-center justify-center rounded-[1.45rem] border border-dashed border-white/12 bg-white/[0.03] px-6 py-10 text-center transition hover:border-app-cyan/25 hover:bg-white/[0.05]">
-                    <div className="text-sm font-medium text-app-text">
-                      Upload Product Image
-                    </div>
-                    <p className="mt-2 max-w-xs text-sm leading-6 text-app-muted">
-                      Upload a product image to enrich the product context with
-                      visual cues like labels, objects, colors, and text.
-                    </p>
-                    <div className="mt-3 text-xs uppercase tracking-[0.22em] text-app-muted">
-                      JPG, JPEG, PNG
-                    </div>
-                    <input
-                      type="file"
-                      accept=".jpg,.jpeg,.png,image/png,image/jpeg"
-                      className="hidden"
-                      onChange={(event) =>
-                        setUploadedImageFile(event.target.files?.[0] ?? null)
-                      }
-                    />
-                  </label>
-                ) : (
-                  <div className="mt-5 space-y-5">
-                    <div className="grid gap-4 md:grid-cols-[minmax(0,0.88fr)_minmax(0,1.12fr)]">
-                      <div className="overflow-hidden rounded-[1.35rem] border border-white/8 bg-white/[0.03]">
-                        {uploadedImagePreviewUrl ? (
-                          <img
-                            src={uploadedImagePreviewUrl}
-                            alt="Uploaded product preview"
-                            className="h-full w-full object-cover"
-                          />
-                        ) : (
-                          <div className="flex h-full min-h-56 items-center justify-center px-6 text-center text-sm text-app-muted">
-                            Previously analyzed image data is available, but the
-                            backend does not yet expose asset retrieval for image
-                            preview reloads.
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="space-y-4">
-                        <div className="flex flex-wrap gap-3">
-                          <label className="cursor-pointer">
-                            <span className="inline-flex items-center justify-center rounded-2xl border border-app-border bg-white/[0.03] px-4 py-3 text-sm font-medium text-app-text transition hover:border-app-cyan/30 hover:text-app-cyan">
-                              Upload Product Image
-                            </span>
-                            <input
-                              type="file"
-                              accept=".jpg,.jpeg,.png,image/png,image/jpeg"
-                              className="hidden"
-                              onChange={(event) =>
-                                setUploadedImageFile(event.target.files?.[0] ?? null)
-                              }
-                            />
-                          </label>
-                          <Button
-                            variant="secondary"
-                            onClick={handleAnalyzeImage}
-                            disabled={!uploadedImageFile || isAnalyzingImage}
-                          >
-                            {isAnalyzingImage ? "Analyzing..." : "Analyze Image"}
-                          </Button>
-                        </div>
-
-                        {imageSignals ? (
-                          <div className="space-y-4">
-                            <ChipRow
-                              title="Labels"
-                              items={toStringArray(imageSignals.labels)}
-                            />
-                            <ChipRow
-                              title="Objects"
-                              items={toStringArray(imageSignals.objects)}
-                            />
-                            <ColorSwatchGrid colors={toColorItems(imageSignals.colors)} />
-                            {String(imageSignals.text ?? "").trim() ? (
-                              <details className="rounded-2xl border border-white/6 bg-white/[0.03] p-4 text-sm text-app-muted">
-                                <summary className="cursor-pointer text-app-text">
-                                  Detected Text
-                                </summary>
-                                <p className="mt-3 whitespace-pre-wrap leading-6">
-                                  {String(imageSignals.text)}
-                                </p>
-                              </details>
-                            ) : null}
-                          </div>
-                        ) : (
-                          <div className="rounded-2xl border border-white/6 bg-white/[0.03] p-4 text-sm text-app-muted">
-                            Analyze the uploaded image to extract raw visual signals.
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <Button
-                        variant="secondary"
-                        onClick={handleGenerateVisualSummary}
-                        disabled={!imageSignals}
-                      >
-                        Generate Visual Summary
-                      </Button>
-                      <Button
-                        variant="secondary"
-                        onClick={handleApplyVisualDetailsToDraft}
-                        disabled={!imagePatch}
-                      >
-                        Apply Visual Details to Context
-                      </Button>
-                    </div>
-
-                    {visualSummary ? (
-                      <div className="rounded-[1.35rem] border border-white/6 bg-white/[0.03] p-4">
-                        <div className="text-[0.72rem] uppercase tracking-[0.24em] text-app-muted">
-                          Visual Summary
-                        </div>
-                        <p className="mt-3 text-sm leading-7 text-app-text">
-                          {visualSummary}
-                        </p>
-                      </div>
-                    ) : null}
-                  </div>
-                )}
-              </div>
-            </GlassPanel>
-          </div>
-        </RevealOnScroll>
       </div>
     </SectionWrapper>
   );
@@ -1040,7 +924,7 @@ function ProductGroupCard({
 }) {
   return (
     <GlassPanel className="p-4 sm:p-5">
-      <div className="rounded-[1.45rem] border border-white/5 bg-[linear-gradient(180deg,rgba(12,18,22,0.84),rgba(12,18,22,0.58))] p-5">
+      <div className="rounded-[1.45rem] border border-app-border [background:var(--theme-panel-gradient)] p-5">
         <div className="mb-5">
           <div className="text-[0.72rem] uppercase tracking-[0.24em] text-app-gold">
             {title}
@@ -1055,18 +939,7 @@ function ProductGroupCard({
 
 function PreviewField({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl border border-white/6 bg-white/[0.03] p-4">
-      <div className="text-[0.68rem] uppercase tracking-[0.22em] text-app-muted">
-        {label}
-      </div>
-      <div className="mt-2 text-sm leading-6 text-app-text">{value}</div>
-    </div>
-  );
-}
-
-function MetaCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-2xl border border-white/6 bg-white/[0.03] p-4">
+    <div className="rounded-2xl border border-app-border [background:var(--status-neutral-bg)] p-4">
       <div className="text-[0.68rem] uppercase tracking-[0.22em] text-app-muted">
         {label}
       </div>
@@ -1127,7 +1000,7 @@ function ColorSwatchGrid({
         {colors.map((color) => (
           <div
             key={`${color.hex}-${color.label}`}
-            className="flex items-center gap-3 rounded-2xl border border-white/6 bg-white/[0.03] px-3 py-2"
+            className="flex items-center gap-3 rounded-2xl border border-app-border [background:var(--status-neutral-bg)] px-3 py-2"
           >
             <span
               className="inline-flex h-4 w-4 rounded-full border border-white/20"
@@ -1145,7 +1018,7 @@ function ColorBadge({ label }: { label: string }) {
   const hex = extractHexColor(label);
 
   return (
-    <span className="inline-flex items-center gap-2 rounded-full border border-white/8 bg-white/[0.04] px-3 py-1.5 text-sm text-app-text">
+    <span className="inline-flex items-center gap-2 rounded-full border border-app-border [background:var(--status-neutral-bg)] px-3 py-1.5 text-sm text-app-text">
       {hex ? (
         <span
           className="inline-flex h-3 w-3 rounded-full border border-white/20"
@@ -1217,40 +1090,6 @@ function validateProductDraft(draft: ProductDraft) {
   }
 
   return null;
-}
-
-function buildAudienceContextSummary(
-  payload:
-    | {
-        state?: string | null;
-        metro?: string | null;
-        zip_code?: string | null;
-        age_min?: number | null;
-        age_max?: number | null;
-        homeowner_only?: boolean;
-        renter_only?: boolean;
-      }
-    | null
-    | undefined
-) {
-  if (!payload) {
-    return "Audience not configured yet.";
-  }
-
-  const geography = [payload.state, payload.metro, payload.zip_code ? `ZIP ${payload.zip_code}` : null]
-    .filter(Boolean)
-    .join(" • ");
-  const age =
-    payload.age_min || payload.age_max
-      ? `Age ${payload.age_min ?? "Any"}-${payload.age_max ?? "Any"}`
-      : "All ages";
-  const housing = payload.homeowner_only
-    ? "Homeowners"
-    : payload.renter_only
-      ? "Renters"
-      : "Mixed housing";
-
-  return [geography || "All geographies", age, housing].filter(Boolean).join(" • ");
 }
 
 function isPatchAppliedToDraft(patch: ProductPayload, payload: ProductPayload) {

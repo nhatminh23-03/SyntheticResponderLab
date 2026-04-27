@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 
-import { loadNeoSurveyPreset, saveStudyMode } from "@/lib/api";
+import { bootstrapNeoDemoStudy, saveStudyMode } from "@/lib/api";
 import { buildStudyModeStatusMessage, StudyModeValue } from "@/lib/setup-flow-utils";
 import { cn } from "@/lib/utils";
 import { useStudy } from "@/providers/study-provider";
@@ -23,33 +23,33 @@ const studyModeCards: Array<{
   bullets: string[];
   accent: "cyan" | "gold";
 }> = [
-  {
-    value: "neo_smart",
-    eyebrow: "Guided Demo",
-    title: "Neo Smart Living Demo",
-    description:
-      "Use the Neo Smart framing, sharper defaults, and more curated context for the premium guided demo experience.",
-    bullets: [
-      "Pre-framed around the Neo Smart Living story",
-      "Best for a polished walkthrough",
-      "Trust framing stays close to the demo narrative",
-    ],
-    accent: "gold",
-  },
-  {
-    value: "general",
-    eyebrow: "Flexible Mode",
-    title: "General Custom Study",
-    description:
-      "Start from a cleaner open canvas for custom research projects, broader use cases, and reusable workflow setup.",
-    bullets: [
-      "Neutral setup path for general research",
-      "Best for reusable studies beyond the demo brand",
-      "Keeps the same grounded trust-first engine",
-    ],
-    accent: "cyan",
-  },
-];
+    {
+      value: "neo_smart",
+      eyebrow: "Guided Demo",
+      title: "Neo Smart Living Demo",
+      description:
+        "Use a guided setup with Neo Smart defaults and prefilled context for a polished demo.",
+      bullets: [
+        "Best for a fast guided walkthrough",
+        "Starts with Neo Smart context and survey defaults",
+        "Great for demo-ready storytelling",
+      ],
+      accent: "gold",
+    },
+    {
+      value: "general",
+      eyebrow: "Custom Study",
+      title: "General Custom Study",
+      description:
+        "Start from a blank setup so you can tailor each step to your own project.",
+      bullets: [
+        "Best for non-Neo use cases",
+        "No prefilled demo assumptions",
+        "Same simulation engine with full flexibility",
+      ],
+      accent: "cyan",
+    },
+  ];
 
 export function StudyModeSection() {
   const {
@@ -60,6 +60,7 @@ export function StudyModeSection() {
     isCreatingStudy,
     isHydratingStudy,
     refreshStudy,
+    setStudy,
   } = useStudy();
   const { scrollToSection } = useSectionRegistry();
   const [selectedMode, setSelectedMode] = useState<StudyModeValue | null>(null);
@@ -123,23 +124,27 @@ export function StudyModeSection() {
         throw new Error("No study is available yet.");
       }
 
+      if (nextMode === "neo_smart") {
+        const workspaceMessage = isSwitchingModes
+          ? " Started a new study for this mode so you can continue with a clean setup."
+          : "";
+        const bootstrappedStudy = await bootstrapNeoDemoStudy(resolvedStudyId);
+        setStudy(bootstrappedStudy);
+        setSelectedMode("neo_smart");
+
+        const previewWarnings =
+          bootstrappedStudy.derived?.latest_persona_preview?.warning_messages ?? [];
+        const previewMessage =
+          previewWarnings.length > 0
+            ? ` Persona preview completed with warnings: ${previewWarnings.join("; ")}`
+            : " Audience, product, market, survey, experiment, and persona preview are ready for Interview Synthesis.";
+
+        setStatusMessage(`Neo Smart Living Demo prepared.${workspaceMessage}${previewMessage}`);
+        return;
+      }
+
       const result = await saveStudyMode(resolvedStudyId, nextMode);
       setSelectedMode(result.value as StudyModeValue);
-      const shouldAutoLoadNeoSurvey =
-        nextMode === "neo_smart" &&
-        (isSwitchingModes || study?.survey?.status !== "saved");
-      let neoSurveyPresetWarning: string | null = null;
-
-      if (shouldAutoLoadNeoSurvey) {
-        try {
-          await loadNeoSurveyPreset(resolvedStudyId);
-        } catch (error) {
-          neoSurveyPresetWarning =
-            error instanceof Error
-              ? error.message
-              : "The Neo survey preset could not be loaded automatically.";
-        }
-      }
 
       const refreshedStudy = await refreshStudy(resolvedStudyId);
       const preservedSavedSections = [
@@ -154,17 +159,9 @@ export function StudyModeSection() {
         isSwitchingModes ? [] : preservedSavedSections
       );
       const workspaceMessage = isSwitchingModes
-        ? " A fresh study workspace was created for the new mode so the downstream setup starts clean."
+        ? " Started a new study for this mode so you can continue with a clean setup."
         : "";
-      const neoSurveyMessage =
-        nextMode === "neo_smart"
-          ? shouldAutoLoadNeoSurvey
-            ? neoSurveyPresetWarning
-              ? ` Neo mode is saved, but the bundled survey preset still needs manual attention: ${neoSurveyPresetWarning}`
-              : " The bundled Neo survey preset was loaded automatically."
-            : " Neo defaults remain available across the guided setup path."
-          : " Downstream setup sections now start empty until you fill and save them.";
-      setStatusMessage(`${baseMessage}${workspaceMessage}${neoSurveyMessage}`);
+      setStatusMessage(`${baseMessage}${workspaceMessage} Next steps are ready for your custom inputs.`);
     } catch (error) {
       setErrorMessage(
         error instanceof Error
@@ -184,22 +181,22 @@ export function StudyModeSection() {
       className="overflow-hidden"
       contentClassName="relative"
     >
-      <div className="grid min-h-[calc(100svh-var(--nav-height)-1rem)] gap-8 lg:grid-cols-[minmax(0,0.7fr)_minmax(0,1.3fr)] lg:items-center">
+      <div className="grid gap-8 lg:min-h-[calc(100svh-var(--nav-height)-1rem)] xl:grid-cols-[minmax(0,0.7fr)_minmax(0,1.3fr)] xl:items-center">
         <RevealOnScroll>
           <SectionHeader
             index={1}
             eyebrow="Study Setup"
-            title="Choose the mode that shapes the rest of the workflow."
-            description="This is the next chapter after the hero: decide whether this study should follow the curated Neo Smart demo path or a more flexible general research path, then carry that decision through the one-page setup flow."
+            title="Choose how you want to start this study."
+            description="Pick the path that fits your demo. Guided Demo loads Neo Smart defaults. Custom Study starts blank so you can build your own setup."
           />
 
           <div className="mt-6 space-y-4">
             <div className="flex flex-wrap gap-3">
-              <BadgeChip tone="gold">Step 01 of 06</BadgeChip>
-              <BadgeChip tone="cyan">Backend save enabled</BadgeChip>
+              <BadgeChip tone="gold">Step 1 of 6</BadgeChip>
+              <BadgeChip tone="cyan">Saves to study</BadgeChip>
             </div>
 
-            
+
 
             <div className="min-h-10 text-sm">
               {errorMessage ? (
@@ -208,7 +205,7 @@ export function StudyModeSection() {
                 <span className="text-app-cyan">{statusMessage}</span>
               ) : (
                 <span className="text-app-muted">
-                  Pick a mode to decide whether the next sections should start guided or blank.
+                  Pick a mode to start with either a guided demo setup or a blank custom setup.
                 </span>
               )}
             </div>
@@ -217,14 +214,15 @@ export function StudyModeSection() {
               variant="secondary"
               onClick={() => scrollToSection("audience")}
               disabled={!selectedMode}
+              className="w-full sm:w-auto"
             >
-              Continue to Audience
+              Continue to Audience Setup
               <ArrowRightIcon />
             </Button>
           </div>
         </RevealOnScroll>
 
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid gap-4 md:grid-cols-2">
           {studyModeCards.map((card, index) => {
             const isSelected = selectedMode === card.value;
 
@@ -242,11 +240,11 @@ export function StudyModeSection() {
                     className={cn(
                       "h-full p-4 transition duration-300 sm:p-5",
                       isSelected
-                        ? "border-app-cyan/30 bg-[linear-gradient(180deg,rgba(118,228,255,0.12),rgba(255,255,255,0.04))] shadow-[0_0_60px_rgba(15,216,255,0.12)]"
-                        : "hover:border-white/15 hover:bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.02))]"
+                        ? "[border-color:var(--color-border-strong)] [background:var(--color-brand-primary-soft)] [box-shadow:var(--button-primary-shadow)]"
+                        : "hover:[border-color:var(--color-border-strong)] hover:[background:var(--button-secondary-bg-hover)]"
                     )}
                   >
-                    <div className="flex h-full flex-col rounded-[1.45rem] border border-white/5 bg-[linear-gradient(180deg,rgba(12,18,22,0.82),rgba(12,18,22,0.56))] p-5">
+                    <div className="flex h-full flex-col rounded-[1.35rem] border border-app-border p-4 sm:rounded-[1.45rem] sm:p-5 [background:var(--theme-panel-gradient)]">
                       <div className="flex items-start justify-between gap-4">
                         <div>
                           <div className="flex flex-wrap items-center gap-3">
@@ -255,7 +253,7 @@ export function StudyModeSection() {
                               <BadgeChip tone="cyan">Current selection</BadgeChip>
                             ) : null}
                           </div>
-                          <h3 className="mt-4 font-display text-[1.85rem] font-medium tracking-[-0.045em] text-app-text">
+                          <h3 className="mt-4 font-display text-[1.55rem] font-medium tracking-[-0.045em] text-app-text sm:text-[1.7rem] lg:text-[1.85rem]">
                             {card.title}
                           </h3>
                           <p className="mt-3 max-w-2xl text-sm leading-6 text-app-muted">
@@ -265,10 +263,10 @@ export function StudyModeSection() {
 
                         <div
                           className={cn(
-                            "relative flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border",
+                            "relative flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border sm:h-12 sm:w-12",
                             isSelected
-                              ? "border-app-cyan/35 bg-[rgba(15,216,255,0.12)] text-app-cyan"
-                              : "border-white/10 bg-white/[0.03] text-app-muted"
+                              ? "text-app-cyan [border-color:var(--color-border-strong)] [background:var(--color-brand-primary-soft)]"
+                              : "text-app-muted [border-color:var(--status-neutral-border)] [background:var(--status-neutral-bg)]"
                           )}
                         >
                           {card.value === "neo_smart" ? (
@@ -283,14 +281,14 @@ export function StudyModeSection() {
                         {card.bullets.map((bullet) => (
                           <div
                             key={bullet}
-                            className="flex items-start gap-3 rounded-2xl border border-white/5 bg-white/[0.02] px-3.5 py-3"
+                            className="flex items-start gap-3 rounded-2xl border border-app-border px-3 py-3 [background:var(--button-secondary-bg)] sm:px-3.5"
                           >
                             <span
                               className={cn(
                                 "mt-1 inline-flex h-2.5 w-2.5 shrink-0 rounded-full",
                                 card.accent === "gold"
-                                  ? "bg-app-gold shadow-[0_0_14px_rgba(216,186,103,0.55)]"
-                                  : "bg-app-cyan shadow-[0_0_14px_rgba(15,216,255,0.55)]"
+                                  ? "bg-app-gold shadow-[var(--chip-gold-shadow)]"
+                                  : "bg-app-cyan shadow-[var(--chip-cyan-shadow)]"
                               )}
                             />
                             <span className="text-sm leading-5 text-app-muted">
@@ -300,26 +298,26 @@ export function StudyModeSection() {
                         ))}
                       </div>
 
-                      <div className="mt-auto flex items-center justify-between gap-4 pt-5">
+                      <div className="mt-auto flex flex-wrap items-center justify-between gap-3 pt-5">
                         <div className="text-[0.72rem] uppercase tracking-[0.24em] text-app-muted">
                           {isBusy
-                            ? "Saving selection..."
+                            ? "Saving mode..."
                             : isSelected
-                              ? "Saved in backend"
-                              : "Select mode"}
+                              ? "Saved"
+                              : "Choose mode"}
                         </div>
                         <div
                           className={cn(
                             "inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs tracking-[0.18em]",
                             isSelected
-                              ? "bg-[rgba(15,216,255,0.12)] text-app-cyan"
-                              : "bg-white/[0.03] text-app-muted"
+                              ? "text-app-cyan [background:var(--color-brand-primary-soft)]"
+                              : "text-app-muted [background:var(--status-neutral-bg)]"
                           )}
                         >
                           <span
                             className={cn(
                               "inline-block h-2 w-2 rounded-full",
-                              isSelected ? "bg-app-cyan" : "bg-white/20"
+                              isSelected ? "bg-app-cyan" : "[background:var(--status-neutral-border)]"
                             )}
                           />
                           {isSelected ? "Active" : "Available"}

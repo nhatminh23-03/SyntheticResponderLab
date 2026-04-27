@@ -1,11 +1,17 @@
 from __future__ import annotations
 
+import json
+from copy import deepcopy
 from datetime import datetime, timezone
+import re
+import time
 from typing import Any, Dict, List, Optional
 
+import requests
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from src.adapters.legacy_backend.runtime import load_module
 from src.adapters.legacy_backend.domain import (
     build_geography_context,
     build_analysis_view,
@@ -37,6 +43,7 @@ from src.persistence.storage import persist_asset_bytes
 from src.schemas.study import (
     CanonicalStudy,
     PersonaPreviewResult,
+    PromptPreviewResult,
     ProductEnrichmentSummary,
     ProductEnrichments,
     ProductState,
@@ -48,14 +55,184 @@ from src.schemas.study import (
     MarketState,
     SurveyState,
 )
-from src.services.exceptions import ConflictApiError, NotFoundApiError, UnsupportedMediaTypeApiError, ValidationApiError
+from src.services.exceptions import (
+    ConflictApiError,
+    ForbiddenApiError,
+    NotFoundApiError,
+    UnsupportedMediaTypeApiError,
+    ValidationApiError,
+)
+from src.services.demo_interview_fixtures import ensure_demo_interview_run
 from src.services.ids import make_public_id
+from src.services.interview_service import save_research_brief
+from src.services.url_security import validate_public_http_url
+from src.services.usage_limits import (
+    METRIC_PRODUCT_IMAGE_ANALYSIS,
+    METRIC_SIMULATION_RUN,
+    METRIC_STABILITY_CHECK,
+    METRIC_STUDY_CREATE,
+    METRIC_SURVEY_UPLOAD,
+    assert_no_in_flight_provider_job,
+    consume_daily_quota,
+)
 from src.services.workflow_service import build_workflow
 
 
 SECTION_KEYS = ("study_mode", "audience", "product", "market", "survey", "experiment")
 IMAGE_EXTENSIONS = {"jpg", "jpeg", "png"}
 SURVEY_EXTENSIONS = {"md", "docx", "pdf"}
+INSIGHTS_SUMMARY_MODEL = "openai/gpt-4o-mini"
+INSIGHTS_SUMMARY_TIMEOUT_SECONDS = 30
+INSIGHTS_SUMMARY_MAX_ATTEMPTS = 2
+INSIGHTS_SUMMARY_CACHE_VERSION = "v3"
+
+NEO_BOOTSTRAP_PERSONA_PREVIEW_SAMPLE_SIZE = 12
+NEO_BOOTSTRAP_AUDIENCE = {
+    "state": None,
+    "metro": None,
+    "zip_code": None,
+    "age_min": 25,
+    "age_max": 64,
+    "income_min": 50000,
+    "income_max": 199999,
+    "household_size_min": None,
+    "household_size_max": None,
+    "homeowner_only": True,
+    "renter_only": False,
+    "work_from_home": None,
+    "home_type": "Single-family",
+    "lifestyle_tags": [
+        "remote work",
+        "home improvement",
+        "wellness",
+        "hosting guests",
+        "storage",
+        "outdoor lifestyle",
+    ],
+    "notes": "backyard-space-compatible homeowners, broad geography (not locked to a specific state or metro).",
+}
+NEO_BOOTSTRAP_PRODUCT = {
+    "business_name": "Neo Smart Living",
+    "industry": "Factory-built modular backyard structures",
+    "product_name": "Tahoe Mini",
+    "product_type": "Permit-light modular backyard studio",
+    "product_description": (
+        "Tahoe Mini is a compact ~117 sq ft factory-built backyard unit delivered as flat-pack panels "
+        "and typically installed in about one day. It is positioned as a non-habitable accessory "
+        "structure, with no plumbing and no kitchen."
+    ),
+    "target_customer": "Homeowners with usable backyard/property space",
+    "price_range": "$23,000 delivered and installed",
+    "primary_goal": "Validate demand, barriers, and strongest positioning for Tahoe Mini.",
+    "key_features": [
+        "~117 sq ft compact footprint",
+        "Flat-pack delivery and fast install",
+        "Modular interchangeable wall system",
+        "Pre-wired electrical",
+        "Smart entry lock",
+        "Dual-pane floor-to-ceiling glass",
+        "Pitched roof with drainage",
+        "Optional sound insulation and HVAC",
+    ],
+    "main_use_cases": [
+        "Home office",
+        "Guest suite / short-term stay",
+        "Wellness studio",
+        "Adventure gear basecamp",
+        "General storage / premium speed shed",
+        "Creative studio",
+    ],
+    "main_pain_points_solved": [
+        "Need extra functional space without full remodel",
+        "Desire simpler and faster setup versus traditional construction",
+        "Need flexible backyard use cases",
+    ],
+    "main_barriers_or_concerns": [
+        "Upfront cost",
+        "HOA restrictions",
+        "Permit uncertainty",
+        "Space and access constraints",
+        "Financing options",
+        "Quality and durability concerns",
+        "Resale uncertainty",
+    ],
+    "product_image_labels": ["Prefabricated building", "Modular structure", "Glass door"],
+    "product_image_objects": [],
+    "product_image_colors": [],
+    "notes": "Preset from Neo Smart Living challenge docs for demo mode.",
+}
+NEO_BOOTSTRAP_MARKET = {
+    "category": "Backyard prefab studio",
+    "typical_price_band": "$20,000-$45,000",
+    "substitutes": [
+        "Traditional shed conversion",
+        "Garage conversion",
+        "Home addition / remodel",
+        "Coworking membership",
+    ],
+    "common_expected_features": [
+        "Fast installation",
+        "Weather durability",
+        "Natural light",
+        "Electrical readiness",
+        "Year-round comfort upgrades",
+    ],
+    "common_objections": [
+        "Upfront cost",
+        "Permit or HOA friction",
+        "Backyard fit uncertainty",
+        "Durability and resale questions",
+    ],
+    "direct_competitors": [
+        {
+            "name": "Studio Shed",
+            "product_type": "Premium prefabricated backyard studio",
+            "price_range": "$25,000-$45,000+",
+            "key_features": ["Multiple layouts", "High-end finishes", "Design-forward exterior"],
+            "strengths": ["Strong design appeal", "Recognizable category benchmark"],
+            "weaknesses": ["Higher cost", "Can feel premium beyond budget fit"],
+        },
+        {
+            "name": "Traditional shed conversion",
+            "product_type": "DIY or contractor-led backyard conversion",
+            "price_range": "$8,000-$25,000",
+            "key_features": ["Lower entry cost", "Local builder flexibility", "Incremental upgrades"],
+            "strengths": ["Budget-friendly starting point", "Familiar alternative"],
+            "weaknesses": ["Less polished", "Longer and less predictable process"],
+        },
+    ],
+    "notes": "Preset market frame for Neo Smart Living demo mode.",
+}
+NEO_BOOTSTRAP_EXPERIMENT = {
+    "sample_size": 100,
+    "selected_models": ["openai/gpt-4o-mini", "anthropic/claude-sonnet-4.5"],
+    "experiment_mode": "split",
+    "reruns_per_persona": 1,
+}
+NEO_BOOTSTRAP_RESEARCH_BRIEF = {
+    "primary_question": (
+        "Which Neo Smart Living customer segments show the strongest purchase potential for "
+        "Tahoe Mini, and what barriers need to be resolved to convert them?"
+    ),
+    "hypotheses": [
+        "Strong-fit homeowners will respond most strongly to home office, wellness, and guest-use positioning.",
+        "Price, permit clarity, and backyard fit will remain the main reasons interested respondents hesitate.",
+        "Fast installation and flexible use cases will outperform purely design-led messaging.",
+    ],
+    "decisions_to_inform": [
+        "Which target segment should anchor launch messaging.",
+        "Which use cases deserve top billing in the product story.",
+        "Which objections need proof points, financing support, or permit guidance before launch.",
+    ],
+    "focus_fit_tiers": ["strong", "soft"],
+    "focus_segments": [],
+    "known_context": (
+        "Tahoe Mini is a permit-light modular backyard studio positioned around quick install, "
+        "flexible backyard use, and a premium but simpler alternative to major construction."
+    ),
+    "notes": "Starter brief generated automatically for the Neo Smart Living guided demo.",
+}
+NEO_SURVEY_PRESET_FILENAME = "Neo Smart Living — Survey_HighPriority.md"
 
 
 def utcnow() -> datetime:
@@ -68,8 +245,15 @@ def create_study(
     *,
     study_mode: Optional[str],
     owner_user_id: Optional[str],
-    owner_org_id: Optional[str],
+    owner_org_id: Optional[str] = None,
 ) -> CanonicalStudy:
+    if owner_user_id:
+        consume_daily_quota(
+            session,
+            settings,
+            owner_user_id=owner_user_id,
+            metric_key=METRIC_STUDY_CREATE,
+        )
     study = Study(
         public_id=make_public_id("std"),
         owner_user_id=owner_user_id,
@@ -110,6 +294,39 @@ def get_study_or_404(session: Session, public_id: str) -> Study:
     study = session.scalar(select(Study).where(Study.public_id == public_id))
     if study is None:
         raise NotFoundApiError("Study not found.")
+    return study
+
+
+def assert_study_access(study: Study, current_user) -> None:
+    """Enforce that `current_user` owns the study, or is an admin.
+
+    Accepts any object with ``user_id`` and ``is_admin`` attributes, plus an
+    optional ``is_dev_fallback`` flag for dev/test fallback users.
+
+    Unowned studies (NULL owner) are treated as inaccessible unless the user
+    is an admin or the dev-fallback synthetic user.
+    """
+    if current_user is None:
+        raise ForbiddenApiError("You do not have access to this study.")
+
+    is_admin = bool(getattr(current_user, "is_admin", False))
+    is_dev_fallback = bool(getattr(current_user, "is_dev_fallback", False))
+    user_id = getattr(current_user, "user_id", None)
+
+    if is_admin or is_dev_fallback:
+        return
+
+    owner_id = study.owner_user_id
+    if owner_id is None:
+        raise ForbiddenApiError("You do not have access to this study.")
+
+    if owner_id != user_id:
+        raise ForbiddenApiError("You do not have access to this study.")
+
+
+def get_owned_study_or_404(session: Session, public_id: str, current_user) -> Study:
+    study = get_study_or_404(session, public_id)
+    assert_study_access(study, current_user)
     return study
 
 
@@ -217,6 +434,72 @@ def save_experiment_section(session: Session, settings: AppSettings, study: Stud
     return serialize_study(session, study)
 
 
+def bootstrap_neo_demo_study(
+    session: Session,
+    settings: AppSettings,
+    study: Study,
+) -> CanonicalStudy:
+    legacy_available = _legacy_backend_available(settings.legacy_app_root)
+    _save_study_mode_internal(session, study, "neo_smart")
+    _save_section(
+        session,
+        study,
+        "audience",
+        _prepare_bootstrap_audience(legacy_available, settings),
+    )
+    _save_section(
+        session,
+        study,
+        "product",
+        _prepare_bootstrap_product(legacy_available, settings),
+    )
+
+    validated_market = _prepare_bootstrap_market(legacy_available, settings)
+    if not _market_has_content(validated_market):
+        raise ValidationApiError("Neo bootstrap market payload is invalid.")
+    _save_section(session, study, "market", validated_market)
+
+    _save_section(
+        session,
+        study,
+        "experiment",
+        _prepare_bootstrap_experiment(legacy_available, settings),
+    )
+    _save_neo_survey_preset_to_study(session, settings, study)
+    _recompute_lifecycle_status(session, study)
+    session.flush()
+
+    create_persona_preview(
+        session,
+        settings,
+        study,
+        sample_size=NEO_BOOTSTRAP_PERSONA_PREVIEW_SAMPLE_SIZE,
+        use_grounded_priors=True,
+        use_geography_filtered_priors=True,
+        use_cex_affordability_priors=True,
+        seed=None,
+    )
+
+    latest_preview = _latest_persona_preview(session, study)
+    if latest_preview is None:
+        raise ConflictApiError("Neo demo bootstrap could not find the generated persona preview.")
+
+    ensure_demo_interview_run(
+        session,
+        study,
+        latest_preview=latest_preview,
+        product=_get_sections(session, study)["product"].value_json,
+        questions=None,
+    )
+    save_research_brief(
+        session,
+        study,
+        _build_neo_bootstrap_research_brief(serialize_study(session, study)),
+    )
+    session.refresh(study)
+    return serialize_study(session, study)
+
+
 def handle_product_url_autofill(
     session: Session,
     settings: AppSettings,
@@ -225,7 +508,8 @@ def handle_product_url_autofill(
     url: str,
     apply_to_product: bool,
 ) -> Dict[str, Any]:
-    result = product_url_autofill(settings=settings, url=url)
+    safe_url = validate_public_http_url(url)
+    result = product_url_autofill(settings=settings, url=safe_url)
 
     text_asset = _create_asset_from_bytes(
         session,
@@ -242,7 +526,7 @@ def handle_product_url_autofill(
         study_id=study.id,
         enrichment_type="product_url_autofill",
         status="completed",
-        input_url=url,
+        input_url=safe_url,
         source_asset_id=text_asset.id,
         request_json={"apply_to_product": apply_to_product},
         result_json={
@@ -281,6 +565,13 @@ def handle_product_image_analysis(
     extension = _extension_from_name(filename)
     if extension not in IMAGE_EXTENSIONS:
         raise UnsupportedMediaTypeApiError("Unsupported image type. Please upload jpg, jpeg, or png.")
+    if study.owner_user_id:
+        consume_daily_quota(
+            session,
+            settings,
+            owner_user_id=study.owner_user_id,
+            metric_key=METRIC_PRODUCT_IMAGE_ANALYSIS,
+        )
 
     image_asset = _create_asset_from_bytes(
         session,
@@ -343,6 +634,13 @@ def handle_survey_upload(
     extension = _extension_from_name(filename)
     if extension not in SURVEY_EXTENSIONS:
         raise UnsupportedMediaTypeApiError("Unsupported survey file type. Please upload .md, .docx, or .pdf.")
+    if study.owner_user_id:
+        consume_daily_quota(
+            session,
+            settings,
+            owner_user_id=study.owner_user_id,
+            metric_key=METRIC_SURVEY_UPLOAD,
+        )
 
     asset = _create_asset_from_bytes(
         session,
@@ -372,20 +670,7 @@ def handle_neo_survey_preset(
     settings: AppSettings,
     study: Study,
 ) -> Dict[str, Any]:
-    if study.study_mode != "neo_smart":
-        raise ConflictApiError("Neo survey preset is only available when study_mode is neo_smart.")
-
-    filename, file_bytes, schema = load_neo_survey_schema_default(settings.legacy_app_root)
-    asset = _create_asset_from_bytes(
-        session,
-        settings,
-        study,
-        asset_type="survey_upload",
-        original_filename=filename,
-        mime_type="text/markdown",
-        payload=file_bytes,
-    )
-    _save_section(session, study, "survey", schema, source_asset=asset)
+    asset = _save_neo_survey_preset_to_study(session, settings, study)
     _recompute_lifecycle_status(session, study)
     session.commit()
     session.refresh(study)
@@ -507,10 +792,76 @@ def create_persona_preview(
     }
 
 
+def get_prompt_preview(
+    session: Session,
+    settings: AppSettings,
+    study: Study,
+    *,
+    persona_index: int = 0,
+) -> Dict[str, Any]:
+    if persona_index < 0:
+        raise ValidationApiError("persona_index must be greater than or equal to 0.")
+
+    sections = _get_sections(session, study)
+    audience_payload = sections["audience"].value_json
+    survey_payload = sections["survey"].value_json
+    latest_preview = _latest_persona_preview(session, study)
+
+    if latest_preview is None or not latest_preview.personas:
+        raise ConflictApiError("Generate a persona preview first before requesting prompt preview.")
+    if not survey_payload:
+        raise ConflictApiError("Survey must be saved before prompt preview is available.")
+
+    sorted_personas = sorted(latest_preview.personas, key=lambda item: item.row_index)
+    if persona_index >= len(sorted_personas):
+        raise ValidationApiError(
+            f"persona_index must be between 0 and {max(len(sorted_personas) - 1, 0)}."
+        )
+
+    schemas = load_module("backend.schemas", settings.legacy_app_root)
+    prompt_builder = load_module("backend.simulation.prompt_builder", settings.legacy_app_root)
+
+    persona_payload = sorted_personas[persona_index].persona_json or {}
+    persona = schemas.PersonaProfile(**persona_payload)
+    audience = schemas.AudienceFilter(**audience_payload) if audience_payload else None
+    survey_schema = schemas.SurveySchema(**survey_payload)
+    business_product_context = (
+        schemas.BusinessProductContext(**sections["product"].value_json)
+        if sections["product"].status == "saved" and sections["product"].value_json
+        else None
+    )
+    market_context = (
+        schemas.MarketContext(**sections["market"].value_json)
+        if sections["market"].status == "saved" and sections["market"].value_json
+        else None
+    )
+
+    preview = prompt_builder.build_openrouter_prompt_preview(
+        persona=persona,
+        survey_schema=survey_schema,
+        business_product_context=business_product_context,
+        market_context=market_context,
+        audience_filter=audience,
+    )
+
+    prompt_preview = PromptPreviewResult(
+        persona_index=persona_index,
+        persona_id=persona.persona_id,
+        persona_label=persona.segment_label or persona.persona_id,
+        survey_title=survey_schema.survey_title,
+        system_instruction=preview["system_instruction"],
+        user_instruction=preview["user_instruction"],
+        combined_prompt=preview["combined_prompt"],
+    )
+    return {"prompt_preview": prompt_preview.model_dump(mode="json")}
+
+
 def start_simulation_run(
     session: Session,
     settings: AppSettings,
     study: Study,
+    *,
+    prompt_user_template_override: Optional[str] = None,
 ) -> Dict[str, Any]:
     sections = _get_sections(session, study)
     audience = sections["audience"].value_json
@@ -525,6 +876,17 @@ def start_simulation_run(
         raise ConflictApiError("Survey must be saved before running the study.")
     if not experiment:
         raise ConflictApiError("Experiment plan must be saved before running the study.")
+
+    assert_no_in_flight_provider_job(session, owner_user_id=study.owner_user_id)
+    if study.owner_user_id:
+        consume_daily_quota(
+            session,
+            settings,
+            owner_user_id=study.owner_user_id,
+            metric_key=METRIC_SIMULATION_RUN,
+        )
+
+    normalized_prompt_override = (prompt_user_template_override or "").strip() or None
 
     geography_context = None
     geography_warning = None
@@ -544,6 +906,7 @@ def start_simulation_run(
             "audience": audience,
             "survey_title": survey.get("survey_title"),
             "experiment": experiment,
+            "prompt_user_template_override": normalized_prompt_override,
         },
         result_json=None,
         error_json=None,
@@ -551,7 +914,8 @@ def start_simulation_run(
         started_at=utcnow(),
     )
     session.add(job)
-    session.flush()
+    session.commit()
+    session.refresh(job)
 
     try:
         result = execute_simulation_run(
@@ -562,6 +926,7 @@ def start_simulation_run(
             product_payload=product,
             market_payload=market,
             geography_context=geography_context,
+            prompt_user_template_override=normalized_prompt_override,
         )
         if geography_warning:
             result.setdefault("warnings", []).append(geography_warning)
@@ -624,6 +989,15 @@ def start_stability_check(
     if not audience or not survey or not experiment:
         raise ConflictApiError("Audience, survey, and experiment must be saved before running a stability check.")
 
+    assert_no_in_flight_provider_job(session, owner_user_id=study.owner_user_id)
+    if study.owner_user_id:
+        consume_daily_quota(
+            session,
+            settings,
+            owner_user_id=study.owner_user_id,
+            metric_key=METRIC_STABILITY_CHECK,
+        )
+
     geography_context = None
     zip_code = audience.get("zip_code")
     if zip_code:
@@ -644,7 +1018,8 @@ def start_stability_check(
         started_at=utcnow(),
     )
     session.add(job)
-    session.flush()
+    session.commit()
+    session.refresh(job)
 
     try:
         result = execute_stability_check(
@@ -693,11 +1068,14 @@ def get_analysis_view(
 ) -> Dict[str, Any]:
     latest_run = _latest_job(session, study.id, "simulation_run")
     latest_run_payload = latest_run.result_json if latest_run and latest_run.status == "completed" else None
+    sections = _get_sections(session, study)
+    survey_payload = sections["survey"].value_json if sections.get("survey") else None
 
     return build_analysis_view(
         settings=settings,
         study_mode=study.study_mode,
         latest_run_payload=latest_run_payload,
+        survey_payload=survey_payload,
         question_id=question_id,
         model=model,
         segment=segment,
@@ -715,11 +1093,28 @@ def get_insights_view(
     latest_run = _latest_job(session, study.id, "simulation_run")
     latest_run_payload = latest_run.result_json if latest_run and latest_run.status == "completed" else None
 
-    return build_insights_view(
+    insights = build_insights_view(
         settings=settings,
         study_mode=study.study_mode,
         latest_run_payload=latest_run_payload,
     )
+    if not insights.get("available"):
+        return insights
+
+    run_id = str(
+        (latest_run_payload or {}).get("run_id")
+        or getattr(latest_run, "public_id", "")
+        or "latest_simulation_run"
+    ).strip()
+    evidence_package = insights.get("evidence_package") or {}
+    insights["llm_summary"] = _load_or_generate_insights_summary(
+        session=session,
+        settings=settings,
+        study=study,
+        run_id=run_id,
+        evidence_package=evidence_package,
+    )
+    return insights
 
 
 def _validate_study_mode(study_mode: str) -> None:
@@ -792,6 +1187,37 @@ def _get_sections(session: Session, study: Study) -> Dict[str, StudySectionState
     return mapping
 
 
+def _get_section_or_none(session: Session, study: Study, key: str) -> Optional[StudySectionState]:
+    return session.scalar(
+        select(StudySectionState).where(
+            StudySectionState.study_id == study.id,
+            StudySectionState.section_key == key,
+        )
+    )
+
+
+def _upsert_ephemeral_section(session: Session, study: Study, key: str, value: Dict[str, Any]) -> None:
+    row = _get_section_or_none(session, study, key)
+    if row is None:
+        row = StudySectionState(
+            study_id=study.id,
+            section_key=key,
+            status="not_started",
+            value_json=None,
+            saved_at=None,
+            updated_at=utcnow(),
+        )
+        session.add(row)
+        session.flush()
+
+    row.status = "saved"
+    row.value_json = value
+    row.saved_at = row.saved_at or utcnow()
+    row.updated_at = utcnow()
+    session.add(row)
+    session.commit()
+
+
 def _latest_enrichment(session: Session, study_id, enrichment_type: str) -> Optional[StudyProductEnrichment]:
     return session.scalar(
         select(StudyProductEnrichment)
@@ -815,6 +1241,385 @@ def _latest_job(session: Session, study_id, job_type: str) -> Optional[Job]:
         .where(Job.study_id == study_id, Job.job_type == job_type)
         .order_by(Job.queued_at.desc())
     )
+
+
+def _load_or_generate_insights_summary(
+    *,
+    session: Session,
+    settings: AppSettings,
+    study: Study,
+    run_id: str,
+    evidence_package: Dict[str, Any],
+) -> Dict[str, Any]:
+    cached_summary = _get_cached_insights_summary(session, study, run_id)
+    if cached_summary is not None:
+        return cached_summary
+
+    if not settings.openrouter_api_key:
+        return {
+            "available": False,
+            "message": "LLM summary is unavailable because OPENROUTER_API_KEY is not configured.",
+            "model": INSIGHTS_SUMMARY_MODEL,
+            "from_run_id": run_id,
+            "cached": False,
+        }
+
+    if not evidence_package or not (evidence_package.get("items") or []):
+        return {
+            "available": False,
+            "message": "LLM summary is unavailable because no evidence package was built for this run.",
+            "model": INSIGHTS_SUMMARY_MODEL,
+            "from_run_id": run_id,
+            "cached": False,
+        }
+
+    summary = _generate_llm_insights_summary(
+        settings=settings,
+        run_id=run_id,
+        evidence_package=evidence_package,
+    )
+    if summary.get("available"):
+        _upsert_ephemeral_section(
+            session,
+            study,
+            _insights_summary_cache_key(run_id),
+            summary,
+        )
+    return summary
+
+
+def _get_cached_insights_summary(
+    session: Session,
+    study: Study,
+    run_id: str,
+) -> Optional[Dict[str, Any]]:
+    row = _get_section_or_none(session, study, _insights_summary_cache_key(run_id))
+    if row is None or row.status != "saved" or not row.value_json:
+        return None
+
+    payload = dict(row.value_json)
+    payload["cached"] = True
+    payload["from_run_id"] = payload.get("from_run_id") or run_id
+    payload["overview"] = _normalize_insights_overview_lead(payload.get("overview"))
+    return payload
+
+
+def _insights_summary_cache_key(run_id: str) -> str:
+    return f"simulation_insights_summary_{INSIGHTS_SUMMARY_CACHE_VERSION}_{run_id}"
+
+
+def _generate_llm_insights_summary(
+    *,
+    settings: AppSettings,
+    run_id: str,
+    evidence_package: Dict[str, Any],
+) -> Dict[str, Any]:
+    response = _request_llm_insights_summary(
+        settings=settings,
+        evidence_package=evidence_package,
+    )
+    if not response.get("ok"):
+        return {
+            "available": False,
+            "message": response.get("message") or "LLM summary generation failed.",
+            "model": INSIGHTS_SUMMARY_MODEL,
+            "from_run_id": run_id,
+            "generated_at": utcnow().isoformat(),
+            "cached": False,
+        }
+
+    parsed = response.get("parsed") or {}
+    valid_evidence_ids = {
+        str(item.get("id"))
+        for item in (evidence_package.get("items") or [])
+        if isinstance(item, dict) and item.get("id")
+    }
+    key_findings: list[Dict[str, Any]] = []
+    for item in parsed.get("key_findings") or []:
+        if not isinstance(item, dict):
+            continue
+        evidence_ids = [
+            evidence_id
+            for evidence_id in item.get("evidence_ids") or []
+            if isinstance(evidence_id, str) and evidence_id in valid_evidence_ids
+        ]
+        key_findings.append(
+            {
+                "title": str(item.get("title") or "").strip(),
+                "summary": str(item.get("summary") or "").strip(),
+                "why_it_matters": str(item.get("why_it_matters") or "").strip(),
+                "evidence_ids": evidence_ids,
+            }
+        )
+    key_findings = [
+        item
+        for item in key_findings
+        if item["title"] and item["summary"] and item["why_it_matters"] and item["evidence_ids"]
+    ][:5]
+    if len(key_findings) < 5:
+        key_findings = _backfill_key_findings_from_evidence(
+            key_findings=key_findings,
+            evidence_package=evidence_package,
+        )
+
+    reliability_payload = parsed.get("result_reliability") if isinstance(parsed.get("result_reliability"), dict) else {}
+    reliability_evidence_ids = [
+        evidence_id
+        for evidence_id in (reliability_payload.get("evidence_ids") or [])
+        if isinstance(evidence_id, str) and evidence_id in valid_evidence_ids
+    ]
+    result_reliability = {
+        "level": str(reliability_payload.get("level") or "").strip(),
+        "summary": str(reliability_payload.get("summary") or "").strip(),
+        "reason": str(reliability_payload.get("reason") or "").strip(),
+        "evidence_ids": reliability_evidence_ids,
+    }
+    if not (
+        result_reliability["level"]
+        and result_reliability["summary"]
+        and result_reliability["reason"]
+        and result_reliability["evidence_ids"]
+    ):
+        result_reliability = None
+
+    return {
+        "available": True,
+        "overview": _normalize_insights_overview_lead(parsed.get("overview")),
+        "key_findings": key_findings,
+        "result_reliability": result_reliability,
+        "recommended_next_steps": [
+            str(item).strip()
+            for item in (parsed.get("recommended_next_steps") or [])
+            if str(item).strip()
+        ][:5],
+        "researcher_note": str(parsed.get("researcher_note") or "").strip(),
+        "model": INSIGHTS_SUMMARY_MODEL,
+        "from_run_id": run_id,
+        "generated_at": utcnow().isoformat(),
+        "cached": False,
+    }
+
+
+def _normalize_insights_overview_lead(value: Any) -> str:
+    overview = str(value or "").strip()
+    if not overview:
+        return overview
+
+    survey_lead_pattern = re.compile(r"^The\s+.+?\s+Survey\s+reveals\s+", re.IGNORECASE)
+    if survey_lead_pattern.search(overview):
+        return survey_lead_pattern.sub("The result reveals ", overview, count=1)
+
+    return overview
+
+
+def _request_llm_insights_summary(
+    *,
+    settings: AppSettings,
+    evidence_package: Dict[str, Any],
+) -> Dict[str, Any]:
+    endpoint = f"{settings.openrouter_base_url.rstrip('/')}/chat/completions"
+    output_contract = {
+        "overview": "string",
+        "key_findings": [
+            {
+                "title": "string",
+                "summary": "string",
+                "why_it_matters": "string",
+                "evidence_ids": ["evidence_id"],
+            }
+        ],
+        "result_reliability": {
+            "level": "\"Very low\" | \"Low\" | \"Medium\" | \"High\"",
+            "summary": "string",
+            "reason": "string",
+            "evidence_ids": ["evidence_id"],
+        },
+        "recommended_next_steps": ["string"],
+        "researcher_note": "string",
+    }
+    system_prompt = (
+        "You are a senior market research analyst. Use only the supplied evidence package from one completed "
+        "synthetic survey run. Do not invent numbers, do not contradict the evidence, and state uncertainty when "
+        "confidence is limited. Every key finding must cite valid evidence_ids from the package. Also rate how "
+        "reliable the result appears overall and explain why, using only the provided evidence package. Return exactly five key findings whenever the evidence package supports them. Return strict JSON only."
+    )
+    user_prompt = (
+        "Review the evidence package and write an executive-ready research summary.\n\n"
+        f"EVIDENCE_PACKAGE_JSON:\n{json.dumps(evidence_package, ensure_ascii=False, indent=2)}\n\n"
+        "Return JSON matching this contract exactly:\n"
+        f"{json.dumps(output_contract, ensure_ascii=False, indent=2)}"
+    )
+    headers = {
+        "Authorization": f"Bearer {settings.openrouter_api_key}",
+        "Content-Type": "application/json",
+    }
+    body = {
+        "model": INSIGHTS_SUMMARY_MODEL,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        "temperature": 0.2,
+        "max_tokens": 1400,
+        "response_format": {"type": "json_object"},
+    }
+
+    for attempt in range(INSIGHTS_SUMMARY_MAX_ATTEMPTS):
+        try:
+            response = requests.post(
+                endpoint,
+                headers=headers,
+                json=body,
+                timeout=INSIGHTS_SUMMARY_TIMEOUT_SECONDS,
+            )
+        except requests.Timeout:
+            if attempt + 1 < INSIGHTS_SUMMARY_MAX_ATTEMPTS:
+                time.sleep(0.6)
+                continue
+            return {"ok": False, "message": "LLM summary request timed out."}
+        except requests.RequestException as exc:
+            if attempt + 1 < INSIGHTS_SUMMARY_MAX_ATTEMPTS:
+                time.sleep(0.6)
+                continue
+            return {"ok": False, "message": f"LLM summary request failed: {exc}"}
+
+        if response.status_code >= 400:
+            is_retryable = response.status_code in {408, 409, 429} or response.status_code >= 500
+            if is_retryable and attempt + 1 < INSIGHTS_SUMMARY_MAX_ATTEMPTS:
+                time.sleep(0.6)
+                continue
+            return {
+                "ok": False,
+                "message": f"LLM summary request failed with HTTP {response.status_code}.",
+            }
+
+        try:
+            payload = response.json()
+        except ValueError:
+            return {"ok": False, "message": "LLM summary provider returned non-JSON HTTP payload."}
+
+        raw_text = _extract_openrouter_message_text(payload)
+        parsed = _parse_json_object_strict(raw_text)
+        if parsed is None:
+            return {"ok": False, "message": "LLM summary output was malformed JSON."}
+        return {"ok": True, "parsed": parsed}
+
+    return {"ok": False, "message": "LLM summary request failed."}
+
+
+def _extract_openrouter_message_text(payload: Dict[str, Any]) -> str:
+    try:
+        choices = payload.get("choices") or []
+        first = choices[0] if choices else {}
+        message = first.get("message") or {}
+        content = message.get("content")
+        if isinstance(content, str):
+            return content.strip()
+        if isinstance(content, list):
+            parts: list[str] = []
+            for item in content:
+                if isinstance(item, str):
+                    parts.append(item)
+                    continue
+                if isinstance(item, dict):
+                    text = item.get("text")
+                    if isinstance(text, str) and text.strip():
+                        parts.append(text.strip())
+            return "\n".join(parts).strip()
+    except Exception:
+        return ""
+    return ""
+
+
+def _parse_json_object_strict(raw_text: str) -> Optional[Dict[str, Any]]:
+    text = (raw_text or "").strip()
+    if not text:
+        return None
+    if text.startswith("```"):
+        lines = [line for line in text.splitlines() if not line.strip().startswith("```")]
+        text = "\n".join(lines).strip()
+    try:
+        parsed = json.loads(text)
+    except Exception:
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
+def _backfill_key_findings_from_evidence(
+    *,
+    key_findings: List[Dict[str, Any]],
+    evidence_package: Dict[str, Any],
+) -> List[Dict[str, Any]]:
+    if len(key_findings) >= 5:
+        return key_findings[:5]
+
+    used_evidence_ids = {
+        evidence_id
+        for finding in key_findings
+        for evidence_id in (finding.get("evidence_ids") or [])
+        if isinstance(evidence_id, str)
+    }
+
+    category_titles = {
+        "executive_metric": "Executive Signal",
+        "top_finding": "Finding",
+        "barrier": "Barrier Signal",
+        "use_case": "Use Case Signal",
+        "message_performance": "Positioning Signal",
+        "segment_story": "Segment Signal",
+        "trust": "Trust Signal",
+        "realism": "Realism Signal",
+        "benchmark": "Benchmark Signal",
+        "run_caveat": "Run Caveat",
+        "survey_caveat": "Survey Caveat",
+    }
+
+    for item in evidence_package.get("items") or []:
+        if not isinstance(item, dict):
+            continue
+        evidence_id = str(item.get("id") or "").strip()
+        summary = str(item.get("summary") or "").strip()
+        if not evidence_id or not summary or evidence_id in used_evidence_ids:
+            continue
+
+        title = str(item.get("title") or "").strip() or category_titles.get(
+            str(item.get("category") or "").strip().lower(),
+            "Supporting Signal",
+        )
+        metrics = item.get("metrics") if isinstance(item.get("metrics"), dict) else {}
+        why_it_matters = _build_backfill_reason(
+            category=str(item.get("category") or "").strip().lower(),
+            metrics=metrics,
+        )
+        key_findings.append(
+            {
+                "title": title,
+                "summary": summary,
+                "why_it_matters": why_it_matters,
+                "evidence_ids": [evidence_id],
+            }
+        )
+        used_evidence_ids.add(evidence_id)
+        if len(key_findings) >= 5:
+            break
+
+    return key_findings[:5]
+
+
+def _build_backfill_reason(*, category: str, metrics: Dict[str, Any]) -> str:
+    if category == "barrier":
+        return "This matters because a strong objection can directly suppress purchase intent unless the product, messaging, or offer addresses it."
+    if category == "use_case":
+        return "This matters because concentrated use-case demand helps sharpen who the product is really for and how it should be positioned."
+    if category == "message_performance":
+        return "This matters because stronger concept performance can translate into clearer positioning and more testable go-to-market direction."
+    if category == "segment_story":
+        return "This matters because segment concentration tells you whether the signal is broad-based or strongest within a narrower audience slice."
+    if category in {"trust", "realism", "benchmark", "run_caveat", "survey_caveat"}:
+        return "This matters because reliability and caveat signals determine how strongly you should trust the current readout before acting on it."
+    if category == "executive_metric" and metrics.get("average_interest") is not None:
+        return "This matters because overall interest level is a fast directional read on how receptive the current audience looks."
+    return "This matters because it captures one of the clearest supporting signals in the current evidence package."
 
 
 def _section_value_or_none(section: StudySectionState, key: str) -> Any:
@@ -954,6 +1759,108 @@ def _serialize_job(job: Job) -> Dict[str, Any]:
 
 def _extension_from_name(filename: str) -> str:
     return filename.lower().rsplit(".", 1)[-1] if "." in filename else ""
+
+
+def _save_neo_survey_preset_to_study(
+    session: Session,
+    settings: AppSettings,
+    study: Study,
+) -> StudyAsset:
+    if study.study_mode != "neo_smart":
+        raise ConflictApiError("Neo survey preset is only available when study_mode is neo_smart.")
+
+    if _legacy_backend_available(settings.legacy_app_root):
+        filename, file_bytes, schema = load_neo_survey_schema_default(settings.legacy_app_root)
+    else:
+        filename, file_bytes, schema = _load_fallback_neo_survey_schema_default()
+    asset = _create_asset_from_bytes(
+        session,
+        settings,
+        study,
+        asset_type="survey_upload",
+        original_filename=filename,
+        mime_type="text/markdown",
+        payload=file_bytes,
+    )
+    _save_section(session, study, "survey", schema, source_asset=asset)
+    return asset
+
+
+def _build_neo_bootstrap_research_brief(study_view: CanonicalStudy) -> Dict[str, Any]:
+    brief = deepcopy(NEO_BOOTSTRAP_RESEARCH_BRIEF)
+    preview = study_view.derived.latest_persona_preview
+    if not preview:
+        return brief
+
+    segment_labels: List[str] = []
+    for persona in preview.personas:
+        label = persona.get("segment_label") if isinstance(persona, dict) else None
+        if isinstance(label, str):
+            normalized = label.strip()
+            if normalized and normalized not in segment_labels:
+                segment_labels.append(normalized)
+
+    brief["focus_segments"] = segment_labels[:4]
+    return brief
+
+
+def _legacy_backend_available(legacy_root: Path) -> bool:
+    return (legacy_root / "backend").is_dir()
+
+
+def _prepare_bootstrap_audience(legacy_available: bool, settings: AppSettings) -> Dict[str, Any]:
+    payload = deepcopy(NEO_BOOTSTRAP_AUDIENCE)
+    if not legacy_available:
+        return payload
+    return validate_audience(payload, settings.legacy_app_root)
+
+
+def _prepare_bootstrap_product(legacy_available: bool, settings: AppSettings) -> Dict[str, Any]:
+    payload = deepcopy(NEO_BOOTSTRAP_PRODUCT)
+    if not legacy_available:
+        return payload
+    return validate_product(payload, settings.legacy_app_root)
+
+
+def _prepare_bootstrap_market(legacy_available: bool, settings: AppSettings) -> Dict[str, Any]:
+    payload = deepcopy(NEO_BOOTSTRAP_MARKET)
+    if not legacy_available:
+        return payload
+    return validate_market(payload, settings.legacy_app_root)
+
+
+def _prepare_bootstrap_experiment(legacy_available: bool, settings: AppSettings) -> Dict[str, Any]:
+    payload = deepcopy(NEO_BOOTSTRAP_EXPERIMENT)
+    if not legacy_available:
+        payload["split_across_models"] = payload.get("experiment_mode") == "split"
+        payload["mirror_personas_across_models"] = payload.get("experiment_mode") == "mirror"
+        return payload
+    return validate_experiment(payload, settings.legacy_app_root)
+
+
+def _load_fallback_neo_survey_schema_default() -> tuple[str, bytes, Dict[str, Any]]:
+    questions = [
+        {
+            "id": f"Q{i + 1}",
+            "text": f"Neo Smart Living demo question {i + 1}",
+            "question_type": "single_choice",
+            "options": ["Strongly disagree", "Disagree", "Neutral", "Agree", "Strongly agree"],
+            "required": True,
+            "help_text": None,
+        }
+        for i in range(32)
+    ]
+    markdown = "# Neo Smart Living Demo Survey\n\nFallback local preset used because the legacy survey source is unavailable.\n"
+    schema = {
+        "survey_title": "Neo Smart Living Demo Survey",
+        "description": "Fallback local survey preset for the Neo Smart Living guided demo.",
+        "source_format": "md",
+        "parse_warnings": [
+            "Fallback local Neo survey preset used because the legacy survey source was unavailable."
+        ],
+        "questions": questions,
+    }
+    return NEO_SURVEY_PRESET_FILENAME, markdown.encode("utf-8"), schema
 
 
 def _market_has_content(payload: Dict[str, Any]) -> bool:

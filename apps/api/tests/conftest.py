@@ -50,7 +50,8 @@ def app(monkeypatch: pytest.MonkeyPatch, test_settings: AppSettings):
 
 @pytest.fixture
 def client(app):
-    return TestClient(app)
+    with TestClient(app) as test_client:
+        yield test_client
 
 
 @pytest.fixture

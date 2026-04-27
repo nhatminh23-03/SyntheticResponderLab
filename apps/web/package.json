@@ -9,6 +9,7 @@
     "test:unit": "tsc -p tsconfig.test.json && node --test .test-dist/tests/**/*.js"
   },
   "dependencies": {
+    "@clerk/nextjs": "^6.39.2",
     "framer-motion": "^11.11.17",
     "next": "^14.2.18",
     "react": "^18.3.1",

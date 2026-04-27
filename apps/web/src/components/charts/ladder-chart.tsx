@@ -49,7 +49,7 @@ export function LadderChart({
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true, amount: 0.35 }}
                 transition={{ duration: 0.35, delay: index * 0.06 }}
-              className="relative min-h-[13.5rem] rounded-[1.25rem] border border-white/6 bg-[linear-gradient(180deg,rgba(255,255,255,0.035),rgba(255,255,255,0.018))] p-5"
+              className="relative min-h-[13.5rem] rounded-[1.25rem] border border-app-border [background:var(--hero-signal-card-bg)] p-5"
             >
               <div className="text-[0.68rem] uppercase tracking-[0.22em] text-app-muted">
                 Step {index + 1}
@@ -61,7 +61,7 @@ export function LadderChart({
                 </div>
                 <div className="h-11 w-11 rounded-full border border-app-cyan/20 bg-app-cyan/10 shadow-[0_0_22px_rgba(15,216,255,0.1)]" />
               </div>
-              <div className="mt-5 h-3 rounded-full border border-white/6 bg-white/[0.04] p-[2px]">
+              <div className="mt-5 h-3 rounded-full border border-app-border [background:var(--status-neutral-bg)] p-[2px]">
                 <motion.div
                   initial={{ scaleX: 0 }}
                   whileInView={{ scaleX: 1 }}

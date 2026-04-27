@@ -18,7 +18,7 @@ export function Field({ label, hint, error, className, children }: FieldProps) {
       </div>
       {children}
       {hint ? <p className="mt-2 text-xs leading-5 text-app-muted">{hint}</p> : null}
-      {error ? <p className="mt-2 text-xs leading-5 text-app-gold">{error}</p> : null}
+      {error ? <p className="mt-2 text-xs leading-5 text-app-warning">{error}</p> : null}
     </label>
   );
 }
@@ -43,7 +43,7 @@ export function TextInput({
       onChange={(event) => onChange(event.target.value)}
       placeholder={placeholder}
       inputMode={inputMode}
-      className="w-full rounded-2xl border border-white/8 bg-[rgba(255,255,255,0.03)] px-4 py-3 text-sm text-app-text outline-none transition placeholder:text-app-muted/50 focus:border-app-cyan/35 focus:bg-[rgba(255,255,255,0.05)] focus:shadow-[0_0_0_4px_rgba(15,216,255,0.08)]"
+      className="w-full rounded-2xl border px-4 py-3 text-sm text-app-text outline-none transition placeholder:text-app-muted/50 [background:var(--control-bg)] [border-color:var(--control-border)] focus:[border-color:var(--color-border-strong)] focus:[background:var(--control-bg-hover)] focus:[box-shadow:var(--focus-ring-shadow)]"
     />
   );
 }
@@ -63,7 +63,7 @@ export function SelectInput({
     <select
       value={value}
       onChange={(event) => onChange(event.target.value)}
-      className="w-full appearance-none rounded-2xl border border-white/8 bg-[rgba(255,255,255,0.03)] px-4 py-3 text-sm text-app-text outline-none transition focus:border-app-cyan/35 focus:bg-[rgba(255,255,255,0.05)] focus:shadow-[0_0_0_4px_rgba(15,216,255,0.08)]"
+      className="w-full appearance-none rounded-2xl border px-4 py-3 text-sm text-app-text outline-none transition [background:var(--control-bg)] [border-color:var(--control-border)] focus:[border-color:var(--color-border-strong)] focus:[background:var(--control-bg-hover)] focus:[box-shadow:var(--focus-ring-shadow)]"
     >
       {options.map((option) => (
         <option key={option.value} value={option.value}>
@@ -88,15 +88,15 @@ export function ToggleChip({ checked, onChange, label }: ToggleChipProps) {
       className={cn(
         "inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm transition",
         checked
-          ? "border-app-cyan/30 bg-[rgba(15,216,255,0.14)] text-app-cyan"
-          : "border-white/8 bg-white/[0.03] text-app-muted hover:border-white/14 hover:text-app-text"
+          ? "text-app-cyan [border-color:var(--color-border-strong)] [background:var(--color-brand-primary-soft)]"
+          : "text-app-muted [background:var(--control-bg)] [border-color:var(--control-border)] hover:text-app-text [box-shadow:inset_0_0_0_1px_var(--control-border)]"
       )}
       aria-pressed={checked}
     >
       <span
         className={cn(
           "inline-flex h-2.5 w-2.5 rounded-full",
-          checked ? "bg-app-cyan" : "bg-white/20"
+          checked ? "bg-app-cyan" : "[background:var(--badge-neutral-border)]"
         )}
       />
       {label}
@@ -123,7 +123,7 @@ export function TextAreaInput({
       onChange={(event) => onChange(event.target.value)}
       placeholder={placeholder}
       rows={rows}
-      className="w-full resize-none rounded-[1.45rem] border border-white/8 bg-[rgba(255,255,255,0.03)] px-4 py-3 text-sm text-app-text outline-none transition placeholder:text-app-muted/50 focus:border-app-cyan/35 focus:bg-[rgba(255,255,255,0.05)] focus:shadow-[0_0_0_4px_rgba(15,216,255,0.08)]"
+      className="w-full resize-none rounded-[1.45rem] border px-4 py-3 text-sm text-app-text outline-none transition placeholder:text-app-muted/50 [background:var(--control-bg)] [border-color:var(--control-border)] focus:[border-color:var(--color-border-strong)] focus:[background:var(--control-bg-hover)] focus:[box-shadow:var(--focus-ring-shadow)]"
     />
   );
 }
@@ -160,8 +160,8 @@ export function TagMultiSelect({
             className={cn(
               "rounded-full border px-3 py-2 text-sm transition",
               selected
-                ? "border-app-cyan/35 bg-[rgba(15,216,255,0.14)] text-app-cyan"
-                : "border-white/8 bg-white/[0.03] text-app-muted hover:border-white/14 hover:text-app-text"
+                ? "text-app-cyan [border-color:var(--color-border-strong)] [background:var(--color-brand-primary-soft)]"
+                : "text-app-muted [background:var(--control-bg)] [border-color:var(--control-border)] hover:text-app-text [box-shadow:inset_0_0_0_1px_var(--control-border)]"
             )}
           >
             {option}
@@ -201,7 +201,7 @@ export function TokenInput({
   }
 
   return (
-    <div className="rounded-[1.45rem] border border-white/8 bg-[rgba(255,255,255,0.03)] p-3">
+    <div className="rounded-[1.45rem] border p-3 [background:var(--control-bg)] [border-color:var(--control-border)]">
       <TokenComposer
         onAdd={addToken}
         placeholder={placeholder}
@@ -218,7 +218,7 @@ export function TokenInput({
             key={token}
             type="button"
             onClick={() => onChange(value.filter((item) => item !== token))}
-            className="inline-flex items-center gap-2 rounded-full border border-white/8 bg-white/[0.04] px-3 py-1.5 text-sm text-app-text transition hover:border-app-cyan/25 hover:text-app-cyan"
+            className="inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm text-app-text transition [background:var(--control-bg-hover)] [border-color:var(--control-border)] hover:border-app-cyan/25 hover:text-app-cyan"
           >
             <span>{token}</span>
             <span className="text-app-muted">×</span>
@@ -253,11 +253,11 @@ function TokenComposer({
         name="token"
         type="text"
         placeholder={placeholder}
-        className="min-w-0 flex-1 rounded-2xl border border-white/8 bg-[rgba(255,255,255,0.03)] px-4 py-3 text-sm text-app-text outline-none transition placeholder:text-app-muted/50 focus:border-app-cyan/35 focus:bg-[rgba(255,255,255,0.05)] focus:shadow-[0_0_0_4px_rgba(15,216,255,0.08)]"
+        className="min-w-0 flex-1 rounded-2xl border px-4 py-3 text-sm text-app-text outline-none transition placeholder:text-app-muted/50 [background:var(--control-bg)] [border-color:var(--control-border)] focus:[border-color:var(--color-border-strong)] focus:[background:var(--control-bg-hover)] focus:[box-shadow:var(--focus-ring-shadow)]"
       />
       <button
         type="submit"
-        className="rounded-2xl border border-app-border bg-white/[0.03] px-4 py-3 text-sm font-medium text-app-text transition hover:border-app-cyan/30 hover:text-app-cyan"
+        className="rounded-2xl border px-4 py-3 text-sm font-medium text-app-text transition [background:var(--button-secondary-bg)] [border-color:var(--button-secondary-border)] hover:border-app-cyan/30 hover:text-app-cyan hover:[background:var(--button-secondary-bg-hover)]"
       >
         {addLabel}
       </button>

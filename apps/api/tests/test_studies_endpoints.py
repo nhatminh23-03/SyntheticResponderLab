@@ -35,6 +35,189 @@ def _create_ready_to_run_study(client, study_mode: str = "neo_smart") -> str:
     return study_id
 
 
+def _mock_insights_run_payload() -> dict:
+    return {
+        "run_id": "run_insights_001",
+        "status": "completed",
+        "total_requested_responses": 8,
+        "total_generated_responses": 8,
+        "models_used": ["openai/gpt-4o-mini", "google/gemini-2.0-flash-001"],
+        "experiment_mode": "mirror",
+        "survey_title": "Neo Smart Living Demo Survey",
+        "question_count": 8,
+        "generation_mode": "mock",
+        "warnings": [],
+        "survey_parse_warnings": [],
+        "personas": [
+            {"persona_id": "PERS_001", "segment_label": "Remote Professionals", "fit_tier": "strong"},
+            {"persona_id": "PERS_002", "segment_label": "Wellness-Oriented", "fit_tier": "strong"},
+        ],
+        "response_record_preview": [],
+        "response_records": [
+            {
+                "respondent_id": "RESP_001",
+                "model": "openai/gpt-4o-mini",
+                "survey_title": "Neo Smart Living Demo Survey",
+                "question_id": "S3",
+                "question_text": "Outdoor space feasibility",
+                "question_type": "single_choice",
+                "answer": "Yes, definitely",
+                "segment_label": "Remote Professionals",
+            },
+            {
+                "respondent_id": "RESP_002",
+                "model": "google/gemini-2.0-flash-001",
+                "survey_title": "Neo Smart Living Demo Survey",
+                "question_id": "S3",
+                "question_text": "Outdoor space feasibility",
+                "question_type": "single_choice",
+                "answer": "Yes, likely",
+                "segment_label": "Wellness-Oriented",
+            },
+            {
+                "respondent_id": "RESP_001",
+                "model": "openai/gpt-4o-mini",
+                "survey_title": "Neo Smart Living Demo Survey",
+                "question_id": "Q1",
+                "question_text": "Purchase interest at $23,000",
+                "question_type": "likert",
+                "answer": 5,
+                "segment_label": "Remote Professionals",
+            },
+            {
+                "respondent_id": "RESP_002",
+                "model": "google/gemini-2.0-flash-001",
+                "survey_title": "Neo Smart Living Demo Survey",
+                "question_id": "Q1",
+                "question_text": "Purchase interest at $23,000",
+                "question_type": "likert",
+                "answer": 4,
+                "segment_label": "Wellness-Oriented",
+            },
+            {
+                "respondent_id": "RESP_001",
+                "model": "openai/gpt-4o-mini",
+                "survey_title": "Neo Smart Living Demo Survey",
+                "question_id": "Q2",
+                "question_text": "Purchase likelihood in 24 months",
+                "question_type": "likert",
+                "answer": 4,
+                "segment_label": "Remote Professionals",
+            },
+            {
+                "respondent_id": "RESP_002",
+                "model": "google/gemini-2.0-flash-001",
+                "survey_title": "Neo Smart Living Demo Survey",
+                "question_id": "Q2",
+                "question_text": "Purchase likelihood in 24 months",
+                "question_type": "likert",
+                "answer": 3,
+                "segment_label": "Wellness-Oriented",
+            },
+            {
+                "respondent_id": "RESP_001",
+                "model": "openai/gpt-4o-mini",
+                "survey_title": "Neo Smart Living Demo Survey",
+                "question_id": "Q3",
+                "question_text": "Primary intended use",
+                "question_type": "single_choice",
+                "answer": "Home office",
+                "segment_label": "Remote Professionals",
+            },
+            {
+                "respondent_id": "RESP_002",
+                "model": "google/gemini-2.0-flash-001",
+                "survey_title": "Neo Smart Living Demo Survey",
+                "question_id": "Q3",
+                "question_text": "Primary intended use",
+                "question_type": "single_choice",
+                "answer": "Home gym",
+                "segment_label": "Wellness-Oriented",
+            },
+            {
+                "respondent_id": "RESP_001",
+                "model": "openai/gpt-4o-mini",
+                "survey_title": "Neo Smart Living Demo Survey",
+                "question_id": "Q5_1",
+                "question_text": "Barrier: Upfront price",
+                "question_type": "likert",
+                "answer": 5,
+                "segment_label": "Remote Professionals",
+            },
+            {
+                "respondent_id": "RESP_002",
+                "model": "google/gemini-2.0-flash-001",
+                "survey_title": "Neo Smart Living Demo Survey",
+                "question_id": "Q5_1",
+                "question_text": "Barrier: Upfront price",
+                "question_type": "likert",
+                "answer": 4,
+                "segment_label": "Wellness-Oriented",
+            },
+            {
+                "respondent_id": "RESP_001",
+                "model": "openai/gpt-4o-mini",
+                "survey_title": "Neo Smart Living Demo Survey",
+                "question_id": "Q5_2",
+                "question_text": "Barrier: Permitting uncertainty",
+                "question_type": "likert",
+                "answer": 3,
+                "segment_label": "Remote Professionals",
+            },
+            {
+                "respondent_id": "RESP_002",
+                "model": "google/gemini-2.0-flash-001",
+                "survey_title": "Neo Smart Living Demo Survey",
+                "question_id": "Q5_2",
+                "question_text": "Barrier: Permitting uncertainty",
+                "question_type": "likert",
+                "answer": 2,
+                "segment_label": "Wellness-Oriented",
+            },
+            {
+                "respondent_id": "RESP_001",
+                "model": "openai/gpt-4o-mini",
+                "survey_title": "Neo Smart Living Demo Survey",
+                "question_id": "Q10A",
+                "question_text": "Concept 10 appeal",
+                "question_type": "likert",
+                "answer": 5,
+                "segment_label": "Remote Professionals",
+            },
+            {
+                "respondent_id": "RESP_002",
+                "model": "google/gemini-2.0-flash-001",
+                "survey_title": "Neo Smart Living Demo Survey",
+                "question_id": "Q10A",
+                "question_text": "Concept 10 appeal",
+                "question_type": "likert",
+                "answer": 4,
+                "segment_label": "Wellness-Oriented",
+            },
+            {
+                "respondent_id": "RESP_001",
+                "model": "openai/gpt-4o-mini",
+                "survey_title": "Neo Smart Living Demo Survey",
+                "question_id": "Q10B",
+                "question_text": "Concept 10 purchase likelihood",
+                "question_type": "likert",
+                "answer": 4,
+                "segment_label": "Remote Professionals",
+            },
+            {
+                "respondent_id": "RESP_002",
+                "model": "google/gemini-2.0-flash-001",
+                "survey_title": "Neo Smart Living Demo Survey",
+                "question_id": "Q10B",
+                "question_text": "Concept 10 purchase likelihood",
+                "question_type": "likert",
+                "answer": 3,
+                "segment_label": "Wellness-Oriented",
+            },
+        ],
+    }
+
+
 def test_create_study_endpoint(client):
     response = client.post("/api/v1/studies", json={"study_mode": "general"})
 
@@ -57,6 +240,170 @@ def test_patch_study_mode_endpoint(client):
     payload = response.json()["data"]
     assert payload["study_mode"]["value"] == "neo_smart"
     assert payload["study_lifecycle_status"] == "setup_in_progress"
+
+
+def test_bootstrap_neo_demo_endpoint_persists_ready_interview_setup(client, monkeypatch):
+    created = client.post("/api/v1/studies", json={}).json()["data"]["study"]
+    study_id = created["study_id"]
+
+    monkeypatch.setattr(
+        "src.services.study_service.preview_personas",
+        lambda **kwargs: {
+            "generation_mode": "grounded_priors",
+            "grounded_priors_available": True,
+            "cex_affordability_available": True,
+            "prior_notes": [{"note": "Grounded priors active"}],
+            "personas": [
+                {
+                    "persona_id": "neo-001",
+                    "segment_label": "Backyard office homeowners",
+                    "fit_tier": "strong",
+                    "age_bucket": "35-44",
+                    "income_bucket": "$75k-$124k",
+                },
+                {
+                    "persona_id": "neo-002",
+                    "segment_label": "Wellness-minded suburban households",
+                    "fit_tier": "soft",
+                    "age_bucket": "45-54",
+                    "income_bucket": "$125k-$199k",
+                },
+            ],
+        },
+    )
+
+    response = client.post(f"/api/v1/studies/{study_id}/study-mode/bootstrap/neo")
+
+    assert response.status_code == 200
+    payload = response.json()["data"]["study"]
+    assert payload["study_mode"]["value"] == "neo_smart"
+    assert payload["audience"]["status"] == "saved"
+    assert payload["product"]["status"] == "saved"
+    assert payload["product"]["value"]["product_name"] == "Tahoe Mini"
+    assert payload["market"]["status"] == "saved"
+    assert payload["survey"]["status"] == "saved"
+    assert payload["survey"]["source_filename"] == "Neo Smart Living — Survey_HighPriority.md"
+    assert payload["experiment"]["status"] == "saved"
+    assert payload["experiment"]["value"]["sample_size"] == 100
+    assert payload["experiment"]["value"]["experiment_mode"] == "split"
+    assert payload["derived"]["workflow"]["ready_for_persona_preview"] is True
+    assert payload["derived"]["latest_persona_preview"]["status"] == "completed"
+    assert payload["derived"]["latest_persona_preview"]["request"]["sample_size"] == 12
+    assert len(payload["derived"]["latest_persona_preview"]["personas"]) == 2
+    assert payload["lifecycle_status"] == "persona_previewed"
+
+    brief_response = client.get(f"/api/v1/studies/{study_id}/interview/brief")
+    assert brief_response.status_code == 200
+    brief_payload = brief_response.json()["data"]["research_brief"]
+    assert brief_payload["status"] == "saved"
+    assert "Tahoe Mini" in brief_payload["value"]["primary_question"]
+    assert brief_payload["value"]["focus_fit_tiers"] == ["strong", "soft"]
+    assert brief_payload["value"]["focus_segments"] == [
+        "Backyard office homeowners",
+        "Wellness-minded suburban households",
+    ]
+
+    latest_interview_response = client.get(
+        f"/api/v1/studies/{study_id}/interview/runs/latest"
+    )
+    assert latest_interview_response.status_code == 200
+    latest_interview_payload = latest_interview_response.json()["data"]["interview_run"]
+    assert latest_interview_payload["status"] == "completed"
+    assert latest_interview_payload["persona_count"] == 2
+    assert len(latest_interview_payload["pairs"]) == 2
+    assert latest_interview_payload["grounding_report"]["corpus_average"] > 0
+
+    rerun_response = client.post(f"/api/v1/studies/{study_id}/interview/runs", json={})
+    assert rerun_response.status_code == 200
+    rerun_payload = rerun_response.json()["data"]["interview_run"]
+    assert rerun_payload["status"] == "completed"
+    assert rerun_payload["persona_count"] == 2
+
+    insights_response = client.get(f"/api/v1/studies/{study_id}/interview/insights")
+    assert insights_response.status_code == 200
+    insights_payload = insights_response.json()["data"]["interview_insights"]
+    assert insights_payload["available"] is True
+    assert insights_payload["persona_count"] == 2
+    assert len(insights_payload["themes"]) >= 1
+
+
+def test_interview_chat_endpoint_continues_selected_persona(client, monkeypatch):
+    created = client.post("/api/v1/studies", json={}).json()["data"]["study"]
+    study_id = created["study_id"]
+
+    monkeypatch.setattr(
+        "src.services.study_service.preview_personas",
+        lambda **kwargs: {
+            "generation_mode": "grounded_priors",
+            "grounded_priors_available": True,
+            "cex_affordability_available": True,
+            "prior_notes": [{"note": "Grounded priors active"}],
+            "personas": [
+                {
+                    "persona_id": "neo-001",
+                    "segment_label": "Backyard office homeowners",
+                    "fit_tier": "strong",
+                    "age_bucket": "35-44",
+                    "income_bucket": "$75k-$124k",
+                    "likely_use_case": "Dedicated home office",
+                },
+            ],
+        },
+    )
+
+    bootstrap_response = client.post(f"/api/v1/studies/{study_id}/study-mode/bootstrap/neo")
+    assert bootstrap_response.status_code == 200
+
+    latest_interview_response = client.get(
+        f"/api/v1/studies/{study_id}/interview/runs/latest"
+    )
+    assert latest_interview_response.status_code == 200
+    latest_interview = latest_interview_response.json()["data"]["interview_run"]
+    persona_id = latest_interview["pairs"][0]["persona_id"]
+
+    client.app.state.settings.openrouter_api_key = "test-key"
+    captured = {}
+
+    def fake_call_openrouter_messages(**kwargs):
+        captured.update(kwargs)
+        return "I would move faster if the install felt predictable and the price included everything."
+
+    monkeypatch.setattr(
+        "src.services.interview_service._call_openrouter_messages",
+        fake_call_openrouter_messages,
+    )
+
+    response = client.post(
+        f"/api/v1/studies/{study_id}/interview/chat",
+        json={
+            "persona_id": persona_id,
+            "prompt": "What would make you more confident about buying?",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Remind me what matters most in your decision?",
+                },
+                {
+                    "role": "assistant",
+                    "content": "I need to trust the install process and feel like I will use it every week.",
+                },
+            ],
+            "transcript_source": "model_a",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()["data"]["interview_chat"]
+    assert payload["persona_id"] == persona_id
+    assert payload["transcript_source"] == "model_a"
+    assert payload["reply"].startswith("I would move faster")
+    assert payload["model"] == latest_interview["pairs"][0]["model_a"]["model"]
+    assert captured["api_key"] == "test-key"
+    assert captured["messages"][0]["role"] == "system"
+    assert captured["messages"][-1] == {
+        "role": "user",
+        "content": "What would make you more confident about buying?",
+    }
 
 
 def test_save_audience_and_get_workflow(client):
@@ -259,14 +606,14 @@ def test_persona_preview_happy_path_updates_canonical_study(client, monkeypatch)
                 {
                     "persona_id": "neo-001",
                     "segment_label": "Backyard office homeowners",
-                    "fit_tier": "high",
+                    "fit_tier": "strong",
                     "age_band": "35-44",
                     "income_band": "$75k-$124k",
                 },
                 {
                     "persona_id": "neo-002",
                     "segment_label": "Wellness-minded suburban households",
-                    "fit_tier": "medium",
+                    "fit_tier": "soft",
                     "age_band": "45-54",
                     "income_band": "$125k-$199k",
                 },
@@ -351,6 +698,126 @@ def test_product_provider_gaps_fail_clearly(client):
     assert "Google Vision credentials are required" in image_response.json()["error"]["message"]
 
 
+def test_product_url_autofill_rejects_private_network_targets(client):
+    created = client.post("/api/v1/studies", json={}).json()["data"]["study"]
+    study_id = created["study_id"]
+
+    response = client.post(
+        f"/api/v1/studies/{study_id}/product/url-autofill",
+        json={"url": "http://127.0.0.1/internal", "apply_to_product": False},
+    )
+
+    assert response.status_code == 400
+    assert "private-network URLs are not allowed" in response.json()["error"]["message"]
+
+
+def test_product_url_autofill_accepts_public_https_url(client, monkeypatch):
+    created = client.post("/api/v1/studies", json={}).json()["data"]["study"]
+    study_id = created["study_id"]
+
+    monkeypatch.setattr(
+        "src.services.study_service.product_url_autofill",
+        lambda **kwargs: {
+            "input_url": kwargs["url"],
+            "page_text": "Public product page copy",
+            "product_patch": {
+                "business_name": "Example Co",
+                "product_name": "Example Product",
+                "product_description": "Autofilled from a public product page.",
+            },
+        },
+    )
+
+    response = client.post(
+        f"/api/v1/studies/{study_id}/product/url-autofill",
+        json={"url": "https://example.com/product", "apply_to_product": False},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["enrichment"]["input_url"] == "https://example.com/product"
+
+
+def test_survey_upload_rejects_oversized_payload(client):
+    created = client.post("/api/v1/studies", json={}).json()["data"]["study"]
+    study_id = created["study_id"]
+    client.app.state.settings.max_survey_upload_bytes = 16
+
+    response = client.post(
+        f"/api/v1/studies/{study_id}/survey/upload",
+        files={"file": ("survey.md", b"x" * 17, "text/markdown")},
+    )
+
+    assert response.status_code == 413
+    assert "Survey upload exceeds" in response.json()["error"]["message"]
+
+
+def test_survey_upload_rejects_unsupported_extension_before_read(client):
+    created = client.post("/api/v1/studies", json={}).json()["data"]["study"]
+    study_id = created["study_id"]
+
+    response = client.post(
+        f"/api/v1/studies/{study_id}/survey/upload",
+        files={"file": ("survey.txt", b"hello", "text/plain")},
+    )
+
+    assert response.status_code == 415
+    assert "Unsupported survey file type" in response.json()["error"]["message"]
+
+
+def test_product_image_analysis_rejects_oversized_payload(client):
+    created = client.post("/api/v1/studies", json={}).json()["data"]["study"]
+    study_id = created["study_id"]
+    client.app.state.settings.max_product_image_upload_bytes = 8
+
+    response = client.post(
+        f"/api/v1/studies/{study_id}/product/image-analysis",
+        files={"file": ("product.png", b"123456789", "image/png")},
+    )
+
+    assert response.status_code == 413
+    assert "Product image upload exceeds" in response.json()["error"]["message"]
+
+
+def test_product_image_analysis_rejects_unsupported_extension_before_read(client):
+    created = client.post("/api/v1/studies", json={}).json()["data"]["study"]
+    study_id = created["study_id"]
+
+    response = client.post(
+        f"/api/v1/studies/{study_id}/product/image-analysis",
+        files={"file": ("product.gif", b"GIF89a", "image/gif")},
+    )
+
+    assert response.status_code == 415
+    assert "Unsupported image type" in response.json()["error"]["message"]
+
+
+def test_product_image_analysis_accepts_small_png_upload(client, monkeypatch):
+    created = client.post("/api/v1/studies", json={}).json()["data"]["study"]
+    study_id = created["study_id"]
+
+    monkeypatch.setattr(
+        "src.api.studies.handle_product_image_analysis",
+        lambda db, settings, study, filename, content_type, file_bytes, apply_to_product: {
+            "image_analysis": {
+                "status": "completed",
+                "source_asset_id": "asset_demo",
+                "analysis": {"labels": ["studio"]},
+                "proposed_product_patch": None,
+                "warnings": [],
+                "applied_to_product": apply_to_product,
+            }
+        },
+    )
+
+    response = client.post(
+        f"/api/v1/studies/{study_id}/product/image-analysis",
+        files={"file": ("product.png", b"\x89PNG\r\n\x1a\nsmall", "image/png")},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["image_analysis"]["status"] == "completed"
+
+
 def test_model_catalog_endpoint_returns_fallback_when_provider_missing(client):
     response = client.get("/api/v1/models")
 
@@ -385,7 +852,7 @@ def test_start_simulation_run_endpoint_returns_saved_job(client, monkeypatch):
                 {
                     "persona_id": "neo-001",
                     "segment_label": "Backyard office homeowners",
-                    "fit_tier": "high",
+                    "fit_tier": "strong",
                 }
             ],
             "response_record_preview": [
@@ -416,6 +883,67 @@ def test_start_simulation_run_endpoint_returns_saved_job(client, monkeypatch):
     latest_payload = latest_response.json()["data"]
     assert latest_payload["simulation_run"]["job_type"] == "simulation_run"
     assert latest_payload["simulation_run"]["result"]["total_generated_responses"] == 80
+
+
+def test_start_simulation_run_endpoint_passes_prompt_override(client, monkeypatch):
+    study_id = _create_ready_to_run_study(client)
+    captured: dict[str, object] = {}
+
+    def fake_execute_simulation_run(**kwargs):
+        captured.update(kwargs)
+        return {
+            "run_id": "run_prompt_001",
+            "status": "completed",
+            "total_requested_responses": 80,
+            "total_generated_responses": 80,
+            "models_used": ["openai/gpt-4o-mini", "google/gemini-2.0-flash-001"],
+            "experiment_mode": "mirror",
+            "survey_title": "Neo Smart Living Demo Survey",
+            "question_count": 32,
+            "generation_mode": "mock",
+            "run_conditions": {
+                "context_influence": {"enabled": True, "sources": ["audience"]},
+                "generation_mode": "mock",
+                "selected_models": ["openai/gpt-4o-mini", "google/gemini-2.0-flash-001"],
+            },
+            "personas": [],
+            "response_record_preview": [],
+            "response_records": [],
+            "warnings": [],
+            "survey_parse_warnings": [],
+        }
+
+    monkeypatch.setattr(
+        "src.services.study_service.execute_simulation_run",
+        fake_execute_simulation_run,
+    )
+
+    response = client.post(
+        f"/api/v1/studies/{study_id}/simulation-runs",
+        json={
+            "prompt_user_template": "Custom run template\n\n{{persona_section}}\n\n{{survey_section}}"
+        },
+    )
+
+    assert response.status_code == 200
+    assert captured["prompt_user_template_override"] == (
+        "Custom run template\n\n{{persona_section}}\n\n{{survey_section}}"
+    )
+
+
+def test_start_simulation_run_endpoint_requires_openrouter_and_saves_failed_job(client):
+    study_id = _create_ready_to_run_study(client)
+
+    response = client.post(f"/api/v1/studies/{study_id}/simulation-runs")
+
+    assert response.status_code == 503
+    assert "OPENROUTER_API_KEY is required" in response.json()["error"]["message"]
+
+    latest_response = client.get(f"/api/v1/studies/{study_id}/simulation-runs/latest")
+    assert latest_response.status_code == 200
+    latest_payload = latest_response.json()["data"]["simulation_run"]
+    assert latest_payload["status"] == "failed"
+    assert "OPENROUTER_API_KEY is required" in latest_payload["error"]["message"]
 
 
 def test_clear_latest_simulation_run_endpoint_removes_saved_jobs(client, monkeypatch):
@@ -515,6 +1043,15 @@ def test_analysis_endpoint_returns_summary_and_question_explorer(client, monkeyp
             "question_count": 2,
             "generation_mode": "mock",
             "warnings": [],
+            "run_debug_summary": {
+                "primary_live_path": True,
+                "total_answers": 4,
+                "truly_live_answers": 4,
+                "fallback_answers": 0,
+                "provider_error_count": 0,
+                "malformed_json_count": 0,
+                "ml_persona_completion_enabled": True,
+            },
             "survey_parse_warnings": ["Expanded matrix question example"],
             "personas": [
                 {"persona_id": "PERS_001", "segment_label": "Remote Professionals", "fit_tier": "strong"},
@@ -526,8 +1063,8 @@ def test_analysis_endpoint_returns_summary_and_question_explorer(client, monkeyp
                     "respondent_id": "RESP_001",
                     "model": "openai/gpt-4o-mini",
                     "survey_title": "Neo Smart Living Demo Survey",
-                    "question_id": "Q1",
-                    "question_text": "How interested are you in Tahoe Mini?",
+                    "question_id": "S3",
+                    "question_text": "How feasible does a backyard studio feel for your property?",
                     "question_type": "likert",
                     "answer": 5,
                     "segment_label": "Remote Professionals",
@@ -536,8 +1073,8 @@ def test_analysis_endpoint_returns_summary_and_question_explorer(client, monkeyp
                     "respondent_id": "RESP_002",
                     "model": "google/gemini-2.0-flash-001",
                     "survey_title": "Neo Smart Living Demo Survey",
-                    "question_id": "Q1",
-                    "question_text": "How interested are you in Tahoe Mini?",
+                    "question_id": "S3",
+                    "question_text": "How feasible does a backyard studio feel for your property?",
                     "question_type": "likert",
                     "answer": 4,
                     "segment_label": "Wellness-Oriented",
@@ -546,8 +1083,8 @@ def test_analysis_endpoint_returns_summary_and_question_explorer(client, monkeyp
                     "respondent_id": "RESP_001",
                     "model": "openai/gpt-4o-mini",
                     "survey_title": "Neo Smart Living Demo Survey",
-                    "question_id": "Q2",
-                    "question_text": "Why did you choose that answer?",
+                    "question_id": "Q0A",
+                    "question_text": "What would make you consider a modular backyard studio now?",
                     "question_type": "open_text",
                     "answer": "It feels like a realistic home office upgrade.",
                     "segment_label": "Remote Professionals",
@@ -556,8 +1093,8 @@ def test_analysis_endpoint_returns_summary_and_question_explorer(client, monkeyp
                     "respondent_id": "RESP_002",
                     "model": "google/gemini-2.0-flash-001",
                     "survey_title": "Neo Smart Living Demo Survey",
-                    "question_id": "Q2",
-                    "question_text": "Why did you choose that answer?",
+                    "question_id": "Q0A",
+                    "question_text": "What would make you consider a modular backyard studio now?",
                     "question_type": "open_text",
                     "answer": "I like the flexibility and backyard fit.",
                     "segment_label": "Wellness-Oriented",
@@ -576,198 +1113,90 @@ def test_analysis_endpoint_returns_summary_and_question_explorer(client, monkeyp
     assert payload["available"] is True
     assert payload["summary"]["total_records"] == 4
     assert payload["run"]["run_id"] == "run_analysis_001"
-    assert payload["filters"]["selected_question_id"] == "Q1"
-    assert payload["question_explorer"]["question_id"] == "Q1"
+    assert payload["filters"]["selected_question_id"] == "S3"
+    assert payload["question_explorer"]["question_id"] == "S3"
+    assert payload["dashboard"]["selected_model"] == "All"
+    assert len(payload["dashboard"]["questions"]) >= 2
+    first_question = next(
+        question for question in payload["dashboard"]["questions"] if question["question_id"] == "S3"
+    )
+    open_text_question = next(
+        question for question in payload["dashboard"]["questions"] if question["question_id"] == "Q0A"
+    )
+    assert first_question["question_id"] == "S3"
+    assert first_question["distribution"] == [
+        {"label": "Yes", "count": 0, "percentage": 0.0},
+        {"label": "I'm not sure, but possibly", "count": 0, "percentage": 0.0},
+        {"label": "No", "count": 0, "percentage": 0.0},
+        {"label": "4", "count": 1, "percentage": 50.0},
+        {"label": "5", "count": 1, "percentage": 50.0},
+    ]
+    assert first_question["chart_kind"] == "likert"
+    assert open_text_question["question_id"] == "Q0A"
+    assert open_text_question["chart_kind"] == "word_cloud"
+    assert open_text_question["word_cloud_terms"]
+    assert open_text_question["quotes"]
     assert payload["benchmark_snapshot"]["available"] is True
+    assert payload["run_debug_summary"]["truly_live_answers"] == 4
     assert payload["realism_scorecard"]["available"] is True
     assert payload["open_text"]["available"] is True
     assert payload["records_preview"]["total"] == 4
 
 
-def test_insights_endpoint_returns_executive_summary_and_charts(client, monkeypatch):
+def test_prompt_preview_endpoint_returns_first_persona_prompt(client, monkeypatch):
     study_id = _create_ready_to_run_study(client)
 
     monkeypatch.setattr(
+        "src.api.studies.get_prompt_preview",
+        lambda *args, **kwargs: {
+            "prompt_preview": {
+                "persona_index": 0,
+                "persona_id": "PERS_001",
+                "persona_label": "Remote Professionals",
+                "survey_title": "Neo Smart Living Demo Survey",
+                "system_instruction": "System text",
+                "user_instruction": "User text",
+                "combined_prompt": "System\nSystem text\n\nUser\nUser text",
+            }
+        },
+    )
+
+    response = client.get(f"/api/v1/studies/{study_id}/prompt-preview")
+    assert response.status_code == 200
+    payload = response.json()["data"]["prompt_preview"]
+    assert payload["persona_index"] == 0
+    assert payload["persona_id"] == "PERS_001"
+    assert "System\nSystem text" in payload["combined_prompt"]
+
+
+def test_insights_endpoint_returns_executive_summary_and_charts(client, monkeypatch, test_settings):
+    study_id = _create_ready_to_run_study(client)
+    test_settings.openrouter_api_key = "test-openrouter-key"
+
+    monkeypatch.setattr(
         "src.services.study_service.execute_simulation_run",
+        lambda **kwargs: _mock_insights_run_payload(),
+    )
+    monkeypatch.setattr(
+        "src.services.study_service._generate_llm_insights_summary",
         lambda **kwargs: {
-            "run_id": "run_insights_001",
-            "status": "completed",
-            "total_requested_responses": 8,
-            "total_generated_responses": 8,
-            "models_used": ["openai/gpt-4o-mini", "google/gemini-2.0-flash-001"],
-            "experiment_mode": "mirror",
-            "survey_title": "Neo Smart Living Demo Survey",
-            "question_count": 8,
-            "generation_mode": "mock",
-            "warnings": [],
-            "survey_parse_warnings": [],
-            "personas": [
-                {"persona_id": "PERS_001", "segment_label": "Remote Professionals", "fit_tier": "strong"},
-                {"persona_id": "PERS_002", "segment_label": "Wellness-Oriented", "fit_tier": "strong"},
+            "available": True,
+            "overview": "Remote-work and wellness scenarios lead the current run, but the evidence stays directional.",
+            "key_findings": [
+                {
+                    "title": "Use case concentration",
+                    "summary": "Home office and home gym surfaced as the leading intended uses.",
+                    "why_it_matters": "Positioning should stay anchored in productive and wellness-oriented scenarios.",
+                    "evidence_ids": ["exec_top_use_case", "use_case_1"],
+                }
             ],
-            "response_record_preview": [],
-            "response_records": [
-                {
-                    "respondent_id": "RESP_001",
-                    "model": "openai/gpt-4o-mini",
-                    "survey_title": "Neo Smart Living Demo Survey",
-                    "question_id": "S3",
-                    "question_text": "Outdoor space feasibility",
-                    "question_type": "single_choice",
-                    "answer": "Yes, definitely",
-                    "segment_label": "Remote Professionals",
-                },
-                {
-                    "respondent_id": "RESP_002",
-                    "model": "google/gemini-2.0-flash-001",
-                    "survey_title": "Neo Smart Living Demo Survey",
-                    "question_id": "S3",
-                    "question_text": "Outdoor space feasibility",
-                    "question_type": "single_choice",
-                    "answer": "Yes, likely",
-                    "segment_label": "Wellness-Oriented",
-                },
-                {
-                    "respondent_id": "RESP_001",
-                    "model": "openai/gpt-4o-mini",
-                    "survey_title": "Neo Smart Living Demo Survey",
-                    "question_id": "Q1",
-                    "question_text": "Purchase interest at $23,000",
-                    "question_type": "likert",
-                    "answer": 5,
-                    "segment_label": "Remote Professionals",
-                },
-                {
-                    "respondent_id": "RESP_002",
-                    "model": "google/gemini-2.0-flash-001",
-                    "survey_title": "Neo Smart Living Demo Survey",
-                    "question_id": "Q1",
-                    "question_text": "Purchase interest at $23,000",
-                    "question_type": "likert",
-                    "answer": 4,
-                    "segment_label": "Wellness-Oriented",
-                },
-                {
-                    "respondent_id": "RESP_001",
-                    "model": "openai/gpt-4o-mini",
-                    "survey_title": "Neo Smart Living Demo Survey",
-                    "question_id": "Q2",
-                    "question_text": "Purchase likelihood in 24 months",
-                    "question_type": "likert",
-                    "answer": 4,
-                    "segment_label": "Remote Professionals",
-                },
-                {
-                    "respondent_id": "RESP_002",
-                    "model": "google/gemini-2.0-flash-001",
-                    "survey_title": "Neo Smart Living Demo Survey",
-                    "question_id": "Q2",
-                    "question_text": "Purchase likelihood in 24 months",
-                    "question_type": "likert",
-                    "answer": 3,
-                    "segment_label": "Wellness-Oriented",
-                },
-                {
-                    "respondent_id": "RESP_001",
-                    "model": "openai/gpt-4o-mini",
-                    "survey_title": "Neo Smart Living Demo Survey",
-                    "question_id": "Q3",
-                    "question_text": "Primary intended use",
-                    "question_type": "single_choice",
-                    "answer": "Home office",
-                    "segment_label": "Remote Professionals",
-                },
-                {
-                    "respondent_id": "RESP_002",
-                    "model": "google/gemini-2.0-flash-001",
-                    "survey_title": "Neo Smart Living Demo Survey",
-                    "question_id": "Q3",
-                    "question_text": "Primary intended use",
-                    "question_type": "single_choice",
-                    "answer": "Home gym",
-                    "segment_label": "Wellness-Oriented",
-                },
-                {
-                    "respondent_id": "RESP_001",
-                    "model": "openai/gpt-4o-mini",
-                    "survey_title": "Neo Smart Living Demo Survey",
-                    "question_id": "Q5_1",
-                    "question_text": "Barrier: Upfront price",
-                    "question_type": "likert",
-                    "answer": 5,
-                    "segment_label": "Remote Professionals",
-                },
-                {
-                    "respondent_id": "RESP_002",
-                    "model": "google/gemini-2.0-flash-001",
-                    "survey_title": "Neo Smart Living Demo Survey",
-                    "question_id": "Q5_1",
-                    "question_text": "Barrier: Upfront price",
-                    "question_type": "likert",
-                    "answer": 4,
-                    "segment_label": "Wellness-Oriented",
-                },
-                {
-                    "respondent_id": "RESP_001",
-                    "model": "openai/gpt-4o-mini",
-                    "survey_title": "Neo Smart Living Demo Survey",
-                    "question_id": "Q5_2",
-                    "question_text": "Barrier: Permitting uncertainty",
-                    "question_type": "likert",
-                    "answer": 3,
-                    "segment_label": "Remote Professionals",
-                },
-                {
-                    "respondent_id": "RESP_002",
-                    "model": "google/gemini-2.0-flash-001",
-                    "survey_title": "Neo Smart Living Demo Survey",
-                    "question_id": "Q5_2",
-                    "question_text": "Barrier: Permitting uncertainty",
-                    "question_type": "likert",
-                    "answer": 2,
-                    "segment_label": "Wellness-Oriented",
-                },
-                {
-                    "respondent_id": "RESP_001",
-                    "model": "openai/gpt-4o-mini",
-                    "survey_title": "Neo Smart Living Demo Survey",
-                    "question_id": "Q10A",
-                    "question_text": "Concept 10 appeal",
-                    "question_type": "likert",
-                    "answer": 5,
-                    "segment_label": "Remote Professionals",
-                },
-                {
-                    "respondent_id": "RESP_002",
-                    "model": "google/gemini-2.0-flash-001",
-                    "survey_title": "Neo Smart Living Demo Survey",
-                    "question_id": "Q10A",
-                    "question_text": "Concept 10 appeal",
-                    "question_type": "likert",
-                    "answer": 4,
-                    "segment_label": "Wellness-Oriented",
-                },
-                {
-                    "respondent_id": "RESP_001",
-                    "model": "openai/gpt-4o-mini",
-                    "survey_title": "Neo Smart Living Demo Survey",
-                    "question_id": "Q10B",
-                    "question_text": "Concept 10 purchase likelihood",
-                    "question_type": "likert",
-                    "answer": 4,
-                    "segment_label": "Remote Professionals",
-                },
-                {
-                    "respondent_id": "RESP_002",
-                    "model": "google/gemini-2.0-flash-001",
-                    "survey_title": "Neo Smart Living Demo Survey",
-                    "question_id": "Q10B",
-                    "question_text": "Concept 10 purchase likelihood",
-                    "question_type": "likert",
-                    "answer": 3,
-                    "segment_label": "Wellness-Oriented",
-                },
-            ],
+            "risks_and_caveats": ["Sample is synthetic and directional."],
+            "recommended_next_steps": ["Test the strongest use case framing with real respondents."],
+            "researcher_note": "Use this summary as a fast decision layer, not final validation.",
+            "model": "openai/gpt-4o-mini",
+            "from_run_id": "run_insights_001",
+            "generated_at": "2026-04-15T00:00:00+00:00",
+            "cached": False,
         },
     )
 
@@ -787,3 +1216,77 @@ def test_insights_endpoint_returns_executive_summary_and_charts(client, monkeypa
     assert payload["charts"]["model_difference"]["available"] is True
     assert len(payload["top_findings"]) >= 3
     assert len(payload["recommendations"]) >= 2
+    assert payload["llm_summary"]["available"] is True
+    assert payload["llm_summary"]["key_findings"][0]["evidence_ids"] == ["exec_top_use_case", "use_case_1"]
+    assert payload["evidence_package"]["from_run_id"] == "run_insights_001"
+
+
+def test_insights_endpoint_keeps_detailed_insights_when_llm_summary_unavailable(client, monkeypatch):
+    study_id = _create_ready_to_run_study(client)
+
+    monkeypatch.setattr(
+        "src.services.study_service.execute_simulation_run",
+        lambda **kwargs: _mock_insights_run_payload(),
+    )
+
+    start_response = client.post(f"/api/v1/studies/{study_id}/simulation-runs")
+    assert start_response.status_code == 200
+
+    insights_response = client.get(f"/api/v1/studies/{study_id}/insights")
+
+    assert insights_response.status_code == 200
+    payload = insights_response.json()["data"]["insights"]
+    assert payload["available"] is True
+    assert payload["llm_summary"]["available"] is False
+    assert "OPENROUTER_API_KEY" in payload["llm_summary"]["message"]
+    assert payload["charts"]["barrier_ranking"]["available"] is True
+
+
+def test_insights_endpoint_caches_llm_summary_per_run(client, monkeypatch, test_settings):
+    study_id = _create_ready_to_run_study(client)
+    test_settings.openrouter_api_key = "test-openrouter-key"
+    call_count = {"value": 0}
+
+    monkeypatch.setattr(
+        "src.services.study_service.execute_simulation_run",
+        lambda **kwargs: _mock_insights_run_payload(),
+    )
+
+    def _fake_generate_summary(**kwargs):
+        call_count["value"] += 1
+        return {
+            "available": True,
+            "overview": "Cached summary test.",
+            "key_findings": [
+                {
+                    "title": "Cached finding",
+                    "summary": "The first request generates the summary.",
+                    "why_it_matters": "The second request should reuse the cached payload.",
+                    "evidence_ids": ["finding_1"],
+                }
+            ],
+            "risks_and_caveats": [],
+            "recommended_next_steps": [],
+            "researcher_note": "",
+            "model": "openai/gpt-4o-mini",
+            "from_run_id": "run_insights_001",
+            "generated_at": "2026-04-15T00:00:00+00:00",
+            "cached": False,
+        }
+
+    monkeypatch.setattr(
+        "src.services.study_service._generate_llm_insights_summary",
+        _fake_generate_summary,
+    )
+
+    start_response = client.post(f"/api/v1/studies/{study_id}/simulation-runs")
+    assert start_response.status_code == 200
+
+    first_response = client.get(f"/api/v1/studies/{study_id}/insights")
+    second_response = client.get(f"/api/v1/studies/{study_id}/insights")
+
+    assert first_response.status_code == 200
+    assert second_response.status_code == 200
+    assert first_response.json()["data"]["insights"]["llm_summary"]["cached"] is False
+    assert second_response.json()["data"]["insights"]["llm_summary"]["cached"] is True
+    assert call_count["value"] == 1

@@ -29,8 +29,8 @@ export function buildStudyModeStatusMessage(
       : "General Custom Study";
 
   if (preservedSavedSections.length > 0) {
-    return `${label} saved. Existing saved setup sections were preserved: ${preservedSavedSections.join(", ")}.`;
+    return `${label} saved. Kept your saved inputs in: ${preservedSavedSections.join(", ")}.`;
   }
 
-  return `${label} saved. Continue into Audience setup.`;
+  return `${label} saved. Next step: Audience setup.`;
 }

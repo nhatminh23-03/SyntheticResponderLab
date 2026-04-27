@@ -29,7 +29,7 @@ def startup_failures(settings: AppSettings, session_factory: sessionmaker) -> Li
     return [name for name, check in payload.checks.items() if check.status == "fail" and name in HARD_FAIL_CHECKS]
 
 
-HARD_FAIL_CHECKS = {"database", "artifacts_root", "legacy_app_root", "python_dependencies"}
+HARD_FAIL_CHECKS = {"database", "artifacts_root", "legacy_app_root", "python_dependencies", "deployment_security"}
 
 
 def build_health_payload(settings: AppSettings, session_factory: sessionmaker) -> HealthPayload:
@@ -39,6 +39,7 @@ def build_health_payload(settings: AppSettings, session_factory: sessionmaker) -
     checks["artifacts_root"] = _artifacts_root_check(settings.artifacts_root)
     checks["legacy_app_root"] = _legacy_root_check(settings.legacy_app_root)
     checks["python_dependencies"] = _python_dependency_check()
+    checks["deployment_security"] = _deployment_security_check(settings)
     checks["openrouter"] = _openrouter_check(settings)
     checks["google_vision"] = _google_vision_check(settings)
     checks["grounding_priors"] = _grounding_priors_check(settings.legacy_app_root)
@@ -106,6 +107,28 @@ def _python_dependency_check() -> HealthCheckResult:
     return HealthCheckResult(status="ok")
 
 
+def _deployment_security_check(settings: AppSettings) -> HealthCheckResult:
+    if not settings.enforce_deployment_guardrails:
+        return HealthCheckResult(status="ok")
+    secret = (settings.deployment_shared_secret or "").strip()
+    if not secret:
+        return HealthCheckResult(
+            status="fail",
+            message="DEPLOYMENT_SHARED_SECRET must be configured outside local/test environments.",
+        )
+    if len(secret) < 16:
+        return HealthCheckResult(
+            status="fail",
+            message="DEPLOYMENT_SHARED_SECRET must be at least 16 characters outside local/test environments.",
+        )
+    if settings.app_debug:
+        return HealthCheckResult(
+            status="fail",
+            message="APP_DEBUG must be false outside local/test environments.",
+        )
+    return HealthCheckResult(status="ok")
+
+
 def _openrouter_check(settings: AppSettings) -> HealthCheckResult:
     if settings.openrouter_api_key:
         return HealthCheckResult(status="ok")
@@ -115,7 +138,13 @@ def _openrouter_check(settings: AppSettings) -> HealthCheckResult:
 def _google_vision_check(settings: AppSettings) -> HealthCheckResult:
     if settings.google_cloud_api_key:
         return HealthCheckResult(status="ok")
-    if settings.google_cloud_service_account_json or settings.google_cloud_service_account_path:
+    has_service_account_path = bool(
+        settings.google_cloud_service_account_path
+        and str(settings.google_cloud_service_account_path) not in {"", "."}
+        and settings.google_cloud_service_account_path.exists()
+        and settings.google_cloud_service_account_path.is_file()
+    )
+    if settings.google_cloud_service_account_json or has_service_account_path:
         try:
             importlib.import_module("cryptography")
             return HealthCheckResult(status="ok")

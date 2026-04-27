@@ -33,17 +33,38 @@ __pycache__/
 .ruff_cache/
 .venv/
 venv/
+*.egg-info/
+
+# Local agent/tool state
+.codex
+.codex/
+.cursor/
+
+# Local cloud/service credentials
+*service-account*.json
+*google-credentials*.json
+apps/api/cra-applying-sql-*.json
 
 # Databases / local runtime state
 *.db
 *.sqlite
 *.sqlite3
+*.db-journal
+*.sqlite-journal
+*.sqlite3-journal
+*.db-shm
+*.db-wal
+*.sqlite-shm
+*.sqlite-wal
+*.sqlite3-shm
+*.sqlite3-wal
 tmp_api.db
 tmp_api_artifacts/
 
 # Generated artifacts
 artifacts/
 apps/api/artifacts/
+apps/api/tmp_artifacts/
 
 # Legacy local environments / caches
 NeoSmart-Hackathon-App/venv/

@@ -5,7 +5,6 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   AudiencePayload,
   saveAudience,
-  WorkflowReadiness,
 } from "@/lib/api";
 import { resolveSetupSeedSource } from "@/lib/setup-flow-utils";
 import { cn } from "@/lib/utils";
@@ -16,30 +15,15 @@ import { Button } from "@/components/ui/button";
 import {
   Field,
   SelectInput,
-  TagMultiSelect,
   TextAreaInput,
   TextInput,
+  TokenInput,
   ToggleChip,
 } from "@/components/ui/form-controls";
 import { GlassPanel } from "@/components/ui/glass-panel";
 import { RevealOnScroll } from "@/components/ui/reveal-on-scroll";
 import { SectionHeader } from "@/components/ui/section-header";
 import { SectionWrapper } from "@/components/ui/section-wrapper";
-
-const LIFESTYLE_OPTIONS = [
-  "remote work",
-  "home improvement",
-  "wellness",
-  "hosting guests",
-  "storage",
-  "outdoor lifestyle",
-  "Remote Worker",
-  "Outdoor Enthusiast",
-  "Wellness Focused",
-  "Budget Conscious",
-  "Guest Suite Interested",
-  "DIY Minded",
-];
 
 const HOME_TYPE_OPTIONS = [
   "Any",
@@ -166,7 +150,7 @@ const NEO_AUDIENCE_DRAFT: AudienceDraft = {
     "outdoor lifestyle",
   ],
   notes:
-    "Neo benchmark default: backyard-space-compatible homeowners, broad geography (not locked to a specific state or metro).",
+    "backyard-space-compatible homeowners, broad geography (not locked to a specific state or metro).",
 };
 
 export function AudienceSection() {
@@ -181,14 +165,13 @@ export function AudienceSection() {
   const { scrollToSection } = useSectionRegistry();
   const [draft, setDraft] = useState<AudienceDraft>(EMPTY_DRAFT);
   const [savedSnapshot, setSavedSnapshot] = useState<string>("");
-  const [workflow, setWorkflow] = useState<WorkflowReadiness | null>(null);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [status, setStatus] = useState<{
     tone: "neutral" | "success" | "error";
     message: string;
   }>({
     tone: "neutral",
-    message: "No audience saved yet. Edits stay local until you save.",
+    message: "No audience saved yet. Save when you're ready.",
   });
   const [isSaving, setIsSaving] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
@@ -197,14 +180,13 @@ export function AudienceSection() {
     let cancelled = false;
 
     async function hydrateAudience() {
-      if (!studyId || !study) {
-        if (!cancelled) {
-          setDraft(EMPTY_DRAFT);
-          setSavedSnapshot("");
-          setWorkflow(null);
-          setStatus({
-            tone: "neutral",
-            message: "No audience saved yet. Edits stay local until you save.",
+        if (!studyId || !study) {
+          if (!cancelled) {
+            setDraft(EMPTY_DRAFT);
+            setSavedSnapshot("");
+            setStatus({
+              tone: "neutral",
+              message: "No audience saved yet. Save when you're ready.",
           });
         }
         return;
@@ -231,16 +213,15 @@ export function AudienceSection() {
             ? JSON.stringify(draftToPayload(nextDraft))
             : ""
         );
-        setWorkflow(study.derived?.workflow ?? null);
         setFieldErrors({});
         setStatus({
           tone: study.audience?.status === "saved" ? "success" : "neutral",
           message:
             seedSource === "saved"
-              ? "Saved audience loaded from the current study."
+              ? "Loaded your saved audience."
               : seedSource === "neo_default"
-                ? "Neo audience defaults loaded locally. Save to persist canonical audience state."
-                : "No audience saved yet. Edits stay local until you save.",
+                ? "Neo audience defaults loaded. Review and save if you want to keep them."
+                : "No audience saved yet. Save when you're ready.",
         });
       }
     }
@@ -257,20 +238,8 @@ export function AudienceSection() {
     study?.study_mode?.value,
   ]);
 
-  useEffect(() => {
-    setWorkflow(study?.derived?.workflow ?? null);
-  }, [study?.derived?.workflow]);
-
   const draftPayload = useMemo(() => draftToPayload(draft), [draft]);
   const isDirty = JSON.stringify(draftPayload) !== savedSnapshot;
-  const summary = useMemo(() => buildAudienceSummary(draft), [draft]);
-  const downstreamReadinessStage = workflow?.stages?.find(
-    (stage) => stage.stage_key === "experiment"
-  );
-  const downstreamMessages = [
-    ...(downstreamReadinessStage?.hard_blockers ?? []),
-    ...(downstreamReadinessStage?.warnings ?? []),
-  ];
 
   function updateDraft<K extends keyof AudienceDraft>(key: K, value: AudienceDraft[K]) {
     setDraft((current) => ({
@@ -286,7 +255,7 @@ export function AudienceSection() {
     if (Object.keys(validationErrors).length > 0) {
       setStatus({
         tone: "error",
-        message: validationErrors.form ?? "Please fix the audience inputs before saving.",
+        message: validationErrors.form ?? "Please fix the highlighted audience fields before saving.",
       });
       return;
     }
@@ -294,7 +263,7 @@ export function AudienceSection() {
     setIsSaving(true);
     setStatus({
       tone: "neutral",
-      message: "Saving audience filter...",
+      message: "Saving audience...",
     });
 
     try {
@@ -307,11 +276,10 @@ export function AudienceSection() {
       const result = await saveAudience(resolvedStudyId, draftPayload);
       await refreshStudy(resolvedStudyId);
       setSavedSnapshot(JSON.stringify(draftPayload));
-      setWorkflow(result.workflow ?? null);
       setFieldErrors({});
       setStatus({
         tone: "success",
-        message: "Audience filter saved successfully.",
+        message: "Audience saved.",
       });
       scrollToSection("product");
     } catch (error) {
@@ -320,7 +288,7 @@ export function AudienceSection() {
         message:
           error instanceof Error
             ? error.message
-            : "Unable to save the audience filter right now.",
+            : "Unable to save audience right now.",
       });
     } finally {
       setIsSaving(false);
@@ -333,7 +301,7 @@ export function AudienceSection() {
     setFieldErrors({});
     setStatus({
       tone: "neutral",
-      message: "Clearing saved audience...",
+      message: "Resetting audience...",
     });
 
     try {
@@ -343,7 +311,7 @@ export function AudienceSection() {
         setSavedSnapshot("");
         setStatus({
           tone: "success",
-          message: "Audience reset locally. Save later to persist if needed.",
+          message: "Audience reset locally. Save if you want to keep this reset.",
         });
         return;
       }
@@ -352,10 +320,9 @@ export function AudienceSection() {
       const result = await saveAudience(resolvedStudyId, emptyPayload);
       await refreshStudy(resolvedStudyId);
       setSavedSnapshot(JSON.stringify(emptyPayload));
-      setWorkflow(result.workflow ?? null);
       setStatus({
         tone: "success",
-        message: "Saved audience cleared.",
+        message: "Audience reset saved.",
       });
     } catch (error) {
       setStatus({
@@ -363,7 +330,7 @@ export function AudienceSection() {
         message:
           error instanceof Error
             ? error.message
-            : "Unable to clear the saved audience right now.",
+            : "Unable to reset saved audience right now.",
       });
     } finally {
       setIsClearing(false);
@@ -374,16 +341,16 @@ export function AudienceSection() {
     <SectionWrapper
       id="audience"
       scrollable
-      contentClassName="relative"
+      contentClassName="relative scrollbar-hidden pr-0"
     >
-      <div className="grid gap-8 lg:grid-cols-[minmax(0,1.1fr)_24rem] lg:items-start">
+      <div className="grid gap-8">
         <div className="space-y-8">
           <RevealOnScroll>
             <SectionHeader
               index={2}
               eyebrow="Audience Builder"
-              title="Define the target audience you want to simulate."
-              description="These settings shape who the synthetic respondents should represent. The filter is validated and saved for the later product, survey, and persona steps."
+              title="Who do you want to hear from?"
+              description="Set the audience for your synthetic respondents. These filters define who gets represented in the simulation."
             />
           </RevealOnScroll>
 
@@ -391,11 +358,11 @@ export function AudienceSection() {
             <div className="grid gap-5 lg:grid-cols-2">
               <AudienceGroupCard
                 title="Geography"
-                description="Geography is optional. Leave it broad when you want the widest signal."
+                description="Use location filters only when you need a narrower audience."
               >
                 <Field
                   label="State"
-                  hint="Choose a state only if you want to narrow the audience."
+                  hint="Select a state to focus results. Keep Any for nationwide coverage."
                 >
                   <SelectInput
                     value={draft.state}
@@ -406,7 +373,7 @@ export function AudienceSection() {
                     }))}
                   />
                 </Field>
-                <Field label="Metro" hint="Optional. Leave blank to include all metros.">
+                <Field label="Metro" hint="Optional. Add a metro area to narrow location.">
                   <TextInput
                     value={draft.metro}
                     onChange={(value) => updateDraft("metro", value)}
@@ -415,7 +382,7 @@ export function AudienceSection() {
                 </Field>
                 <Field
                   label="ZIP Code"
-                  hint="Optional. Use ZIP only for tighter geography filters."
+                  hint="Optional. Use ZIP code for precise local targeting."
                   error={fieldErrors.zip_code}
                 >
                   <TextInput
@@ -429,9 +396,9 @@ export function AudienceSection() {
 
               <AudienceGroupCard
                 title="Demographics"
-                description="Blank numeric fields include all values."
+                description="Leave numeric fields blank to keep the audience broad."
               >
-                <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid gap-4 md:grid-cols-2">
                   <Field label="Age Min" error={fieldErrors.age_min}>
                     <TextInput
                       value={draft.age_min}
@@ -491,7 +458,7 @@ export function AudienceSection() {
 
               <AudienceGroupCard
                 title="Housing"
-                description="Use these only when you want tighter housing assumptions."
+                description="Use these only if housing profile matters for this study."
               >
                 <div className="flex flex-wrap gap-3">
                   <ToggleChip
@@ -538,20 +505,24 @@ export function AudienceSection() {
 
               <AudienceGroupCard
                 title="Lifestyle & Notes"
-                description="Lifestyle tags are optional. Notes help preserve researcher intent."
+                description="Add optional context to describe the people you want to hear from."
               >
-                <Field label="Lifestyle Tags">
-                  <TagMultiSelect
-                    options={LIFESTYLE_OPTIONS}
+                <Field
+                  label="Lifestyle Tags"
+                  hint="Type a tag and press Enter, or use Add Tag. Remove any tag you do not want."
+                >
+                  <TokenInput
                     value={draft.lifestyle_tags}
                     onChange={(value) => updateDraft("lifestyle_tags", value)}
+                    placeholder="Add a lifestyle tag (for example: remote work)"
+                    addLabel="Add Tag"
                   />
                 </Field>
                 <Field label="Notes">
                   <TextAreaInput
                     value={draft.notes}
                     onChange={(value) => updateDraft("notes", value)}
-                    placeholder="Optional context, exclusions, or special audience guidance."
+                    placeholder="Optional notes about inclusions, exclusions, or edge cases."
                     rows={5}
                   />
                 </Field>
@@ -560,80 +531,17 @@ export function AudienceSection() {
           </RevealOnScroll>
         </div>
 
-        <RevealOnScroll delay={0.08} className="lg:sticky lg:top-0">
-          <GlassPanel className="p-5 sm:p-6">
-            <div className="rounded-[1.55rem] border border-white/5 bg-[linear-gradient(180deg,rgba(12,18,22,0.84),rgba(12,18,22,0.6))] p-5">
-              <div className="flex flex-wrap items-center gap-3">
-                <BadgeChip tone="gold">Audience Status</BadgeChip>
-                <BadgeChip tone={isDirty ? "gold" : "cyan"}>
-                  {isDirty ? "Unsaved edits" : "Saved state"}
-                </BadgeChip>
-              </div>
-
-              <div
-                className={cn(
-                  "mt-4 rounded-2xl border px-4 py-3 text-sm leading-6",
-                  status.tone === "success" &&
-                    "border-app-cyan/20 bg-[rgba(15,216,255,0.08)] text-app-cyan",
-                  status.tone === "error" &&
-                    "border-app-gold/20 bg-[rgba(216,186,103,0.08)] text-app-gold",
-                  status.tone === "neutral" &&
-                    "border-white/8 bg-white/[0.03] text-app-muted"
-                )}
-              >
-                {status.message}
-              </div>
-
-              <div className="mt-7">
-                <div className="text-[0.72rem] uppercase tracking-[0.24em] text-app-muted">
-                  Live Summary
-                </div>
-                <div className="mt-4 space-y-3">
-                  <SummaryLine label="Geography" value={summary.geography} />
-                  <SummaryLine label="Age" value={summary.age} />
-                  <SummaryLine label="Income" value={summary.income} />
-                  <SummaryLine label="Household" value={summary.household} />
-                  <SummaryLine label="Housing" value={summary.housing} />
-                  <SummaryLine label="Lifestyle" value={summary.lifestyle} />
-                  <SummaryLine label="Notes" value={summary.notes} />
-                </div>
-              </div>
-
-              <div className="mt-7 rounded-2xl border border-white/8 bg-white/[0.03] p-4">
-                <div className="text-[0.72rem] uppercase tracking-[0.24em] text-app-muted">
-                  Workflow Readiness
-                </div>
-                <div className="mt-3 text-sm text-app-text">
-                  {workflow?.ready_for_persona_preview
-                    ? "Audience is saved and the setup stack is in good shape for the later run flow."
-                    : "Audience can be saved now, but the later run flow still depends on other setup chapters."}
-                </div>
-                {downstreamMessages.length > 0 ? (
-                  <ul className="mt-3 space-y-2 text-sm text-app-muted">
-                    {downstreamMessages.map((message) => (
-                      <li key={message} className="flex gap-2">
-                        <span className="mt-1 inline-flex h-2 w-2 rounded-full bg-app-gold" />
-                        <span>{message}</span>
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-              </div>
-            </div>
-          </GlassPanel>
-        </RevealOnScroll>
-
         <RevealOnScroll delay={0.1}>
-          <div className="rounded-[1.55rem] border border-white/8 bg-[rgba(255,255,255,0.03)] p-5">
+          <div className="rounded-[1.55rem] border border-app-border [background:var(--status-neutral-bg)] p-5">
             <div
               className={cn(
                 "rounded-2xl border px-4 py-3 text-sm leading-6",
                 status.tone === "success" &&
-                  "border-app-cyan/20 bg-[rgba(15,216,255,0.08)] text-app-cyan",
+                  "[border-color:var(--status-success-border)] [background:var(--status-success-bg)] [color:var(--status-success-text)]",
                 status.tone === "error" &&
-                  "border-app-gold/20 bg-[rgba(216,186,103,0.08)] text-app-gold",
+                  "[border-color:var(--status-warning-border)] [background:var(--status-warning-bg)] [color:var(--status-warning-text)]",
                 status.tone === "neutral" &&
-                  "border-white/8 bg-white/[0.03] text-app-muted"
+                  "border-app-border [background:var(--status-neutral-bg)] text-app-muted"
               )}
             >
               {status.message}
@@ -644,17 +552,17 @@ export function AudienceSection() {
                 onClick={handleSave}
                 disabled={isSaving || isCreatingStudy || isHydratingStudy}
               >
-                {isSaving ? "Saving Audience..." : "Save Audience Filter"}
+                {isSaving ? "Saving Audience..." : "Save Audience"}
               </Button>
               <Button
                 variant="secondary"
                 onClick={handleClear}
                 disabled={isClearing || isSaving || isHydratingStudy}
               >
-                {isClearing ? "Clearing..." : "Clear Saved Audience"}
+                {isClearing ? "Resetting..." : "Reset Audience"}
               </Button>
               <BadgeChip tone={isDirty ? "gold" : "cyan"}>
-                {isDirty ? "Unsaved changes" : "Saved state"}
+                {isDirty ? "Unsaved edits" : "All changes saved"}
               </BadgeChip>
             </div>
           </div>
@@ -675,7 +583,7 @@ function AudienceGroupCard({
 }) {
   return (
     <GlassPanel className="p-4 sm:p-5">
-      <div className="rounded-[1.45rem] border border-white/5 bg-[linear-gradient(180deg,rgba(12,18,22,0.84),rgba(12,18,22,0.58))] p-5">
+      <div className="rounded-[1.45rem] border border-app-border [background:var(--theme-panel-gradient)] p-5">
         <div className="mb-5">
           <div className="text-[0.72rem] uppercase tracking-[0.24em] text-app-gold">
             {title}
@@ -685,17 +593,6 @@ function AudienceGroupCard({
         <div className="space-y-4">{children}</div>
       </div>
     </GlassPanel>
-  );
-}
-
-function SummaryLine({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-2xl border border-white/6 bg-white/[0.03] px-4 py-3">
-      <div className="text-[0.68rem] uppercase tracking-[0.22em] text-app-muted">
-        {label}
-      </div>
-      <div className="mt-1 text-sm leading-6 text-app-text">{value}</div>
-    </div>
   );
 }
 

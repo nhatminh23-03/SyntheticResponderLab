@@ -60,9 +60,12 @@ def install_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(Exception)
     async def handle_unexpected_error(request: Request, exc: Exception):
         request_id = getattr(request.state, "request_id", new_request_id())
+        settings = getattr(request.app.state, "settings", None)
+        is_debug = bool(getattr(settings, "app_debug", False))
+        message = f"Unexpected server error: {exc}" if is_debug else "Unexpected server error."
         return JSONResponse(
             status_code=500,
-            content=build_meta_error(request_id, "legacy_module_error", f"Unexpected server error: {exc}", {}),
+            content=build_meta_error(request_id, "legacy_module_error", message, {}),
         )
 
 

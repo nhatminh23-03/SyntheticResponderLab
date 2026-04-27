@@ -27,9 +27,33 @@ class ConflictApiError(ApiError):
         super().__init__(409, "conflict", message, details)
 
 
+class ProviderRunInFlightApiError(ApiError):
+    def __init__(self, message: str, details: Optional[dict] = None) -> None:
+        super().__init__(409, "provider_run_in_flight", message, details)
+
+
+class UnauthorizedApiError(ApiError):
+    def __init__(self, message: str = "Authentication is required.", details: Optional[dict] = None) -> None:
+        super().__init__(401, "unauthorized", message, details)
+
+
+class ForbiddenApiError(ApiError):
+    def __init__(self, message: str = "You do not have access to this resource.", details: Optional[dict] = None) -> None:
+        super().__init__(403, "forbidden", message, details)
+
+
 class UnsupportedMediaTypeApiError(ApiError):
     def __init__(self, message: str, details: Optional[dict] = None) -> None:
         super().__init__(415, "unsupported_media_type", message, details)
+
+
+class PayloadTooLargeApiError(ApiError):
+    def __init__(self, message: str, details: Optional[dict] = None) -> None:
+        super().__init__(413, "payload_too_large", message, details)
+
+class QuotaExceededApiError(ApiError):
+    def __init__(self, message: str, details: Optional[dict] = None) -> None:
+        super().__init__(429, "quota_exceeded", message, details)
 
 
 class ProviderUnavailableApiError(ApiError):

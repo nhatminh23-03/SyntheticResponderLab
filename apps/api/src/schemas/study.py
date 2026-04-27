@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl
 
@@ -80,6 +80,16 @@ class PersonaPreviewResult(BaseModel):
     completed_at: Optional[datetime] = None
 
 
+class PromptPreviewResult(BaseModel):
+    persona_index: int
+    persona_id: Optional[str] = None
+    persona_label: Optional[str] = None
+    survey_title: Optional[str] = None
+    system_instruction: str
+    user_instruction: str
+    combined_prompt: str
+
+
 class StudyOwner(BaseModel):
     owner_user_id: Optional[str] = None
     owner_org_id: Optional[str] = None
@@ -110,8 +120,6 @@ class CanonicalStudy(BaseModel):
 
 class StudyCreateRequest(BaseModel):
     study_mode: Optional[str] = None
-    owner_user_id: Optional[str] = None
-    owner_org_id: Optional[str] = None
 
 
 class StudyModeUpdateRequest(BaseModel):
@@ -133,3 +141,20 @@ class PersonaPreviewRequest(BaseModel):
 
 class StabilityCheckRequest(BaseModel):
     repeat_runs: int = 3
+
+
+class SimulationRunRequest(BaseModel):
+    prompt_user_template: Optional[str] = None
+
+
+class InterviewChatMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str
+
+
+class InterviewChatRequest(BaseModel):
+    persona_id: str
+    prompt: str
+    messages: List[InterviewChatMessage] = Field(default_factory=list)
+    transcript_source: Literal["model_a", "model_b"] = "model_a"
+    model: Optional[str] = None

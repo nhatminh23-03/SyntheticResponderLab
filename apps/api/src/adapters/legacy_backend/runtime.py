@@ -23,7 +23,7 @@ def load_module(module_name: str, legacy_root: Path):
 def load_service_account_info(json_value: Optional[str], path_value: Optional[Path]) -> Optional[dict]:
     if json_value:
         return json.loads(json_value)
-    if path_value and path_value.exists():
+    if path_value and str(path_value) not in {"", "."} and path_value.exists() and path_value.is_file():
         return json.loads(path_value.read_text())
     return None
 

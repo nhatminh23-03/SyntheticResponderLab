@@ -1,26 +1,55 @@
-const DEFAULT_API_BASE_URL = "http://localhost:8000";
-
 function getApiBaseUrl() {
-  return process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ?? DEFAULT_API_BASE_URL;
+  return "/api/backend";
 }
 
 type ApiErrorResponse = {
   error?: {
+    code?: string;
     message?: string;
   };
 };
 
+export function getDisplayApiErrorMessage(
+  status: number,
+  code: string | undefined,
+  fallback: string,
+  message?: string
+) {
+  if (code === "quota_exceeded") {
+    return "You’ve reached today’s limit for this action. Please try again tomorrow or contact support.";
+  }
+
+  if (code === "provider_run_in_flight") {
+    return "You already have a run in progress. Wait for it to finish before starting another.";
+  }
+
+  if (status === 401 || status === 403) {
+    return "Your session has expired or you no longer have access. Please sign in again and retry.";
+  }
+
+  if (status === 429) {
+    return "Too many requests right now. Please wait a moment and try again.";
+  }
+
+  return message || fallback;
+}
+
 async function readApiErrorMessage(response: Response, fallback: string) {
   const body = await response.text();
   if (!body) {
-    return fallback;
+    return getDisplayApiErrorMessage(response.status, undefined, fallback);
   }
 
   try {
     const payload = JSON.parse(body) as ApiErrorResponse;
-    return payload.error?.message || body;
+    return getDisplayApiErrorMessage(
+      response.status,
+      payload.error?.code,
+      fallback,
+      payload.error?.message
+    );
   } catch {
-    return body;
+    return getDisplayApiErrorMessage(response.status, undefined, fallback, body);
   }
 }
 
@@ -191,6 +220,16 @@ export type PersonaPreviewPayload = {
   completed_at?: string | null;
 };
 
+export type PromptPreviewPayload = {
+  persona_index: number;
+  persona_id?: string | null;
+  persona_label?: string | null;
+  survey_title?: string | null;
+  system_instruction: string;
+  user_instruction: string;
+  combined_prompt: string;
+};
+
 export type SimulationRunConditions = {
   context_influence?: {
     enabled?: boolean;
@@ -210,6 +249,17 @@ export type SimulationRunConditions = {
   };
   generation_mode?: string;
   selected_models?: string[];
+};
+
+export type SimulationRunDebugSummary = {
+  primary_live_path?: boolean;
+  total_answers?: number;
+  truly_live_answers?: number;
+  fallback_answers?: number;
+  provider_error_count?: number;
+  malformed_json_count?: number;
+  live_answer_rate?: number | null;
+  ml_persona_completion_enabled?: boolean;
 };
 
 export type SimulationRunResultPayload = {
@@ -232,6 +282,7 @@ export type SimulationRunResultPayload = {
   prior_notes?: Array<Record<string, unknown>>;
   warnings?: string[];
   generation_debug?: Record<string, unknown> | null;
+  run_debug_summary?: SimulationRunDebugSummary | null;
   run_conditions?: SimulationRunConditions | null;
   personas?: Array<Record<string, unknown>>;
   response_record_preview?: Array<Record<string, unknown>>;
@@ -254,6 +305,7 @@ export type AnalysisQuestionOption = {
   text: string;
   question_type?: string;
   response_count?: number;
+  question_order?: number;
 };
 
 export type AnalysisTrustPayload = {
@@ -267,6 +319,56 @@ export type AnalysisDistributionRow = {
   answer_display: string;
   count: number;
   percentage: number;
+};
+
+export type AnalysisDashboardDistributionRow = {
+  label: string;
+  count: number;
+  percentage: number;
+};
+
+export type AnalysisDashboardHistogramBin = {
+  label: string;
+  count: number;
+  start?: number;
+  end?: number;
+};
+
+export type AnalysisDashboardLinePoint = {
+  label: string;
+  count: number;
+  value?: string;
+};
+
+export type AnalysisDashboardWordCloudTerm = {
+  term: string;
+  count: number;
+  weight: number;
+};
+
+export type AnalysisDashboardQuote = {
+  text: string;
+  respondent_id?: string | null;
+  model?: string | null;
+};
+
+export type AnalysisDashboardQuestion = {
+  question_id: string;
+  question_text: string;
+  question_type?: string;
+  question_order: number;
+  response_count: number;
+  chart_kind:
+    | "categorical_bar"
+    | "likert"
+    | "histogram"
+    | "line"
+    | "word_cloud";
+  distribution?: AnalysisDashboardDistributionRow[];
+  histogram_bins?: AnalysisDashboardHistogramBin[];
+  line_points?: AnalysisDashboardLinePoint[];
+  word_cloud_terms?: AnalysisDashboardWordCloudTerm[];
+  quotes?: AnalysisDashboardQuote[];
 };
 
 export type AnalysisResponseRecord = {
@@ -312,6 +414,12 @@ export type AnalysisPayload = {
     selected_segment?: string;
     filtered_record_count?: number;
   };
+  dashboard?: {
+    model_options?: string[];
+    selected_model?: string;
+    questions?: AnalysisDashboardQuestion[];
+  };
+  run_debug_summary?: SimulationRunDebugSummary | null;
   benchmark_snapshot?: {
     available?: boolean;
     message?: string;
@@ -363,6 +471,40 @@ export type InsightsTopFinding = {
   agreement_label?: string;
   chart_kind?: string;
   chart_rows?: Array<Record<string, unknown>>;
+};
+
+export type InsightsLlmKeyFinding = {
+  title: string;
+  summary: string;
+  why_it_matters: string;
+  evidence_ids: string[];
+};
+
+export type InsightsLlmSummary = {
+  available: boolean;
+  message?: string;
+  overview?: string;
+  key_findings?: InsightsLlmKeyFinding[];
+  result_reliability?: {
+    level: string;
+    summary: string;
+    reason: string;
+    evidence_ids: string[];
+  };
+  recommended_next_steps?: string[];
+  researcher_note?: string;
+  model?: string;
+  from_run_id?: string;
+  generated_at?: string;
+  cached?: boolean;
+};
+
+export type InsightsEvidenceItem = {
+  id: string;
+  category?: string;
+  title?: string;
+  summary?: string;
+  metrics?: Record<string, unknown>;
 };
 
 export type InsightsPayload = {
@@ -481,6 +623,20 @@ export type InsightsPayload = {
     run_warnings?: string[];
     survey_parse_warnings?: string[];
   };
+  llm_summary?: InsightsLlmSummary;
+  evidence_package?: {
+    version?: string;
+    from_run_id?: string;
+    run_context?: {
+      run_id?: string;
+      survey_title?: string | null;
+      experiment_mode?: string;
+      models_used?: string[];
+      respondent_count?: number | null;
+      question_count?: number | null;
+    };
+    items?: InsightsEvidenceItem[];
+  };
 };
 
 export type SimulationJobPayload<T> = {
@@ -550,6 +706,145 @@ export type InsightsResponse = {
   data?: {
     insights?: InsightsPayload;
   };
+};
+
+// ---------------------------------------------------------------------------
+// Interview types
+// ---------------------------------------------------------------------------
+
+export type InterviewQuestion = {
+  id: string;
+  text: string;
+};
+
+export type InterviewSynthesisConfig = {
+  questions?: InterviewQuestion[] | null;
+  model_a?: string | null;
+  model_b?: string | null;
+  judge_model?: string | null;
+};
+
+export type InterviewDimensionScores = {
+  purchase_intent: 0 | 1;
+  primary_objection: 0 | 1;
+  fit_tier_alignment: 0 | 1;
+  use_case_specificity: 0 | 1;
+};
+
+export type InterviewPersonaScore = {
+  persona_id: string;
+  score: number;
+  dimension_scores: InterviewDimensionScores;
+  has_error: boolean;
+};
+
+export type InterviewGroundingReport = {
+  corpus_average: number;
+  passes_threshold: boolean;
+  threshold: number;
+  per_dimension_avg: {
+    purchase_intent: number;
+    primary_objection: number;
+    fit_tier_alignment: number;
+    use_case_specificity: number;
+  };
+  flagged_persona_ids: string[];
+  persona_scores: InterviewPersonaScore[];
+};
+
+export type InterviewAnswers = Record<string, string>;
+
+export type InterviewModelResult = {
+  model: string;
+  answers: InterviewAnswers;
+  error: string | null;
+};
+
+export type InterviewPair = {
+  persona_id: string;
+  persona_index: number;
+  persona: Record<string, unknown>;
+  model_a: InterviewModelResult;
+  model_b: InterviewModelResult;
+  generation_timestamp: string;
+};
+
+export type InterviewRunPayload = {
+  job_id: string;
+  status: "running" | "completed" | "failed";
+  persona_count: number | null;
+  model_a: string | null;
+  model_b: string | null;
+  grounding_report: InterviewGroundingReport | null;
+  pairs: InterviewPair[] | null;
+  error: { message?: string } | null;
+  queued_at: string | null;
+  completed_at: string | null;
+};
+
+export type InterviewSynthesisState = {
+  status: string;
+  value: InterviewSynthesisConfig | null;
+  saved_at: string | null;
+  updated_at: string | null;
+  latest_run: InterviewRunPayload | null;
+};
+
+export type ResearchBriefValue = {
+  primary_question: string;
+  hypotheses: string[];
+  decisions_to_inform: string[];
+  focus_fit_tiers: string[];
+  focus_segments: string[];
+  known_context: string | null;
+  notes: string | null;
+};
+
+export type ResearchBriefState = {
+  status: string;
+  value: ResearchBriefValue | null;
+  saved_at: string | null;
+  updated_at: string | null;
+};
+
+export type InterviewTheme = {
+  label: string;
+  count: number;
+  synthesis: string;
+  representative_quote: string;
+  quote_persona_id: string;
+  sentiment: "positive" | "neutral" | "negative";
+};
+
+export type InterviewInsightsPayload = {
+  available: boolean;
+  message?: string;
+  from_run_id?: string;
+  themes?: InterviewTheme[];
+  persona_count?: number;
+  grounding_corpus_average?: number | null;
+  grounding_passes_threshold?: boolean | null;
+};
+
+export type InterviewChatMessage = {
+  role: "user" | "assistant";
+  content: string;
+};
+
+export type InterviewChatPayload = {
+  persona_id: string;
+  prompt: string;
+  messages?: InterviewChatMessage[];
+  transcript_source?: "model_a" | "model_b";
+  model?: string;
+};
+
+export type InterviewChatResponse = {
+  persona_id: string;
+  transcript_source: "model_a" | "model_b";
+  model: string | null;
+  source_run_id: string;
+  reply: string;
 };
 
 export type GetStudyResponse = {
@@ -691,6 +986,12 @@ export type PersonaPreviewResponse = {
   };
 };
 
+export type PromptPreviewResponse = {
+  data?: {
+    prompt_preview?: PromptPreviewPayload | null;
+  };
+};
+
 export type ModelCatalogResponse = {
   data?: {
     source?: "openrouter" | "fallback";
@@ -736,7 +1037,12 @@ export async function createStudy() {
   });
 
   if (!response.ok) {
-    throw new Error(`Study bootstrap failed with status ${response.status}`);
+    throw new Error(
+      await readApiErrorMessage(
+        response,
+        `Study bootstrap failed with status ${response.status}`
+      )
+    );
   }
 
   const payload = (await response.json()) as CreateStudyResponse;
@@ -760,7 +1066,12 @@ export async function getStudy(studyId: string) {
   });
 
   if (!response.ok) {
-    throw new Error(`Study load failed with status ${response.status}`);
+    throw new Error(
+      await readApiErrorMessage(
+        response,
+        `Study load failed with status ${response.status}`
+      )
+    );
   }
 
   const payload = (await response.json()) as GetStudyResponse;
@@ -784,7 +1095,12 @@ export async function getStudyDetails(studyId: string) {
   });
 
   if (!response.ok) {
-    throw new Error(`Study detail load failed with status ${response.status}`);
+    throw new Error(
+      await readApiErrorMessage(
+        response,
+        `Study detail load failed with status ${response.status}`
+      )
+    );
   }
 
   const payload = (await response.json()) as GetStudyResponse;
@@ -811,7 +1127,12 @@ export async function saveStudyMode(studyId: string, studyMode: "neo_smart" | "g
   });
 
   if (!response.ok) {
-    throw new Error(`Study mode save failed with status ${response.status}`);
+    throw new Error(
+      await readApiErrorMessage(
+        response,
+        `Study mode save failed with status ${response.status}`
+      )
+    );
   }
 
   const payload = (await response.json()) as PatchStudyModeResponse;
@@ -826,6 +1147,34 @@ export async function saveStudyMode(studyId: string, studyMode: "neo_smart" | "g
     status: payload.data?.study_mode?.status ?? "saved",
     lifecycleStatus: payload.data?.study_lifecycle_status ?? "setup_in_progress",
   };
+}
+
+export async function bootstrapNeoDemoStudy(studyId: string) {
+  const apiBaseUrl = getApiBaseUrl();
+
+  const response = await fetch(`${apiBaseUrl}/api/v1/studies/${studyId}/study-mode/bootstrap/neo`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      await readApiErrorMessage(
+        response,
+        `Neo demo bootstrap failed with status ${response.status}`
+      )
+    );
+  }
+
+  const payload = (await response.json()) as GetStudyResponse;
+  const study = payload.data?.study;
+  if (!study?.study_id) {
+    throw new Error("Neo demo bootstrap succeeded but no canonical study was returned.");
+  }
+
+  return normalizeCanonicalStudy(study);
 }
 
 export async function saveAudience(studyId: string, payload: AudiencePayload) {
@@ -1111,6 +1460,25 @@ export async function generatePersonaPreview(
   };
 }
 
+export async function getPromptPreview(studyId: string, personaIndex = 0) {
+  const apiBaseUrl = getApiBaseUrl();
+  const response = await fetch(
+    `${apiBaseUrl}/api/v1/studies/${studyId}/prompt-preview?persona_index=${encodeURIComponent(String(personaIndex))}`
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      await readApiErrorMessage(
+        response,
+        `Prompt preview failed with status ${response.status}`
+      )
+    );
+  }
+
+  const result = (await response.json()) as PromptPreviewResponse;
+  return result.data?.prompt_preview ?? null;
+}
+
 export async function startSimulationRun(studyId: string) {
   const apiBaseUrl = getApiBaseUrl();
 
@@ -1312,4 +1680,220 @@ export async function getInsights(studyId: string) {
 
   const result = (await response.json()) as InsightsResponse;
   return result.data?.insights ?? { available: false };
+}
+
+// ---------------------------------------------------------------------------
+// Interview fetch functions
+// ---------------------------------------------------------------------------
+
+export async function getInterviewSynthesis(studyId: string): Promise<InterviewSynthesisState> {
+  const apiBaseUrl = getApiBaseUrl();
+  const response = await fetch(
+    `${apiBaseUrl}/api/v1/studies/${studyId}/interview/synthesis`,
+    { method: "GET", headers: { Accept: "application/json" }, cache: "no-store" }
+  );
+  if (!response.ok) {
+    throw new Error(
+      await readApiErrorMessage(
+        response,
+        `Interview synthesis load failed with status ${response.status}`
+      )
+    );
+  }
+  const result = (await response.json()) as {
+    data?: { interview_synthesis?: InterviewSynthesisState };
+  };
+  return (
+    result.data?.interview_synthesis ?? {
+      status: "not_started",
+      value: null,
+      saved_at: null,
+      updated_at: null,
+      latest_run: null,
+    }
+  );
+}
+
+export async function saveInterviewSynthesisConfig(
+  studyId: string,
+  payload: InterviewSynthesisConfig
+) {
+  const apiBaseUrl = getApiBaseUrl();
+  const response = await fetch(
+    `${apiBaseUrl}/api/v1/studies/${studyId}/interview/synthesis`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }
+  );
+  if (!response.ok) {
+    throw new Error(
+      await readApiErrorMessage(
+        response,
+        `Interview synthesis save failed with status ${response.status}`
+      )
+    );
+  }
+  const result = (await response.json()) as {
+    data?: { interview_synthesis?: Omit<InterviewSynthesisState, "latest_run"> };
+  };
+  return result.data?.interview_synthesis ?? null;
+}
+
+export async function startInterviewRun(
+  studyId: string,
+  payload?: Partial<InterviewSynthesisConfig>
+): Promise<InterviewRunPayload | null> {
+  const apiBaseUrl = getApiBaseUrl();
+  const response = await fetch(
+    `${apiBaseUrl}/api/v1/studies/${studyId}/interview/runs`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload ?? {}),
+    }
+  );
+  if (!response.ok) {
+    throw new Error(
+      await readApiErrorMessage(
+        response,
+        `Interview run failed with status ${response.status}`
+      )
+    );
+  }
+  const result = (await response.json()) as {
+    data?: { interview_run?: InterviewRunPayload };
+  };
+  return result.data?.interview_run ?? null;
+}
+
+export async function getLatestInterviewRun(
+  studyId: string
+): Promise<InterviewRunPayload | null> {
+  const apiBaseUrl = getApiBaseUrl();
+  const response = await fetch(
+    `${apiBaseUrl}/api/v1/studies/${studyId}/interview/runs/latest`,
+    { method: "GET", headers: { Accept: "application/json" }, cache: "no-store" }
+  );
+  if (!response.ok) {
+    throw new Error(
+      await readApiErrorMessage(
+        response,
+        `Interview run load failed with status ${response.status}`
+      )
+    );
+  }
+  const result = (await response.json()) as {
+    data?: { interview_run?: InterviewRunPayload | null };
+  };
+  return result.data?.interview_run ?? null;
+}
+
+export async function getResearchBrief(studyId: string): Promise<ResearchBriefState> {
+  const apiBaseUrl = getApiBaseUrl();
+  const response = await fetch(
+    `${apiBaseUrl}/api/v1/studies/${studyId}/interview/brief`,
+    { method: "GET", headers: { Accept: "application/json" }, cache: "no-store" }
+  );
+  if (!response.ok) {
+    throw new Error(
+      await readApiErrorMessage(
+        response,
+        `Research brief load failed with status ${response.status}`
+      )
+    );
+  }
+  const result = (await response.json()) as {
+    data?: { research_brief?: ResearchBriefState };
+  };
+  return (
+    result.data?.research_brief ?? {
+      status: "not_started",
+      value: null,
+      saved_at: null,
+      updated_at: null,
+    }
+  );
+}
+
+export async function saveResearchBrief(
+  studyId: string,
+  payload: Partial<ResearchBriefValue>
+) {
+  const apiBaseUrl = getApiBaseUrl();
+  const response = await fetch(
+    `${apiBaseUrl}/api/v1/studies/${studyId}/interview/brief`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }
+  );
+  if (!response.ok) {
+    throw new Error(
+      await readApiErrorMessage(
+        response,
+        `Research brief save failed with status ${response.status}`
+      )
+    );
+  }
+  const result = (await response.json()) as {
+    data?: { research_brief?: ResearchBriefState };
+  };
+  return result.data?.research_brief ?? null;
+}
+
+export async function getInterviewInsights(
+  studyId: string
+): Promise<InterviewInsightsPayload> {
+  const apiBaseUrl = getApiBaseUrl();
+  const response = await fetch(
+    `${apiBaseUrl}/api/v1/studies/${studyId}/interview/insights`,
+    { method: "GET", headers: { Accept: "application/json" }, cache: "no-store" }
+  );
+  if (!response.ok) {
+    throw new Error(
+      await readApiErrorMessage(
+        response,
+        `Interview insights load failed with status ${response.status}`
+      )
+    );
+  }
+  const result = (await response.json()) as {
+    data?: { interview_insights?: InterviewInsightsPayload };
+  };
+  return result.data?.interview_insights ?? { available: false };
+}
+
+export async function sendInterviewChatMessage(
+  studyId: string,
+  payload: InterviewChatPayload
+): Promise<InterviewChatResponse> {
+  const apiBaseUrl = getApiBaseUrl();
+  const response = await fetch(
+    `${apiBaseUrl}/api/v1/studies/${studyId}/interview/chat`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      await readApiErrorMessage(
+        response,
+        `Interview chat failed with status ${response.status}`
+      )
+    );
+  }
+
+  const result = (await response.json()) as {
+    data?: { interview_chat?: InterviewChatResponse };
+  };
+  if (!result.data?.interview_chat) {
+    throw new Error("Interview chat returned an empty response.");
+  }
+  return result.data.interview_chat;
 }

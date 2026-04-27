@@ -39,12 +39,12 @@ export function HorizontalBarChart({
       emptyMessage={emptyMessage}
       note={note}
     >
-      <div className="mb-5 flex items-center justify-between gap-3 text-[0.72rem] uppercase tracking-[0.2em] text-app-muted">
+      <div className="mb-5 flex flex-col gap-1.5 text-[0.72rem] uppercase tracking-[0.2em] text-app-muted sm:flex-row sm:items-center sm:justify-between sm:gap-3">
         <span>{highlightTopRow ? "Ranked comparison" : "Distribution"}</span>
         <span>{formatScaleValue(maxValue)}</span>
       </div>
 
-      <div className="mb-4 grid grid-cols-5 gap-0 text-[0.68rem] text-app-muted">
+      <div className="mb-4 hidden grid-cols-5 gap-0 text-[0.68rem] text-app-muted sm:grid">
         {scaleTicks.map((tick, index) => (
           <span
             key={`${title}-tick-${index}`}
@@ -69,15 +69,15 @@ export function HorizontalBarChart({
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, amount: 0.3 }}
             transition={{ duration: 0.35, delay: index * 0.05 }}
-            className="rounded-[1.05rem] border border-white/6 bg-[linear-gradient(180deg,rgba(255,255,255,0.022),rgba(255,255,255,0.012))] p-4"
+            className="rounded-[1.05rem] border border-app-border [background:var(--hero-signal-card-bg)] p-3.5 sm:p-4"
           >
             <div className="flex items-center gap-3">
-              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-xs font-medium text-app-muted">
+              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-app-border [background:var(--status-neutral-bg)] text-xs font-medium text-app-muted">
                 {index + 1}
               </div>
               <div className="min-w-0 flex-1">
-                <div className="flex items-center justify-between gap-3 text-sm text-app-text">
-                  <span className="truncate">{row.label}</span>
+                <div className="flex items-start justify-between gap-3 text-sm text-app-text">
+                  <span className="min-w-0 leading-6 sm:truncate">{row.label}</span>
                   <span className="shrink-0 text-app-muted">
                     {row.valueLabel ?? formatNumber(row.value)}
                   </span>
@@ -87,7 +87,7 @@ export function HorizontalBarChart({
 
             {row.meta ? <div className="mt-1 text-xs leading-6 text-app-muted">{row.meta}</div> : null}
 
-            <div className="mt-4 h-3 rounded-full border border-white/6 bg-white/[0.04] p-[2px]">
+            <div className="mt-3 h-3 rounded-full border border-app-border [background:var(--status-neutral-bg)] p-[2px]">
                 <motion.div
                   initial={{ scaleX: 0, opacity: 0.6 }}
                   whileInView={{ scaleX: 1, opacity: 1 }}
@@ -105,6 +105,10 @@ export function HorizontalBarChart({
                 >
                   <span className="absolute right-0 top-1/2 h-3 w-3 -translate-y-1/2 translate-x-1/2 rounded-full border border-white/20 bg-white/80 shadow-[0_0_18px_rgba(255,255,255,0.28)]" />
                 </motion.div>
+            </div>
+            <div className="mt-2 flex items-center justify-between text-[0.68rem] text-app-muted sm:hidden">
+              <span>0</span>
+              <span>{formatScaleValue(maxValue)}</span>
             </div>
           </motion.div>
         ))}
