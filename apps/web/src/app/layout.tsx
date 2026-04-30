@@ -15,6 +15,10 @@ export const metadata: Metadata = {
   title: "Grounded Synthetic Respondent Lab",
   description:
     "Build grounded synthetic personas, run AI-powered survey simulations, and verify realism with trust signals.",
+  icons: {
+    icon: "/icon.png",
+    apple: "/apple-icon.png",
+  },
 };
 
 export default function RootLayout({

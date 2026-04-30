@@ -10,6 +10,8 @@ import { cn } from "@/lib/utils";
 import { useSectionRegistry } from "@/providers/section-registry-provider";
 import { useTheme } from "@/providers/theme-provider";
 
+const APP_LOGO_SRC = "/brand/app-logo.png";
+
 export function WorkflowNav() {
   const { activeSectionId, navigationLocked, scrollToSection } = useSectionRegistry();
   const { isReady, theme, toggleTheme } = useTheme();
@@ -69,8 +71,9 @@ export function WorkflowNav() {
           <button
             type="button"
             onClick={() => scrollToSection("main")}
-            className="flex min-w-0 w-[clamp(18rem,33vw,30rem)] max-w-[30rem] items-center px-1 py-1 text-left"
+            className="flex min-w-0 w-[clamp(18rem,33vw,30rem)] max-w-[30rem] items-center gap-3 px-1 py-1 text-left"
           >
+            <AppLogoMark className="h-10 w-10" />
             <div className="min-w-0">
               <div className="truncate font-display text-[clamp(0.66rem,0.86vw,0.92rem)] font-semibold uppercase tracking-[0.08em] text-app-cyan">
                 Grounded Synthetic Respondent Lab
@@ -148,13 +151,16 @@ export function WorkflowNav() {
             <button
               type="button"
               onClick={() => scrollToSection("main")}
-              className="min-w-0 flex-1 px-0 py-0 text-left"
+              className="flex min-w-0 flex-1 items-center gap-2.5 px-0 py-0 text-left"
             >
-              <div className="truncate font-display text-[0.76rem] font-semibold uppercase tracking-[0.08em] text-app-cyan sm:text-[0.82rem]">
-                Grounded Synthetic Respondent Lab
-              </div>
-              <div className="mt-1 text-[0.6rem] tracking-[0.08em] text-app-muted sm:text-[0.66rem]">
-                Premium grounded research workflow
+              <AppLogoMark className="h-9 w-9" />
+              <div className="min-w-0">
+                <div className="truncate font-display text-[0.76rem] font-semibold uppercase tracking-[0.08em] text-app-cyan sm:text-[0.82rem]">
+                  Grounded Synthetic Respondent Lab
+                </div>
+                <div className="mt-1 truncate text-[0.6rem] tracking-[0.08em] text-app-muted sm:text-[0.66rem]">
+                  Premium grounded research workflow
+                </div>
               </div>
             </button>
 
@@ -305,6 +311,24 @@ export function WorkflowNav() {
         </div>
       </header>
     </>
+  );
+}
+
+export function AppLogoMark({ className }: { className?: string }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full border [background:var(--button-secondary-bg)] [border-color:var(--button-secondary-border)]",
+        className
+      )}
+      aria-hidden="true"
+    >
+      <img
+        src={APP_LOGO_SRC}
+        alt=""
+        className="h-full w-full scale-[1.24] object-cover"
+      />
+    </span>
   );
 }
 
