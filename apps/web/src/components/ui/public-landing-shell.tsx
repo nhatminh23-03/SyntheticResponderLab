@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { HeroSignalPanel } from "@/components/sections/hero-signal-panel";
 import { MetricPill } from "@/components/ui/metric-pill";
 import { RevealOnScroll } from "@/components/ui/reveal-on-scroll";
+import { AppLogoMark } from "@/components/ui/workflow-nav";
 import { useBackendReadiness } from "@/hooks/use-backend-readiness";
 
 export function PublicLandingShell() {
@@ -119,12 +120,15 @@ function PublicTopNav({ backendReady }: { backendReady: boolean }) {
   return (
     <header className="sticky top-0 z-50 border-b [background:var(--nav-bg)] [border-color:var(--nav-border)] backdrop-blur-2xl">
       <div className="mx-auto flex h-[5.5rem] w-full max-w-[92rem] items-center justify-between gap-4 px-4 sm:h-[var(--nav-height)] sm:px-6 lg:px-8">
-        <div className="min-w-0 px-1 py-1">
-          <div className="truncate font-display text-[clamp(0.66rem,0.86vw,0.92rem)] font-semibold uppercase tracking-[0.08em] text-app-cyan">
-            Grounded Synthetic Respondent Lab
-          </div>
-          <div className="text-[clamp(0.58rem,0.74vw,0.8rem)] tracking-[0.08em] text-app-muted">
-            Premium grounded research workflow
+        <div className="flex min-w-0 items-center gap-3 px-1 py-1">
+          <AppLogoMark className="h-10 w-10" />
+          <div className="min-w-0">
+            <div className="truncate font-display text-[clamp(0.66rem,0.86vw,0.92rem)] font-semibold uppercase tracking-[0.08em] text-app-cyan">
+              Grounded Synthetic Respondent Lab
+            </div>
+            <div className="truncate text-[clamp(0.58rem,0.74vw,0.8rem)] tracking-[0.08em] text-app-muted">
+              Premium grounded research workflow
+            </div>
           </div>
         </div>
 
