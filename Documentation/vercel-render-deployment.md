@@ -8,7 +8,7 @@ This document defines the recommended real-hosting target for the current codeba
 
 - Frontend: **Vercel**
 - Backend: **Render Web Service** using Docker
-- Database: **Render Postgres**
+- Database: **Neon Postgres** for a free deployment, or Render Postgres for a paid Render-only setup
 - Storage/artifacts: **Render persistent disk** mounted into the backend service
 - Edge rate limiting: **Vercel Firewall / WAF rate limiting**
 
@@ -42,7 +42,7 @@ Production request flow:
 
 1. Browser → Vercel frontend (`apps/web`)
 2. Vercel Next.js proxy → Render backend (`apps/api`)
-3. Render backend → Render Postgres
+3. Render backend → Postgres, typically Neon on the free path
 4. Render backend → Render persistent disk at `ARTIFACTS_ROOT`
 
 Trust boundary:
@@ -60,7 +60,7 @@ This repo now includes the minimum platform-specific definitions for this target
 - [`apps/api/Dockerfile`](/Users/mnd/Desktop/AI%20Hackathon/SyntheticResponderLab/apps/api/Dockerfile)
   - builds the FastAPI service and copies the legacy runtime tree into the image
 - [`render.yaml`](/Users/mnd/Desktop/AI%20Hackathon/SyntheticResponderLab/render.yaml)
-  - defines the Render backend service and Render Postgres database
+  - defines the Render backend service and paid Render Postgres option; for free Neon deployments, create only the backend service manually and paste the Neon `DATABASE_URL`
 - [`apps/web/vercel.json`](/Users/mnd/Desktop/AI%20Hackathon/SyntheticResponderLab/apps/web/vercel.json)
   - locks the Vercel project to the expected Next.js build/install commands
 
@@ -110,7 +110,7 @@ Required:
 |---|---:|---|
 | `APP_ENV` | Yes | `production` |
 | `APP_DEBUG` | Yes | `false` |
-| `DATABASE_URL` | Yes | Sourced from Render Postgres |
+| `DATABASE_URL` | Yes | Neon pooled Postgres connection string on the free path, or Render Postgres connection string on the paid path |
 | `ARTIFACTS_ROOT` | Yes | `/var/data/artifacts` |
 | `LEGACY_APP_ROOT` | Yes | `/app/NeoSmart-Hackathon-App` |
 | `DEPLOYMENT_SHARED_SECRET` | Yes | Must match frontend |
@@ -230,8 +230,9 @@ Do **not** treat documented rate limits as “done” if they are not actually c
 ### 1. Provision services
 
 1. Create the Vercel project rooted at `apps/web`
-2. Create the Render backend and Render Postgres from [`render.yaml`](/Users/mnd/Desktop/AI%20Hackathon/SyntheticResponderLab/render.yaml)
-3. Confirm the Render service has a persistent disk attached at `/var/data`
+2. Create a Neon Postgres database for the free path
+3. Create the Render backend as a Docker web service using [`apps/api/Dockerfile`](/Users/mnd/Desktop/AI%20Hackathon/SyntheticResponderLab/apps/api/Dockerfile)
+4. Skip the Render persistent disk on the fully-free path; uploaded/generated filesystem artifacts will be ephemeral until object storage or a paid Render disk is added
 4. Create the Clerk production or staging app
 
 ### 2. Set secrets
@@ -245,14 +246,13 @@ Set all required:
 
 ### 3. Run migrations
 
-Before first live traffic, run:
+The backend Docker startup runs:
 
 ```bash
-cd /app/apps/api
 alembic upgrade head
 ```
 
-Run this inside the Render backend environment using Render Shell or an equivalent one-off command workflow.
+before starting Uvicorn. This is intentional for the Render free path where a separate shell or pre-deploy command may not be available. On first backend boot, Neon should receive the required tables automatically.
 
 ### 4. Backfill owners if needed
 

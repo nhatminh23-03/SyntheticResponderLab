@@ -20,4 +20,4 @@ RUN pip install --upgrade pip && pip install .
 
 EXPOSE 10000
 
-CMD ["/bin/sh", "-c", "mkdir -p \"${ARTIFACTS_ROOT:-/var/data/artifacts}\" && uvicorn src.main:app --host 0.0.0.0 --port ${PORT:-10000}"]
+CMD ["/bin/sh", "-c", "mkdir -p \"${ARTIFACTS_ROOT:-/var/data/artifacts}\" && alembic upgrade head && uvicorn src.main:app --host 0.0.0.0 --port ${PORT:-10000}"]
