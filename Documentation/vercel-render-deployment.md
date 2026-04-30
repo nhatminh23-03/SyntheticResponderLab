@@ -58,7 +58,7 @@ This repo now includes the minimum platform-specific definitions for this target
 - [`.dockerignore`](/Users/mnd/Desktop/AI%20Hackathon/SyntheticResponderLab/.dockerignore)
   - trims the Docker build context for the Render backend image
 - [`apps/api/Dockerfile`](/Users/mnd/Desktop/AI%20Hackathon/SyntheticResponderLab/apps/api/Dockerfile)
-  - builds the FastAPI service and fetches the pinned legacy runtime tree into the image
+  - builds the FastAPI service and copies the vendored legacy runtime tree into the image
 - [`render.yaml`](/Users/mnd/Desktop/AI%20Hackathon/SyntheticResponderLab/render.yaml)
   - defines the Render backend service and paid Render Postgres option; for free Neon deployments, create only the backend service manually and paste the Neon `DATABASE_URL`
 - [`apps/web/vercel.json`](/Users/mnd/Desktop/AI%20Hackathon/SyntheticResponderLab/apps/web/vercel.json)
@@ -153,18 +153,16 @@ Required in Clerk dashboard:
 
 ## D. Legacy runtime strategy
 
-`LEGACY_APP_ROOT` will exist in deployment by being **fetched into the backend Docker image** from the pinned legacy runtime repository and commit.
+`LEGACY_APP_ROOT` will exist in deployment by being **copied into the backend Docker image** from the vendored runtime at `apps/api/legacy_runtime/backend`.
 
 Concrete path:
 - container path: `/app/NeoSmart-Hackathon-App`
 - backend env:
   - `LEGACY_APP_ROOT=/app/NeoSmart-Hackathon-App`
-- Docker build args:
-  - `LEGACY_APP_REPO=https://github.com/ytun1/NeoSmart-Hackathon-App.git`
-  - `LEGACY_APP_REV=0d066c1ddc963e562cc699a6a43f2d1e91c46828`
 
 Why this is the simplest safe choice:
 - no separate mount is required for the legacy source tree
+- Render does not need access to the private/source legacy repo during Docker build
 - backend startup checks can validate it deterministically
 - the image contains the exact runtime tree the backend expects
 
