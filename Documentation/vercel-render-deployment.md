@@ -153,7 +153,7 @@ Required in Clerk dashboard:
 
 ## D. Legacy runtime strategy
 
-`LEGACY_APP_ROOT` will exist in deployment by being **copied into the backend Docker image** from the vendored runtime at `apps/api/legacy_runtime/backend`.
+`LEGACY_APP_ROOT` will exist in deployment by being **copied into the backend Docker image** from the vendored runtime at `apps/api/legacy_runtime`.
 
 Concrete path:
 - container path: `/app/NeoSmart-Hackathon-App`
@@ -165,6 +165,7 @@ Why this is the simplest safe choice:
 - Render does not need access to the private/source legacy repo during Docker build
 - backend startup checks can validate it deterministically
 - the image contains the exact runtime tree the backend expects
+- guided Neo demo survey presets are bundled under `Provided Info/`
 
 Operational implication:
 - any backend deploy that changes the repo will rebuild the image and refresh the embedded legacy tree
