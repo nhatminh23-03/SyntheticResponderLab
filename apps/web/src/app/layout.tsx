@@ -10,6 +10,7 @@ import {
   isClerkConfigured,
 } from "@/lib/server-env";
 import { ClerkProvider } from "@clerk/nextjs";
+import { Analytics } from "@vercel/analytics/next";
 
 export const metadata: Metadata = {
   title: "Grounded Synthetic Respondent Lab",
@@ -33,7 +34,10 @@ export default function RootLayout({
 
   const content = (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        {children}
+        <Analytics />
+      </body>
     </html>
   );
 
