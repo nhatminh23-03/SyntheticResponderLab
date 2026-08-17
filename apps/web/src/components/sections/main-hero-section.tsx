@@ -67,14 +67,6 @@ export function MainHeroSection() {
               {isCreatingStudy || isHydratingStudy ? "Preparing Setup..." : "Start Setup"}
               <ArrowRightIcon />
             </Button>
-            <Button
-              variant="secondary"
-              onClick={() => scrollToSection("study-mode")}
-              className="w-full sm:w-auto"
-            >
-              See Workflow
-              <ArrowRightIcon />
-            </Button>
           </div>
 
           <div className="mt-4">

@@ -373,11 +373,14 @@ export function AudienceSection() {
                     }))}
                   />
                 </Field>
-                <Field label="Metro" hint="Optional. Add a metro area to narrow location.">
+                <Field
+                  label="City or Area"
+                  hint="Optional. Add a city, county, or regional area to narrow location."
+                >
                   <TextInput
                     value={draft.metro}
                     onChange={(value) => updateDraft("metro", value)}
-                    placeholder="San Francisco-Oakland-Berkeley"
+                    placeholder="San Francisco or Bay Area"
                   />
                 </Field>
                 <Field
@@ -415,7 +418,7 @@ export function AudienceSection() {
                       inputMode="numeric"
                     />
                   </Field>
-                  <Field label="Income Min" error={fieldErrors.income_min}>
+                  <Field label="Household Income Min" error={fieldErrors.income_min}>
                     <TextInput
                       value={draft.income_min}
                       onChange={(value) => updateDraft("income_min", value)}
@@ -423,7 +426,7 @@ export function AudienceSection() {
                       inputMode="numeric"
                     />
                   </Field>
-                  <Field label="Income Max" error={fieldErrors.income_max}>
+                  <Field label="Household Income Max" error={fieldErrors.income_max}>
                     <TextInput
                       value={draft.income_max}
                       onChange={(value) => updateDraft("income_max", value)}

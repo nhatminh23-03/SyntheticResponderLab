@@ -5,7 +5,7 @@ from src.config.settings import AppSettings
 from src.persistence.base import Base
 from src.persistence.session import create_session_factory
 from src.schemas.health import HealthCheckResult, HealthPayload
-from src.services.health_service import startup_failures
+from src.services.health_service import build_health_payload, startup_failures
 from fastapi.testclient import TestClient
 
 
@@ -27,6 +27,19 @@ def test_health_endpoint_returns_503_on_failed_status(monkeypatch, client):
     body = response.json()
     assert body["data"]["status"] == "failed"
     assert body["data"]["checks"]["database"]["status"] == "fail"
+
+
+def test_health_reports_missing_usage_counter_migration(test_settings, tmp_path):
+    settings = test_settings.model_copy(
+        update={"database_url": f"sqlite:///{tmp_path / 'unmigrated.db'}"}
+    )
+    session_factory = create_session_factory(settings)
+
+    payload = build_health_payload(settings, session_factory)
+
+    assert payload.status == "failed"
+    assert payload.checks["database_schema"].status == "fail"
+    assert "alembic upgrade head" in (payload.checks["database_schema"].message or "")
 
 
 def test_startup_failures_require_deployment_secret_in_production(test_settings):

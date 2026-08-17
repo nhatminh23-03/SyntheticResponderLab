@@ -3,5 +3,5 @@ export function cn(...values: Array<string | false | null | undefined>) {
 }
 
 export function formatSectionIndex(index: number) {
-  return String(index + 1).padStart(2, "0");
+  return String(index).padStart(2, "0");
 }

@@ -67,25 +67,22 @@ export function WorkflowNav() {
   return (
     <>
       <header className="sticky top-0 z-50 hidden border-b [background:var(--nav-bg)] [border-color:var(--nav-border)] backdrop-blur-2xl lg:block">
-        <div className="mx-auto flex h-[var(--nav-height)] w-full max-w-[92rem] items-center gap-4 px-8">
+        <div className="mx-auto flex h-[var(--nav-height)] w-full max-w-[92rem] items-center gap-2 px-4 xl:gap-4 xl:px-8">
           <button
             type="button"
             onClick={() => scrollToSection("main")}
-            className="flex min-w-0 w-[clamp(18rem,33vw,30rem)] max-w-[30rem] items-center gap-3 px-1 py-1 text-left"
+            className="flex min-w-0 w-[clamp(10rem,18vw,18rem)] max-w-[18rem] items-center gap-3 px-1 py-1 text-left"
           >
             <AppLogoMark className="h-10 w-10" />
             <div className="min-w-0">
-              <div className="truncate font-display text-[clamp(0.66rem,0.86vw,0.92rem)] font-semibold uppercase tracking-[0.08em] text-app-cyan">
+              <div className="font-display text-[clamp(0.66rem,0.86vw,0.92rem)] font-semibold uppercase leading-[1.2] tracking-[0.08em] text-app-cyan">
                 Grounded Synthetic Respondent Lab
-              </div>
-              <div className="text-[clamp(0.58rem,0.74vw,0.8rem)] tracking-[0.08em] text-app-muted">
-                Premium grounded research workflow
               </div>
             </div>
           </button>
 
-          <nav className="min-w-0 flex-1 overflow-x-auto">
-            <div className="inline-flex w-max items-center rounded-[1.5rem] border px-2 py-1.5 [background:var(--theme-panel-inline-gradient)] [border-color:var(--button-secondary-border)] [box-shadow:inset_0_1px_0_rgba(255,255,255,0.03)]">
+          <nav className="min-w-0 flex-1 overflow-hidden">
+            <div className="grid w-full grid-cols-10 items-center rounded-[1.5rem] border px-1 py-1.5 [background:var(--theme-panel-inline-gradient)] [border-color:var(--button-secondary-border)] [box-shadow:inset_0_1px_0_rgba(255,255,255,0.03)] xl:px-2">
               {navSections.map((section) => {
                 const isInterviewGroupTab = section.id === "interview-synthesis";
                 const isActive = isInterviewGroupTab
@@ -100,7 +97,7 @@ export function WorkflowNav() {
                     disabled={navigationLocked}
                     aria-current={isActive ? "page" : undefined}
                     className={cn(
-                      "relative shrink-0 rounded-full px-3.5 py-2 font-medium tracking-[0.003em] transition-all duration-200",
+                      "relative min-w-0 rounded-full px-[clamp(0.25rem,0.6vw,0.85rem)] py-2 font-medium tracking-[0.003em] transition-all duration-200",
                       "text-center",
                       navigationLocked && "cursor-not-allowed opacity-55",
                       isActive
@@ -114,7 +111,7 @@ export function WorkflowNav() {
                         className="absolute inset-0 rounded-full border [background:var(--nav-active-pill-bg)] [border-color:var(--button-secondary-border)] shadow-[0_0_0_1px_rgba(255,255,255,0.02),0_14px_28px_rgba(15,216,255,0.08)]"
                       />
                     ) : null}
-                    <span className="relative z-10 block whitespace-nowrap text-[clamp(0.68rem,0.82vw,0.98rem)] leading-none">
+                    <span className="relative z-10 block whitespace-nowrap text-[clamp(0.56rem,0.68vw,0.84rem)] leading-none">
                       {section.label}
                     </span>
                   </button>

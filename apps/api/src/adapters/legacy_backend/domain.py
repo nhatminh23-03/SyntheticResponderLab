@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from collections import Counter
 from datetime import datetime, timezone
+from html import unescape
 import inspect
 import json
 from pathlib import Path
 import re
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlsplit
 
 import pandas as pd
 from pydantic import ValidationError
@@ -2803,15 +2805,22 @@ def _build_realism_detail(realism_scorecard: dict[str, Any]) -> Optional[str]:
 
 
 def product_url_autofill(*, settings: AppSettings, url: str) -> dict:
-    if not settings.openrouter_api_key:
-        raise ProviderUnavailableApiError("OPENROUTER_API_KEY is required for product URL autofill.")
-
     scraper = load_module("backend.scraper", settings.legacy_app_root)
-    vision = load_module("backend.vision", settings.legacy_app_root)
     schemas = load_module("backend.schemas", settings.legacy_app_root)
 
     try:
         page_text = scraper.scrape_product_page(url)
+        if not settings.openrouter_api_key:
+            return {
+                "page_text": page_text,
+                "product_patch": _build_product_context_from_page_text(
+                    page_text=page_text,
+                    url=url,
+                    schemas=schemas,
+                ),
+            }
+
+        vision = load_module("backend.vision", settings.legacy_app_root)
         with temporary_env(
             {
                 "OPENROUTER_API_KEY": settings.openrouter_api_key,
@@ -2830,6 +2839,120 @@ def product_url_autofill(*, settings: AppSettings, url: str) -> dict:
         raise ProviderUnavailableApiError(str(exc)) from exc
     except Exception as exc:
         raise LegacyModuleApiError("Product URL autofill failed.") from exc
+
+
+def _build_product_context_from_page_text(*, page_text: str, url: str, schemas: Any) -> dict:
+    """Build a reviewable product draft without requiring an LLM provider."""
+    text = re.sub(r"\s+", " ", unescape(page_text)).strip()
+    product_name = _extract_product_name_from_page_text(text)
+    product_description = _extract_product_description_from_page_text(text)
+
+    if not product_name and not product_description:
+        raise LegacyModuleApiError(
+            "The product page did not expose enough public text to build a draft."
+        )
+
+    hostname = (urlsplit(url).hostname or "").removeprefix("www.")
+    brand = hostname.split(".", 1)[0].replace("-", " ").title() or None
+    product_type, industry = _infer_product_category(product_name or product_description or "")
+    price_match = re.search(
+        r"\$\d[\d,]*(?:\.\d{2})?(?:\s+\$\d[\d,]*(?:\.\d{2})?)?",
+        text,
+    )
+    price_range = price_match.group(0) if price_match else None
+
+    context = schemas.BusinessProductContext(
+        business_name=brand,
+        industry=industry,
+        product_name=product_name,
+        product_type=product_type,
+        product_description=product_description or product_name,
+        target_customer=_infer_target_customer(product_name or ""),
+        price_range=price_range,
+        primary_goal=(
+            f"Understand audience response to {product_name}."
+            if product_name
+            else "Understand audience response to this product."
+        ),
+        key_features=_extract_product_features(text),
+        notes="Drafted from public product-page text without AI enrichment. Review before applying.",
+    )
+    return context.model_dump()
+
+
+def _extract_product_name_from_page_text(text: str) -> Optional[str]:
+    domain_title = re.match(
+        r"^(.{2,140}?)\.\s+[A-Za-z0-9-]+\.(?:com|co|net|org|io)\b",
+        text,
+        flags=re.IGNORECASE,
+    )
+    if domain_title:
+        return domain_title.group(1).strip()
+
+    first_sentence = re.match(r"^(.{2,140}?)\.", text)
+    return first_sentence.group(1).strip() if first_sentence else None
+
+
+def _extract_product_description_from_page_text(text: str) -> Optional[str]:
+    description_match = re.search(
+        r"(?:Favorite|Wishlist).*?([A-Z][a-z][^.!?]{20,600}[.!?])\s*(?:Shown:|Product Details)",
+        text,
+        flags=re.IGNORECASE,
+    )
+    if description_match:
+        return description_match.group(1).strip()
+
+    details_match = re.search(
+        r"Product Details\s+(.{30,600}?)(?:Size\s*&\s*Fit|Shipping\s*&\s*Returns|$)",
+        text,
+        flags=re.IGNORECASE,
+    )
+    if details_match:
+        return details_match.group(1).strip()
+    return None
+
+
+def _extract_product_features(text: str) -> list[str]:
+    details_match = re.search(
+        r"Product Details\s+(.{0,1200}?)(?:Size\s*&\s*Fit|Shipping\s*&\s*Returns|$)",
+        text,
+        flags=re.IGNORECASE,
+    )
+    if not details_match:
+        return []
+
+    candidates = re.split(r"(?<=[.!?])\s+", details_match.group(1))
+    ignored_prefixes = ("shown:", "style:", "size & fit", "shipping", "returns")
+    features = []
+    for candidate in candidates:
+        cleaned = candidate.strip(" .")
+        if len(cleaned) < 3 or cleaned.lower().startswith(ignored_prefixes):
+            continue
+        if cleaned not in features:
+            features.append(cleaned)
+        if len(features) == 6:
+            break
+    return features
+
+
+def _infer_product_category(value: str) -> tuple[str, str]:
+    normalized = value.lower()
+    if any(token in normalized for token in ("shoe", "sneaker", "boot", "sandal")):
+        return "Footwear", "Consumer footwear"
+    if any(token in normalized for token in ("fleece", "hoodie", "crew", "shirt", "jacket", "pants", "shorts")):
+        return "Apparel", "Consumer apparel"
+    return "Consumer product", "Consumer goods"
+
+
+def _infer_target_customer(product_name: str) -> Optional[str]:
+    normalized = product_name.lower()
+    if "men" in normalized:
+        return "Men"
+    if "women" in normalized:
+        return "Women"
+    if any(token in normalized for token in ("kid", "youth", "boys", "girls")):
+        return "Kids and families"
+    return None
 
 
 def product_image_analysis(*, settings: AppSettings, file_bytes: bytes) -> dict:

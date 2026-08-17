@@ -192,7 +192,6 @@ export function StudyModeSection() {
 
           <div className="mt-6 space-y-4">
             <div className="flex flex-wrap gap-3">
-              <BadgeChip tone="gold">Step 1 of 6</BadgeChip>
               <BadgeChip tone="cyan">Saves to study</BadgeChip>
             </div>
 

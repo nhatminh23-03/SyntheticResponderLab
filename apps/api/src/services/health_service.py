@@ -4,7 +4,7 @@ import importlib
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from sqlalchemy import text
+from sqlalchemy import inspect, text
 from sqlalchemy.orm import sessionmaker
 
 from src.config.settings import AppSettings
@@ -29,13 +29,21 @@ def startup_failures(settings: AppSettings, session_factory: sessionmaker) -> Li
     return [name for name, check in payload.checks.items() if check.status == "fail" and name in HARD_FAIL_CHECKS]
 
 
-HARD_FAIL_CHECKS = {"database", "artifacts_root", "legacy_app_root", "python_dependencies", "deployment_security"}
+HARD_FAIL_CHECKS = {
+    "database",
+    "database_schema",
+    "artifacts_root",
+    "legacy_app_root",
+    "python_dependencies",
+    "deployment_security",
+}
 
 
 def build_health_payload(settings: AppSettings, session_factory: sessionmaker) -> HealthPayload:
     checks: Dict[str, HealthCheckResult] = {}
 
     checks["database"] = _database_check(session_factory)
+    checks["database_schema"] = _database_schema_check(session_factory)
     checks["artifacts_root"] = _artifacts_root_check(settings.artifacts_root)
     checks["legacy_app_root"] = _legacy_root_check(settings.legacy_app_root)
     checks["python_dependencies"] = _python_dependency_check()
@@ -61,6 +69,23 @@ def _database_check(session_factory: sessionmaker) -> HealthCheckResult:
         return HealthCheckResult(status="ok")
     except Exception as exc:
         return HealthCheckResult(status="fail", message=str(exc))
+
+
+def _database_schema_check(session_factory: sessionmaker) -> HealthCheckResult:
+    """Fail fast when a deployed database is missing a required migration."""
+    try:
+        engine = session_factory.kw["bind"]
+        if inspect(engine).has_table("user_usage_counters"):
+            return HealthCheckResult(status="ok")
+        return HealthCheckResult(
+            status="fail",
+            message=(
+                "Database migration is required: user_usage_counters is missing. "
+                "Run `alembic upgrade head` before starting the API."
+            ),
+        )
+    except Exception as exc:
+        return HealthCheckResult(status="fail", message=f"Unable to verify database schema: {exc}")
 
 
 def _artifacts_root_check(path: Path) -> HealthCheckResult:
