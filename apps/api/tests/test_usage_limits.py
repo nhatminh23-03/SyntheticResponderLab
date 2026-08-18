@@ -393,3 +393,35 @@ def test_completed_or_failed_jobs_do_not_block_future_provider_runs(client, monk
     response = client.post(f"/api/v1/studies/{study_id}/simulation-runs")
     assert response.status_code == 200
     assert response.json()["data"]["simulation_run"]["result"]["run_id"] == "run_after_old_jobs"
+
+
+def test_concurrent_first_request_of_day_does_not_error(client):
+    """F-11 regression: two simultaneous requests on the first use of a UTC day.
+
+    Both requests read an empty ``user_usage_counters`` table and then both try to INSERT
+    the same (owner_user_id, metric_key, bucket_date_utc) row, violating
+    ``uq_user_usage_counters_owner_metric_bucket``. A sequential call cannot reproduce this,
+    so the two requests are released from a barrier to overlap their read/insert windows.
+    """
+    import threading
+
+    barrier = threading.Barrier(2)
+    results: list[int] = []
+    lock = threading.Lock()
+
+    def fire() -> None:
+        barrier.wait(timeout=10)
+        response = client.post("/api/v1/studies", json={})
+        with lock:
+            results.append(response.status_code)
+
+    threads = [threading.Thread(target=fire) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=30)
+
+    assert sorted(results) == [200, 200], (
+        f"concurrent first-of-day study creation returned {sorted(results)}; "
+        "both requests must succeed rather than hitting the usage-counter unique constraint"
+    )
