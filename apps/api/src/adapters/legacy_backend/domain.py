@@ -1250,6 +1250,41 @@ def execute_stability_check(
     }
 
 
+def _split_live_and_fallback_records(
+    records: List[Dict[str, Any]]
+) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """Separate answers a model returned from deterministic filler.
+
+    Fabricated answers are schema-valid and carry the real model name, so counting them would average
+    filler into every mean, percentage and ranking. They stay in the saved dataset — this only decides
+    what the analytical surfaces read.
+
+    Runs saved before provenance existed have no ``is_fallback`` key; those are treated as live, since
+    excluding them would erase historic results rather than correct them.
+    """
+    live: List[Dict[str, Any]] = []
+    fallback: List[Dict[str, Any]] = []
+    for record in records:
+        (fallback if record.get("is_fallback") is True else live).append(record)
+    return live, fallback
+
+
+def _answer_sourcing_summary(
+    live_records: List[Dict[str, Any]], fallback_records: List[Dict[str, Any]]
+) -> Dict[str, Any]:
+    total = len(live_records) + len(fallback_records)
+    return {
+        "live_answers_used": len(live_records),
+        "fallback_answers_excluded": len(fallback_records),
+        "total_answers": total,
+        "live_answer_rate": round(len(live_records) / total, 4) if total else None,
+        "note": (
+            "Charts, means and rankings use live model answers only. Fabricated answers remain in the "
+            "saved records, flagged, and are excluded from analysis."
+        ),
+    }
+
+
 def build_analysis_view(
     *,
     settings: AppSettings,
@@ -1275,12 +1310,25 @@ def build_analysis_view(
             "transparency_note": transparency_note,
         }
 
-    records = list(latest_run_payload.get("response_records") or [])
+    all_records = list(latest_run_payload.get("response_records") or [])
     personas = list(latest_run_payload.get("personas") or [])
-    if not records:
+    if not all_records:
         return {
             "available": False,
             "message": "The latest run does not include response records yet.",
+            "transparency_note": transparency_note,
+        }
+
+    records, fallback_records = _split_live_and_fallback_records(all_records)
+    answer_sourcing = _answer_sourcing_summary(records, fallback_records)
+    if not records:
+        return {
+            "available": False,
+            "message": (
+                "Every answer in this run was deterministic filler rather than a model response, so "
+                "there is nothing to analyse. Check the run diagnostics before relying on it."
+            ),
+            "answer_sourcing": answer_sourcing,
             "transparency_note": transparency_note,
         }
 
@@ -1345,7 +1393,12 @@ def build_analysis_view(
         else pd.DataFrame(columns=["respondent_id", "model", "segment_label", "answer"])
     )
 
-    preview_df = filtered_df.iloc[records_offset : records_offset + records_limit].copy()
+    # The raw-record view intentionally pages over *all* saved rows, including fabricated ones, so a
+    # reader can inspect what was excluded rather than only being told a count.
+    all_filtered_df = _apply_record_filters(
+        df=pd.DataFrame(all_records), model=selected_model, segment_label=selected_segment
+    )
+    preview_df = all_filtered_df.iloc[records_offset : records_offset + records_limit].copy()
     benchmark_snapshot = _build_benchmark_snapshot(
         df=df,
         personas=personas,
@@ -1413,8 +1466,9 @@ def build_analysis_view(
             "selected_question_id": selected_open_text_question_id,
             "samples": _dataframe_to_records(open_text_samples_df),
         },
+        "answer_sourcing": answer_sourcing,
         "records_preview": {
-            "total": int(len(filtered_df)),
+            "total": int(len(all_filtered_df)),
             "offset": int(records_offset),
             "limit": int(records_limit),
             "rows": _dataframe_to_records(preview_df),
@@ -1444,7 +1498,9 @@ def build_insights_view(
             "transparency_note": transparency_note,
         }
 
-    records = list(latest_run_payload.get("response_records") or [])
+    all_records = list(latest_run_payload.get("response_records") or [])
+    records, fallback_records = _split_live_and_fallback_records(all_records)
+    answer_sourcing = _answer_sourcing_summary(records, fallback_records)
     personas = list(latest_run_payload.get("personas") or [])
     if not records:
         return {
@@ -1538,6 +1594,7 @@ def build_insights_view(
 
     return {
         "available": True,
+        "answer_sourcing": answer_sourcing,
         "transparency_note": transparency_note,
         "run": {
             "run_id": latest_run_payload.get("run_id"),

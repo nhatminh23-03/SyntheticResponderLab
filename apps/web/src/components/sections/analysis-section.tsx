@@ -12,6 +12,7 @@ import {
   AnalysisPayload,
   getAnalysis,
 } from "@/lib/api";
+import { formatAnswerSourcing } from "@/lib/answer-sourcing";
 import { cn } from "@/lib/utils";
 import { useStudy } from "@/providers/study-provider";
 import { useSectionRegistry } from "@/providers/section-registry-provider";
@@ -147,6 +148,22 @@ export function AnalysisSection() {
                       <h2 className="text-[1.12rem] font-semibold tracking-tight text-app-text sm:text-[1.22rem] lg:text-[1.35rem]">
                         Result Dashboard
                       </h2>
+              {(() => {
+                const sourcing = formatAnswerSourcing(analysis?.answer_sourcing ?? null);
+                if (!sourcing.shown) return null;
+                return (
+                  <p
+                    className={
+                      sourcing.excluded > 0
+                        ? "mt-3 rounded-[1.2rem] border border-amber-400/30 bg-amber-400/[0.06] px-4 py-3 text-xs leading-5 text-amber-300"
+                        : "mt-3 rounded-[1.2rem] border border-app-border bg-white/[0.02] px-4 py-3 text-xs leading-5 text-app-muted"
+                    }
+                  >
+                    {sourcing.summary}
+                    {sourcing.ratePercent !== null ? ` Live-answer rate ${sourcing.ratePercent}%.` : ""}
+                  </p>
+                );
+              })()}
                       <span className="inline-flex items-center rounded-full border border-app-border/70 px-3.5 py-1.5 text-sm font-medium text-app-muted [background:var(--status-neutral-bg)]">
                         {`${questions.length} questions`}
                       </span>
