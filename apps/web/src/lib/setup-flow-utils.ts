@@ -34,3 +34,37 @@ export function buildStudyModeStatusMessage(
 
   return `${label} saved. Next step: Audience setup.`;
 }
+
+export type OwnershipFilter = "any" | "homeowner_only" | "renter_only";
+
+/**
+ * Ownership is stored as two independent "only" booleans, but they describe a
+ * single three-way choice. Both true is contradictory ("only owners" and "only
+ * renters" is the empty set) and the backend rejects it, so the UI drives one
+ * selector through these helpers instead of two toggles.
+ *
+ * Both false is the meaningful "include owners and renters" state: the persona
+ * sampler applies no ownership constraint and draws the real population mix.
+ */
+export function toOwnershipFilter(flags: {
+  homeowner_only: boolean;
+  renter_only: boolean;
+}): OwnershipFilter {
+  if (flags.homeowner_only) {
+    return "homeowner_only";
+  }
+  if (flags.renter_only) {
+    return "renter_only";
+  }
+  return "any";
+}
+
+export function fromOwnershipFilter(value: OwnershipFilter): {
+  homeowner_only: boolean;
+  renter_only: boolean;
+} {
+  return {
+    homeowner_only: value === "homeowner_only",
+    renter_only: value === "renter_only",
+  };
+}

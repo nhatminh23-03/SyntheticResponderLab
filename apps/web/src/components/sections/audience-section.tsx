@@ -6,7 +6,12 @@ import {
   AudiencePayload,
   saveAudience,
 } from "@/lib/api";
-import { resolveSetupSeedSource } from "@/lib/setup-flow-utils";
+import {
+  fromOwnershipFilter,
+  OwnershipFilter,
+  resolveSetupSeedSource,
+  toOwnershipFilter,
+} from "@/lib/setup-flow-utils";
 import { cn } from "@/lib/utils";
 import { useStudy } from "@/providers/study-provider";
 import { useSectionRegistry } from "@/providers/section-registry-provider";
@@ -18,7 +23,6 @@ import {
   TextAreaInput,
   TextInput,
   TokenInput,
-  ToggleChip,
 } from "@/components/ui/form-controls";
 import { GlassPanel } from "@/components/ui/glass-panel";
 import { RevealOnScroll } from "@/components/ui/reveal-on-scroll";
@@ -515,18 +519,24 @@ export function AudienceSection() {
                 title="Housing"
                 description="Use these only if housing profile matters for this study."
               >
-                <div className="flex flex-wrap gap-3">
-                  <ToggleChip
-                    checked={draft.homeowner_only}
-                    onChange={(checked) => updateDraft("homeowner_only", checked)}
-                    label="Homeowner Only"
+                <Field
+                  label="Ownership"
+                  hint="Any includes both owners and renters, in their real population mix."
+                >
+                  <SelectInput
+                    value={toOwnershipFilter(draft)}
+                    onChange={(value) => {
+                      const flags = fromOwnershipFilter(value as OwnershipFilter);
+                      updateDraft("homeowner_only", flags.homeowner_only);
+                      updateDraft("renter_only", flags.renter_only);
+                    }}
+                    options={[
+                      { label: "Any (owners and renters)", value: "any" },
+                      { label: "Homeowner only", value: "homeowner_only" },
+                      { label: "Renter only", value: "renter_only" },
+                    ]}
                   />
-                  <ToggleChip
-                    checked={draft.renter_only}
-                    onChange={(checked) => updateDraft("renter_only", checked)}
-                    label="Renter Only"
-                  />
-                </div>
+                </Field>
                 {fieldErrors.form ? (
                   <p className="text-xs leading-5 text-app-gold">{fieldErrors.form}</p>
                 ) : null}
