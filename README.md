@@ -163,11 +163,13 @@ POST /api/v1/studies/{study_id}/study-mode/bootstrap/preset/{preset_key}
 
 The `coffee` preset exists to exercise the product-agnostic path: a different
 category, price point, and audience shape (renters included, no housing
-constraint) with its own bundled 32-question survey. It is reachable from the UI
-via **Load Coffee Brand Example** in Study Setup. Add a preset by appending a
-`DemoPreset` to `DEMO_PRESETS` in `apps/api/src/services/study_service.py`; a
-preset that ships its own survey markdown places it in
-`apps/api/legacy_runtime/Provided Info/`.
+constraint) with its own bundled 32-question survey. It is API-only — there is
+no UI entry point — and is intended for verifying that the full chain runs on a
+product unrelated to Neo Smart.
+
+Add a preset by appending a `DemoPreset` to `DEMO_PRESETS` in
+`apps/api/src/services/study_service.py`; a preset that ships its own survey
+markdown places it in `apps/api/legacy_runtime/Provided Info/`.
 
 ### Grounding priors
 
