@@ -8,7 +8,6 @@ from fastapi.testclient import TestClient
 
 
 API_ROOT = Path(__file__).resolve().parents[1]
-WORKSPACE_ROOT = Path(__file__).resolve().parents[3]
 
 if str(API_ROOT) not in sys.path:
     sys.path.insert(0, str(API_ROOT))
@@ -25,17 +24,19 @@ def test_settings(tmp_path: Path) -> AppSettings:
     artifacts_root.mkdir()
     database_path = tmp_path / "test.db"
     return AppSettings(
+        _env_file=None,
         APP_ENV="test",
         APP_DEBUG=True,
         DATABASE_URL=f"sqlite:///{database_path}",
         ARTIFACTS_ROOT=artifacts_root,
-        LEGACY_APP_ROOT=WORKSPACE_ROOT / "NeoSmart-Hackathon-App",
+        LEGACY_APP_ROOT=API_ROOT / "legacy_runtime",
         OPENROUTER_API_KEY="",
         GOOGLE_CLOUD_API_KEY="",
         GOOGLE_CLOUD_SERVICE_ACCOUNT_JSON=None,
         GOOGLE_CLOUD_SERVICE_ACCOUNT_PATH=None,
         HUD_API_TOKEN="",
         ANTHROPIC_API_KEY="",
+        DEPLOYMENT_SHARED_SECRET=None,
     )
 
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from typing import List, Optional
 
@@ -434,6 +435,54 @@ def _extract_answer_map_from_openrouter_result(result: dict) -> dict[str, object
 	return answer_map
 
 
+def _normalize_choice_text(text: str) -> str:
+	"""Normalize a choice string for tolerant option matching.
+
+	Models routinely echo an option with cosmetic differences that carry no
+	semantic meaning -- a trailing period, surrounding quotes, an enumeration
+	prefix ("B) ", "2. "), or collapsed/expanded whitespace. Matching on the raw
+	string rejects those answers and silently pushes them onto the mock-answer
+	fallback path, so normalize before comparing.
+	"""
+	cleaned = str(text).strip().strip('"“”\'')
+	cleaned = re.sub(r"^\s*(?:[A-Za-z][\.\)]|\d+[\.\)])\s+", "", cleaned)
+	cleaned = re.sub(r"[\s ]+", " ", cleaned)
+	cleaned = cleaned.strip().rstrip(".!,;:").strip()
+	return cleaned.casefold()
+
+
+def _match_survey_option(text: str, options: list[str]) -> str | None:
+	"""Resolve model-provided text to one of the survey's declared options."""
+	raw = str(text).strip()
+	if not raw:
+		return None
+
+	for option in options:
+		if raw.casefold() == str(option).casefold():
+			return option
+
+	normalized_text = _normalize_choice_text(raw)
+	if not normalized_text:
+		return None
+
+	normalized_options = [(option, _normalize_choice_text(option)) for option in options]
+	for option, normalized_option in normalized_options:
+		if normalized_text == normalized_option:
+			return option
+
+	# Last resort: accept only an unambiguous containment match so a partial
+	# echo ("moderately interested in the concept") still resolves, while
+	# genuinely ambiguous output is rejected into the fallback path.
+	contained = [
+		option
+		for option, normalized_option in normalized_options
+		if normalized_option and (normalized_option in normalized_text or normalized_text in normalized_option)
+	]
+	if len(contained) == 1:
+		return contained[0]
+	return None
+
+
 def _coerce_openrouter_answer_value(question: SurveyQuestion, value):
 	"""Validate and coerce live model answers into expected schema-compatible shapes."""
 	if value is None:
@@ -444,10 +493,7 @@ def _coerce_openrouter_answer_value(question: SurveyQuestion, value):
 		if not text:
 			return None
 		if question.options:
-			for option in question.options:
-				if text.lower() == option.lower():
-					return option
-			return None
+			return _match_survey_option(text, list(question.options))
 		return text
 
 	if question.question_type == "multi_choice":
@@ -455,11 +501,11 @@ def _coerce_openrouter_answer_value(question: SurveyQuestion, value):
 			return None
 		values = [str(item).strip() for item in value if str(item).strip()]
 		if question.options:
-			allowed = {option.lower(): option for option in question.options}
 			matched = []
 			for item in values:
-				if item.lower() in allowed:
-					matched.append(allowed[item.lower()])
+				option = _match_survey_option(item, list(question.options))
+				if option is not None and option not in matched:
+					matched.append(option)
 			return matched or None
 		return values or None
 

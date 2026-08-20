@@ -7,6 +7,7 @@ from uuid import uuid4
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from pydantic import ValidationError
 
 from src.schemas.common import ErrorResponse, ErrorPayload
 from src.services.exceptions import ApiError
@@ -14,6 +15,17 @@ from src.services.exceptions import ApiError
 
 def new_request_id() -> str:
     return f"req_{uuid4().hex[:12]}"
+
+
+def serializable_validation_errors(exc: ValidationError | RequestValidationError) -> list[dict]:
+    """Return JSON-safe pydantic validation errors.
+
+    ``ValidationError.errors()`` embeds the originating exception object under
+    ``ctx`` (for example the ``ValueError`` raised by a model validator), and the
+    ``url`` key adds noise. Neither is JSON-serializable/useful over the wire, so
+    a raw ``errors()`` payload turns a clean 400 into an opaque 500.
+    """
+    return exc.errors(include_url=False, include_context=False)
 
 
 def build_meta_error(request_id: str, code: str, message: str, details: Optional[dict] = None) -> dict:
@@ -53,7 +65,7 @@ def install_exception_handlers(app: FastAPI) -> None:
                 request_id,
                 "validation_error",
                 "Request validation failed.",
-                {"errors": exc.errors()},
+                {"errors": serializable_validation_errors(exc)},
             ),
         )
 

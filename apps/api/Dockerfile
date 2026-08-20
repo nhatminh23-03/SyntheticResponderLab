@@ -15,7 +15,9 @@ COPY apps/api /app/apps/api
 RUN mkdir -p /app/NeoSmart-Hackathon-App \
     && cp -R /app/apps/api/legacy_runtime/backend /app/NeoSmart-Hackathon-App/backend \
     && cp -R "/app/apps/api/legacy_runtime/Provided Info" "/app/NeoSmart-Hackathon-App/Provided Info" \
-    && test -d /app/NeoSmart-Hackathon-App/backend
+    && cp -R /app/apps/api/legacy_runtime/data /app/NeoSmart-Hackathon-App/data \
+    && test -d /app/NeoSmart-Hackathon-App/backend \
+    && test -f /app/NeoSmart-Hackathon-App/data/processed/priors/age_income_priors.parquet
 
 WORKDIR /app/apps/api
 

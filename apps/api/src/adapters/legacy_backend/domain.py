@@ -15,6 +15,7 @@ import pandas as pd
 import requests
 from pydantic import ValidationError
 
+from src.api.errors import serializable_validation_errors
 from src.adapters.legacy_backend.runtime import load_module, load_service_account_info, temporary_env
 from src.adapters.legacy_backend.survey_docx_fallback import parse_aytm_style_docx_to_validated_schema
 from src.config.settings import AppSettings
@@ -119,7 +120,7 @@ def validate_audience(payload: dict, legacy_root: Path) -> dict:
     try:
         return schemas.AudienceFilter(**payload).model_dump()
     except ValidationError as exc:
-        raise ValidationApiError("Audience validation failed.", {"errors": exc.errors()}) from exc
+        raise ValidationApiError("Audience validation failed.", {"errors": serializable_validation_errors(exc)}) from exc
 
 
 def validate_product(payload: dict, legacy_root: Path) -> dict:
@@ -127,7 +128,7 @@ def validate_product(payload: dict, legacy_root: Path) -> dict:
     try:
         return schemas.BusinessProductContext(**payload).model_dump()
     except ValidationError as exc:
-        raise ValidationApiError("Product validation failed.", {"errors": exc.errors()}) from exc
+        raise ValidationApiError("Product validation failed.", {"errors": serializable_validation_errors(exc)}) from exc
 
 
 def validate_market(payload: dict, legacy_root: Path) -> dict:
@@ -138,7 +139,7 @@ def validate_market(payload: dict, legacy_root: Path) -> dict:
         normalized["direct_competitors"] = competitors
         return schemas.MarketContext(**normalized).model_dump()
     except ValidationError as exc:
-        raise ValidationApiError("Market validation failed.", {"errors": exc.errors()}) from exc
+        raise ValidationApiError("Market validation failed.", {"errors": serializable_validation_errors(exc)}) from exc
 
 
 def validate_experiment(payload: dict, legacy_root: Path) -> dict:
@@ -146,7 +147,7 @@ def validate_experiment(payload: dict, legacy_root: Path) -> dict:
     try:
         return schemas.ExperimentPlan(**payload).model_dump()
     except ValidationError as exc:
-        raise ValidationApiError("Experiment validation failed.", {"errors": exc.errors()}) from exc
+        raise ValidationApiError("Experiment validation failed.", {"errors": serializable_validation_errors(exc)}) from exc
 
 
 def list_model_catalog(*, settings: AppSettings) -> dict:
@@ -159,8 +160,8 @@ def list_model_catalog(*, settings: AppSettings) -> dict:
             "completion_price_per_million": None,
         },
         {
-            "id": "google/gemini-2.0-flash-001",
-            "name": "google/gemini-2.0-flash-001",
+            "id": "anthropic/claude-sonnet-4.5",
+            "name": "anthropic/claude-sonnet-4.5",
             "prompt_price_per_million": None,
             "completion_price_per_million": None,
         },
@@ -2836,7 +2837,7 @@ def product_url_autofill(*, settings: AppSettings, url: str) -> dict:
             "product_patch": validated.model_dump(),
         }
     except ValidationError as exc:
-        raise LegacyModuleApiError("Legacy URL autofill returned invalid product context.", {"errors": exc.errors()}) from exc
+        raise LegacyModuleApiError("Legacy URL autofill returned invalid product context.", {"errors": serializable_validation_errors(exc)}) from exc
     except RuntimeError as exc:
         raise ProviderUnavailableApiError(str(exc)) from exc
     except Exception as exc:
