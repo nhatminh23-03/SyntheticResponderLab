@@ -1389,3 +1389,77 @@ def test_simulation_run_reports_unavailable_not_server_error_for_retired_model(c
     latest = client.get(f"/api/v1/studies/{study_id}/simulation-runs/latest").json()["data"]["simulation_run"]
     assert latest["status"] == "failed"
     assert "No endpoints found" in latest["error"]["message"]
+def _bootstrap_neo_study(client, monkeypatch) -> str:
+    created = client.post("/api/v1/studies", json={}).json()["data"]["study"]
+    study_id = created["study_id"]
+    monkeypatch.setattr(
+        "src.services.study_service.preview_personas",
+        lambda **kwargs: {
+            "generation_mode": "grounded_priors",
+            "grounded_priors_available": True,
+            "cex_affordability_available": True,
+            "prior_notes": [{"note": "Grounded priors active"}],
+            "personas": [
+                {
+                    "persona_id": "neo-001",
+                    "segment_label": "Backyard office homeowners",
+                    "fit_tier": "strong",
+                }
+            ],
+        },
+    )
+    assert client.post(f"/api/v1/studies/{study_id}/study-mode/bootstrap/neo").status_code == 200
+    return study_id
+
+
+def test_neo_interview_run_discloses_fixture_provenance(client, monkeypatch):
+    """F-07 regression: a Neo interview run is seeded fixture data, not two live model interviews.
+
+    The backend already records ``demo_fixture``, ``fixture_source`` and ``judge_model`` on the job
+    result, but ``_serialize_interview_job`` dropped all three, so no client could tell a fixture
+    apart from a genuine dual-model batch. The UI meanwhile claims both models interviewed every
+    persona and that a judge LLM scored their agreement.
+    """
+    study_id = _bootstrap_neo_study(client, monkeypatch)
+
+    response = client.post(f"/api/v1/studies/{study_id}/interview/runs", json={})
+    assert response.status_code == 200
+
+    run = response.json()["data"]["interview_run"]
+    assert run["demo_fixture"] is True, "Neo interview runs must declare that they are fixture-generated"
+    assert run["fixture_source"], "fixture provenance must reach the client"
+    assert run["judge_model"] == "demo/stamp-fixture", (
+        "the fixture's stand-in judge must be disclosed rather than presented as a real judge LLM"
+    )
+
+
+def test_live_interview_run_is_not_flagged_as_fixture():
+    """A genuine (non-Neo) interview batch must report demo_fixture=False.
+
+    Guards the disclosure from degrading into a constant: the flag has to track the job's
+    actual provenance, otherwise a live Custom Study batch would be mislabelled as seeded.
+    """
+    from src.persistence.models import Job
+    from src.services.interview_service import _serialize_interview_job
+
+    live_job = Job(
+        public_id="job_live_interview",
+        job_type="interview_run",
+        status="completed",
+        payload_json={"model_a": "openai/gpt-4o-mini", "model_b": "google/gemini-2.5-flash"},
+        result_json={
+            "persona_count": 2,
+            "model_a": "openai/gpt-4o-mini",
+            "model_b": "google/gemini-2.5-flash",
+            "judge_model": "openai/o4-mini",
+            "pairs": [],
+            "grounding_report": {"corpus_average": 0.75},
+        },
+        error_json=None,
+    )
+
+    serialized = _serialize_interview_job(live_job)
+
+    assert serialized["demo_fixture"] is False
+    assert serialized["fixture_source"] is None
+    assert serialized["judge_model"] == "openai/o4-mini"

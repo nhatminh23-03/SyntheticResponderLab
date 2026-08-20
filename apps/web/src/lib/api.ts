@@ -786,6 +786,9 @@ export type InterviewRunPayload = {
   model_a: string | null;
   model_b: string | null;
   grounding_report: InterviewGroundingReport | null;
+  demo_fixture: boolean;
+  fixture_source: string | null;
+  judge_model: string | null;
   pairs: InterviewPair[] | null;
   error: { message?: string } | null;
   queued_at: string | null;
