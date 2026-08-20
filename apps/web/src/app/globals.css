@@ -105,6 +105,15 @@
   --theme-panel-gradient-strong: linear-gradient(180deg, rgba(8, 13, 16, 0.86), rgba(12, 18, 22, 0.72));
   --theme-panel-inline-gradient: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.015));
 
+  /* Fade behind sticky headers so scrolled content dissolves into the page
+     background. Must track --color-background in each theme. */
+  --theme-sticky-scrim: linear-gradient(
+    180deg,
+    rgba(10, 15, 19, 0.96) 0%,
+    rgba(10, 15, 19, 0.88) 78%,
+    rgba(10, 15, 19, 0) 100%
+  );
+
   --app-background:
     radial-gradient(circle at 20% 18%, rgba(15, 216, 255, 0.12), transparent 28%),
     radial-gradient(circle at 85% 16%, rgba(216, 186, 103, 0.1), transparent 22%),
@@ -359,6 +368,12 @@
     180deg,
     rgba(255, 255, 255, 0.9),
     rgba(250, 253, 255, 0.92)
+  );
+  --theme-sticky-scrim: linear-gradient(
+    180deg,
+    rgba(247, 244, 238, 0.96) 0%,
+    rgba(247, 244, 238, 0.88) 78%,
+    rgba(247, 244, 238, 0) 100%
   );
 }
 

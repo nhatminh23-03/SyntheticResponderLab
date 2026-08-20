@@ -147,6 +147,28 @@ sample size. Those requests are issued concurrently, bounded by
 Results are folded back in respondent order, so raising concurrency changes run
 time only — never the saved output. Lower it if the provider starts rate-limiting.
 
+### Demo presets
+
+One-click setups that fill audience, product, market, survey, and experiment so a
+study is immediately runnable:
+
+```
+POST /api/v1/studies/{study_id}/study-mode/bootstrap/preset/{preset_key}
+```
+
+| Preset | Mode | Product |
+| --- | --- | --- |
+| `neo` | `neo_smart` | Tahoe Mini modular backyard studio |
+| `coffee` | `general` | Cortado Roasters "Everyday Origins" coffee subscription |
+
+The `coffee` preset exists to exercise the product-agnostic path: a different
+category, price point, and audience shape (renters included, no housing
+constraint) with its own bundled 32-question survey. It is reachable from the UI
+via **Load Coffee Brand Example** in Study Setup. Add a preset by appending a
+`DemoPreset` to `DEMO_PRESETS` in `apps/api/src/services/study_service.py`; a
+preset that ships its own survey markdown places it in
+`apps/api/legacy_runtime/Provided Info/`.
+
 ### Grounding priors
 
 Persona generation samples from ACS prior tables in

@@ -9,7 +9,11 @@ from src.api.auth import AuthUser, get_current_user
 from src.api.dependencies import get_db_session, get_settings
 from src.api.errors import response_envelope
 from src.config.settings import AppSettings
-from src.services.exceptions import PayloadTooLargeApiError, UnsupportedMediaTypeApiError
+from src.services.exceptions import (
+    NotFoundApiError,
+    PayloadTooLargeApiError,
+    UnsupportedMediaTypeApiError,
+)
 from src.schemas.study import (
     InterviewChatRequest,
     PersonaPreviewRequest,
@@ -20,6 +24,8 @@ from src.schemas.study import (
     StudyModeUpdateRequest,
 )
 from src.services.study_service import (
+    DEMO_PRESETS,
+    bootstrap_demo_study,
     bootstrap_neo_demo_study,
     clear_latest_simulation_runs,
     create_persona_preview,
@@ -173,6 +179,28 @@ def bootstrap_neo_demo_endpoint(
 ):
     study = get_owned_study_or_404(db, study_id, current_user)
     result = bootstrap_neo_demo_study(db, settings, study)
+    return response_envelope(
+        request,
+        {"study": result.model_dump(mode="json", by_alias=True)},
+    )
+
+
+@router.post("/api/v1/studies/{study_id}/study-mode/bootstrap/preset/{preset_key}")
+def bootstrap_demo_preset_endpoint(
+    study_id: str,
+    preset_key: str,
+    request: Request,
+    db: Session = Depends(get_db_session),
+    settings: AppSettings = Depends(get_settings),
+    current_user: AuthUser = Depends(get_current_user),
+):
+    preset = DEMO_PRESETS.get(preset_key.strip().lower())
+    if preset is None:
+        raise NotFoundApiError(
+            f"Unknown demo preset '{preset_key}'. Available: {', '.join(sorted(DEMO_PRESETS))}."
+        )
+    study = get_owned_study_or_404(db, study_id, current_user)
+    result = bootstrap_demo_study(db, settings, study, preset)
     return response_envelope(
         request,
         {"study": result.model_dump(mode="json", by_alias=True)},

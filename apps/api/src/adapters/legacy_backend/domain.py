@@ -580,6 +580,20 @@ def parse_normalize_validate_survey(file_name: str, file_bytes: bytes, legacy_ro
         raise LegacyModuleApiError(f"Survey parsing failed: {exc}") from exc
 
 
+def load_bundled_survey_schema(legacy_root: Path, filename: str) -> tuple[str, bytes, dict]:
+    """Load and validate a survey markdown file bundled under `Provided Info/`.
+
+    Used by demo presets that ship their own survey rather than going through the
+    Neo-specific loader in `backend.presets`.
+    """
+    survey_path = legacy_root / "Provided Info" / filename
+    if not survey_path.is_file():
+        raise ValidationApiError(f"Bundled survey preset not found: {filename}")
+    file_bytes = survey_path.read_bytes()
+    schema = parse_normalize_validate_survey(survey_path.name, file_bytes, legacy_root)
+    return survey_path.name, file_bytes, schema
+
+
 def load_neo_survey_schema_default(legacy_root: Path) -> tuple[str, bytes, dict]:
     presets = load_module("backend.presets", legacy_root)
     try:

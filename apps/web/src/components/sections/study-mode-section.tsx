@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 
-import { bootstrapNeoDemoStudy, saveStudyMode } from "@/lib/api";
+import { bootstrapDemoPresetStudy, bootstrapNeoDemoStudy, saveStudyMode } from "@/lib/api";
 import { buildStudyModeStatusMessage, StudyModeValue } from "@/lib/setup-flow-utils";
 import { cn } from "@/lib/utils";
 import { useStudy } from "@/providers/study-provider";
@@ -167,6 +167,44 @@ export function StudyModeSection() {
         error instanceof Error
           ? error.message
           : "Unable to save the study mode right now."
+      );
+    } finally {
+      setIsSavingMode(false);
+    }
+  }
+
+  async function handleLoadPreset(presetKey: string, presetLabel: string) {
+    setErrorMessage(null);
+    setStatusMessage(null);
+    setIsSavingMode(true);
+
+    try {
+      // Presets always start from a clean study so a previously configured
+      // product cannot bleed into the example setup.
+      const resolvedStudyId = (await createFreshStudy()) ?? studyId;
+      if (!resolvedStudyId) {
+        throw new Error("No study is available yet.");
+      }
+
+      const bootstrappedStudy = await bootstrapDemoPresetStudy(resolvedStudyId, presetKey);
+      setStudy(bootstrappedStudy);
+
+      const mode = bootstrappedStudy.study_mode?.value;
+      if (mode === "neo_smart" || mode === "general") {
+        setSelectedMode(mode);
+      }
+
+      const previewWarnings =
+        bootstrappedStudy.derived?.latest_persona_preview?.warning_messages ?? [];
+      const previewMessage =
+        previewWarnings.length > 0
+          ? ` Persona preview completed with warnings: ${previewWarnings.join("; ")}`
+          : " Audience, product, market, survey, and experiment are prefilled and ready to run.";
+
+      setStatusMessage(`${presetLabel} example loaded into a new study.${previewMessage}`);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : `Unable to load the ${presetLabel} example right now.`
       );
     } finally {
       setIsSavingMode(false);
@@ -338,6 +376,36 @@ export function StudyModeSection() {
               </RevealOnScroll>
             );
           })}
+
+          <RevealOnScroll delay={0.12}>
+            <GlassPanel className="p-5 sm:p-6">
+              <div className="rounded-[1.55rem] border border-app-border [background:var(--theme-panel-inline-gradient)] p-5">
+                <div className="flex flex-wrap items-center gap-3">
+                  <BadgeChip tone="cyan">Custom Study Example</BadgeChip>
+                </div>
+                <h3 className="mt-4 font-display text-[1.35rem] font-medium tracking-[-0.04em] text-app-text sm:text-[1.45rem]">
+                  Try a different product category
+                </h3>
+                <p className="mt-3 max-w-2xl text-sm leading-6 text-app-muted">
+                  Loads a complete General Custom Study for a direct-to-consumer coffee
+                  subscription — audience, product, market, survey, and experiment prefilled — so
+                  you can run the full chain on something other than Neo Smart.
+                </p>
+                <div className="mt-5 flex flex-wrap items-center gap-3">
+                  <Button
+                    variant="secondary"
+                    disabled={isBusy}
+                    onClick={() => handleLoadPreset("coffee", "Cortado Roasters coffee")}
+                  >
+                    {isBusy ? "Loading example..." : "Load Coffee Brand Example"}
+                  </Button>
+                  <span className="text-[0.72rem] uppercase tracking-[0.24em] text-app-muted">
+                    Starts a new study
+                  </span>
+                </div>
+              </div>
+            </GlassPanel>
+          </RevealOnScroll>
         </div>
       </div>
     </SectionWrapper>

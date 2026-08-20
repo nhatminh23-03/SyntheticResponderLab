@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from copy import deepcopy
+from dataclasses import dataclass
 from datetime import datetime, timezone
 import re
 import time
@@ -19,6 +20,7 @@ from src.adapters.legacy_backend.domain import (
     execute_simulation_run,
     execute_stability_check,
     list_model_catalog,
+    load_bundled_survey_schema,
     load_neo_survey_schema_default,
     parse_normalize_validate_survey,
     preview_personas,
@@ -208,6 +210,154 @@ NEO_BOOTSTRAP_EXPERIMENT = {
     "selected_models": ["openai/gpt-4o-mini", "anthropic/claude-sonnet-4.5"],
     "experiment_mode": "split",
     "reruns_per_persona": 1,
+}
+
+# General-mode demo preset. Deliberately a different category, price point, and
+# audience shape from the Neo preset so the product-agnostic path gets exercised.
+COFFEE_BOOTSTRAP_SURVEY_FILENAME = "Cortado Roasters — Coffee Subscription Survey.md"
+COFFEE_BOOTSTRAP_AUDIENCE = {
+    "state": None,
+    "metro": None,
+    "zip_code": None,
+    "age_min": 22,
+    "age_max": 65,
+    "income_min": 30000,
+    "income_max": None,
+    "household_size_min": None,
+    "household_size_max": None,
+    "homeowner_only": False,
+    "renter_only": False,
+    "work_from_home": None,
+    "home_type": None,
+    "lifestyle_tags": [
+        "coffee enthusiast",
+        "home brewing",
+        "subscription services",
+        "sustainability minded",
+        "specialty food and drink",
+        "online shopping",
+    ],
+    "notes": "At-home coffee drinkers across renters and owners; no housing or geography constraint.",
+}
+COFFEE_BOOTSTRAP_PRODUCT = {
+    "business_name": "Cortado Roasters",
+    "industry": "Food and beverage",
+    "product_name": "Everyday Origins",
+    "product_type": "Direct-to-consumer coffee subscription",
+    "product_description": (
+        "Everyday Origins is a coffee subscription from Cortado Roasters. Beans are roasted to "
+        "order and shipped within 24 hours of roasting. Subscribers pick a roast profile, a grind, "
+        "and a delivery cadence, and can skip, pause, swap, or cancel at any time with no fee."
+    ),
+    "target_customer": "Adults who brew coffee at home at least a few times per week",
+    "price_range": "$19 per 12 oz bag, free shipping",
+    "primary_goal": (
+        "Validate subscription demand, price sensitivity, and the strongest positioning angle "
+        "for Everyday Origins."
+    ),
+    "key_features": [
+        "Roasted to order, shipped within 24 hours",
+        "Choice of light, medium, or dark roast",
+        "Whole bean or ground to order",
+        "Flexible 1, 2, or 4 week cadence",
+        "Skip, pause, or cancel anytime with no fee",
+        "Single-origin and traceable to the growing cooperative",
+        "Published premium paid above the Fair Trade floor",
+    ],
+    "main_use_cases": [
+        "Daily morning brew at home",
+        "Replacing supermarket coffee",
+        "Replacing a daily coffee-shop purchase",
+        "Trying new single-origin coffees",
+        "Gifting to another coffee drinker",
+        "Stocking a home office or small team kitchen",
+    ],
+    "main_pain_points_solved": [
+        "Supermarket coffee is often stale by the time it is brewed",
+        "Running out of coffee unexpectedly",
+        "Hard to know where beans came from or what growers were paid",
+        "Coffee-shop habit is expensive over a month",
+    ],
+    "main_barriers_or_concerns": [
+        "Price per bag versus supermarket coffee",
+        "Commitment of a recurring plan",
+        "Uncertainty about taste preference",
+        "Receiving more coffee than can be consumed",
+        "Satisfaction with current coffee",
+        "Preference for buying coffee in person",
+    ],
+    "product_image_labels": ["Coffee bag", "Roasted coffee beans", "Packaging"],
+    "product_image_objects": [],
+    "product_image_colors": [],
+    "notes": "General-mode demo preset used to exercise a non-Neo product category.",
+}
+COFFEE_BOOTSTRAP_MARKET = {
+    "category": "Direct-to-consumer specialty coffee subscription",
+    "typical_price_band": "$14-$26 per 12 oz bag",
+    "substitutes": [
+        "Supermarket bagged coffee",
+        "Local coffee shop beans",
+        "Warehouse club bulk coffee",
+        "Single-serve pods",
+        "Buying brewed coffee out instead",
+    ],
+    "common_expected_features": [
+        "Freshness and clear roast date",
+        "Flexible cadence and easy cancellation",
+        "Choice of roast and grind",
+        "Free or included shipping",
+        "Ethical and traceable sourcing",
+    ],
+    "common_objections": [
+        "Costs more than supermarket coffee",
+        "Do not want another recurring charge",
+        "Might not like the roast profile",
+        "Coffee could pile up unused",
+    ],
+    "direct_competitors": [
+        {
+            "name": "Trade Coffee",
+            "product_type": "Coffee subscription marketplace",
+            "price_range": "$15-$25 per bag",
+            "key_features": ["Matches roasters to taste quiz", "Wide roaster selection", "Flexible cadence"],
+            "strengths": ["Large roaster variety", "Well-known category brand"],
+            "weaknesses": ["Less consistent brand identity", "Quality varies by roaster"],
+        },
+        {
+            "name": "Supermarket bagged coffee",
+            "product_type": "Mass-market retail coffee",
+            "price_range": "$7-$14 per bag",
+            "key_features": ["Lowest price", "Immediately available", "Familiar brands"],
+            "strengths": ["Cheap and convenient", "No commitment"],
+            "weaknesses": ["Often stale", "No sourcing transparency"],
+        },
+    ],
+    "notes": "General-mode demo market frame for the coffee subscription preset.",
+}
+COFFEE_BOOTSTRAP_EXPERIMENT = dict(NEO_BOOTSTRAP_EXPERIMENT)
+COFFEE_BOOTSTRAP_RESEARCH_BRIEF = {
+    "primary_question": (
+        "Which at-home coffee drinkers are most likely to convert to an Everyday Origins "
+        "subscription at $19 per bag, and which positioning angle moves them?"
+    ),
+    "hypotheses": [
+        "Freshness is the strongest single positioning angle for high-intent coffee drinkers.",
+        "Price is the dominant barrier for drinkers currently buying supermarket coffee.",
+        "Flexibility to skip or cancel materially reduces commitment resistance.",
+        "Ethical sourcing appeals strongly to a smaller, higher-income segment.",
+    ],
+    "decisions_to_inform": [
+        "Which positioning angle to lead with in acquisition creative.",
+        "Whether $19 per bag is the right entry price.",
+        "Which default delivery cadence to present first.",
+    ],
+    "focus_fit_tiers": [],
+    "focus_segments": [],
+    "known_context": (
+        "Everyday Origins is a new subscription with no existing customer base. The category is "
+        "crowded and anchored by cheap supermarket coffee."
+    ),
+    "notes": "General-mode demo research brief for the coffee subscription preset.",
 }
 NEO_BOOTSTRAP_RESEARCH_BRIEF = {
     "primary_question": (
@@ -434,38 +584,90 @@ def save_experiment_section(session: Session, settings: AppSettings, study: Stud
     return serialize_study(session, study)
 
 
-def bootstrap_neo_demo_study(
+@dataclass(frozen=True)
+class DemoPreset:
+    """A one-click study setup: mode, saved sections, survey, and research brief."""
+
+    key: str
+    label: str
+    study_mode: str
+    audience: Dict[str, Any]
+    product: Dict[str, Any]
+    market: Dict[str, Any]
+    experiment: Dict[str, Any]
+    research_brief: Dict[str, Any]
+    survey_filename: Optional[str] = None
+
+
+NEO_DEMO_PRESET = DemoPreset(
+    key="neo",
+    label="Neo Smart Living",
+    study_mode="neo_smart",
+    audience=NEO_BOOTSTRAP_AUDIENCE,
+    product=NEO_BOOTSTRAP_PRODUCT,
+    market=NEO_BOOTSTRAP_MARKET,
+    experiment=NEO_BOOTSTRAP_EXPERIMENT,
+    research_brief=NEO_BOOTSTRAP_RESEARCH_BRIEF,
+    survey_filename=None,  # loaded through the Neo-specific preset loader
+)
+
+COFFEE_DEMO_PRESET = DemoPreset(
+    key="coffee",
+    label="Cortado Roasters",
+    study_mode="general",
+    audience=COFFEE_BOOTSTRAP_AUDIENCE,
+    product=COFFEE_BOOTSTRAP_PRODUCT,
+    market=COFFEE_BOOTSTRAP_MARKET,
+    experiment=COFFEE_BOOTSTRAP_EXPERIMENT,
+    research_brief=COFFEE_BOOTSTRAP_RESEARCH_BRIEF,
+    survey_filename=COFFEE_BOOTSTRAP_SURVEY_FILENAME,
+)
+
+DEMO_PRESETS: Dict[str, DemoPreset] = {
+    NEO_DEMO_PRESET.key: NEO_DEMO_PRESET,
+    COFFEE_DEMO_PRESET.key: COFFEE_DEMO_PRESET,
+}
+
+
+def bootstrap_demo_study(
     session: Session,
     settings: AppSettings,
     study: Study,
+    preset: DemoPreset,
 ) -> CanonicalStudy:
+    """Populate a study from a demo preset so it is immediately ready to run."""
     legacy_available = _legacy_backend_available(settings.legacy_app_root)
-    _save_study_mode_internal(session, study, "neo_smart")
+    _save_study_mode_internal(session, study, preset.study_mode)
     _save_section(
         session,
         study,
         "audience",
-        _prepare_bootstrap_audience(legacy_available, settings),
+        _prepare_bootstrap_audience(legacy_available, settings, preset.audience),
     )
     _save_section(
         session,
         study,
         "product",
-        _prepare_bootstrap_product(legacy_available, settings),
+        _prepare_bootstrap_product(legacy_available, settings, preset.product),
     )
 
-    validated_market = _prepare_bootstrap_market(legacy_available, settings)
+    validated_market = _prepare_bootstrap_market(legacy_available, settings, preset.market)
     if not _market_has_content(validated_market):
-        raise ValidationApiError("Neo bootstrap market payload is invalid.")
+        raise ValidationApiError(f"{preset.label} bootstrap market payload is invalid.")
     _save_section(session, study, "market", validated_market)
 
     _save_section(
         session,
         study,
         "experiment",
-        _prepare_bootstrap_experiment(legacy_available, settings),
+        _prepare_bootstrap_experiment(legacy_available, settings, preset.experiment),
     )
-    _save_neo_survey_preset_to_study(session, settings, study)
+
+    if preset.survey_filename is None:
+        _save_neo_survey_preset_to_study(session, settings, study)
+    else:
+        _save_bundled_survey_preset_to_study(session, settings, study, preset.survey_filename)
+
     _recompute_lifecycle_status(session, study)
     session.flush()
 
@@ -482,7 +684,9 @@ def bootstrap_neo_demo_study(
 
     latest_preview = _latest_persona_preview(session, study)
     if latest_preview is None:
-        raise ConflictApiError("Neo demo bootstrap could not find the generated persona preview.")
+        raise ConflictApiError(
+            f"{preset.label} demo bootstrap could not find the generated persona preview."
+        )
 
     ensure_demo_interview_run(
         session,
@@ -494,10 +698,18 @@ def bootstrap_neo_demo_study(
     save_research_brief(
         session,
         study,
-        _build_neo_bootstrap_research_brief(serialize_study(session, study)),
+        _build_bootstrap_research_brief(preset.research_brief, serialize_study(session, study)),
     )
     session.refresh(study)
     return serialize_study(session, study)
+
+
+def bootstrap_neo_demo_study(
+    session: Session,
+    settings: AppSettings,
+    study: Study,
+) -> CanonicalStudy:
+    return bootstrap_demo_study(session, settings, study, NEO_DEMO_PRESET)
 
 
 def handle_product_url_autofill(
@@ -1786,8 +1998,32 @@ def _save_neo_survey_preset_to_study(
     return asset
 
 
-def _build_neo_bootstrap_research_brief(study_view: CanonicalStudy) -> Dict[str, Any]:
-    brief = deepcopy(NEO_BOOTSTRAP_RESEARCH_BRIEF)
+def _save_bundled_survey_preset_to_study(
+    session: Session,
+    settings: AppSettings,
+    study: Study,
+    filename: str,
+) -> StudyAsset:
+    """Attach a survey markdown file bundled with the runtime to `study`."""
+    filename_, file_bytes, schema = load_bundled_survey_schema(settings.legacy_app_root, filename)
+    asset = _create_asset_from_bytes(
+        session,
+        settings,
+        study,
+        asset_type="survey_upload",
+        original_filename=filename_,
+        mime_type="text/markdown",
+        payload=file_bytes,
+    )
+    _save_section(session, study, "survey", schema, source_asset=asset)
+    return asset
+
+
+def _build_bootstrap_research_brief(
+    source: Dict[str, Any],
+    study_view: CanonicalStudy,
+) -> Dict[str, Any]:
+    brief = deepcopy(source)
     preview = study_view.derived.latest_persona_preview
     if not preview:
         return brief
@@ -1808,29 +2044,45 @@ def _legacy_backend_available(legacy_root: Path) -> bool:
     return (legacy_root / "backend").is_dir()
 
 
-def _prepare_bootstrap_audience(legacy_available: bool, settings: AppSettings) -> Dict[str, Any]:
-    payload = deepcopy(NEO_BOOTSTRAP_AUDIENCE)
+def _prepare_bootstrap_audience(
+    legacy_available: bool,
+    settings: AppSettings,
+    source: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    payload = deepcopy(source if source is not None else NEO_BOOTSTRAP_AUDIENCE)
     if not legacy_available:
         return payload
     return validate_audience(payload, settings.legacy_app_root)
 
 
-def _prepare_bootstrap_product(legacy_available: bool, settings: AppSettings) -> Dict[str, Any]:
-    payload = deepcopy(NEO_BOOTSTRAP_PRODUCT)
+def _prepare_bootstrap_product(
+    legacy_available: bool,
+    settings: AppSettings,
+    source: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    payload = deepcopy(source if source is not None else NEO_BOOTSTRAP_PRODUCT)
     if not legacy_available:
         return payload
     return validate_product(payload, settings.legacy_app_root)
 
 
-def _prepare_bootstrap_market(legacy_available: bool, settings: AppSettings) -> Dict[str, Any]:
-    payload = deepcopy(NEO_BOOTSTRAP_MARKET)
+def _prepare_bootstrap_market(
+    legacy_available: bool,
+    settings: AppSettings,
+    source: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    payload = deepcopy(source if source is not None else NEO_BOOTSTRAP_MARKET)
     if not legacy_available:
         return payload
     return validate_market(payload, settings.legacy_app_root)
 
 
-def _prepare_bootstrap_experiment(legacy_available: bool, settings: AppSettings) -> Dict[str, Any]:
-    payload = deepcopy(NEO_BOOTSTRAP_EXPERIMENT)
+def _prepare_bootstrap_experiment(
+    legacy_available: bool,
+    settings: AppSettings,
+    source: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    payload = deepcopy(source if source is not None else NEO_BOOTSTRAP_EXPERIMENT)
     if not legacy_available:
         payload["split_across_models"] = payload.get("experiment_mode") == "split"
         payload["mirror_personas_across_models"] = payload.get("experiment_mode") == "mirror"
