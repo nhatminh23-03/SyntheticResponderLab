@@ -204,7 +204,7 @@ NEO_BOOTSTRAP_MARKET = {
     "notes": "Preset market frame for Neo Smart Living demo mode.",
 }
 NEO_BOOTSTRAP_EXPERIMENT = {
-    "sample_size": 100,
+    "sample_size": 20,
     "selected_models": ["openai/gpt-4o-mini", "anthropic/claude-sonnet-4.5"],
     "experiment_mode": "split",
     "reruns_per_persona": 1,

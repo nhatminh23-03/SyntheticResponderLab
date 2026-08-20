@@ -54,6 +54,8 @@ services:
         value: "50"
       - key: DAILY_PROVIDER_RUN_LIMIT
         value: "20"
+      - key: SIMULATION_MAX_CONCURRENCY
+        value: "8"
     disk:
       name: artifacts
       mountPath: /var/data

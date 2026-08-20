@@ -77,7 +77,7 @@ const EXPERIMENT_MODE_OPTIONS: Array<{
 ];
 
 const DEFAULT_DRAFT: ExperimentDraft = {
-  sample_size: 100,
+  sample_size: 20,
   selected_models: DEFAULT_SELECTED_MODEL_IDS,
   experiment_mode: "split",
   reruns_per_persona: 1,

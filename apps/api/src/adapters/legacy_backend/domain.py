@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from html import unescape
 import base64
@@ -21,6 +22,11 @@ from src.adapters.legacy_backend.survey_docx_fallback import parse_aytm_style_do
 from src.config.settings import AppSettings
 from src.services.exceptions import LegacyModuleApiError, ProviderUnavailableApiError, ValidationApiError
 
+
+# Respondent requests are independent provider round-trips, so they are issued
+# concurrently. Kept modest by default to stay well inside provider rate limits;
+# override with SIMULATION_MAX_CONCURRENCY.
+DEFAULT_SIMULATION_MAX_CONCURRENCY = 8
 
 _ANALYSIS_STOP_WORDS = {
     "about",
@@ -418,6 +424,7 @@ def _generate_live_response_records_with_debug(
     market_context: Any,
     prompt_user_template_override: Optional[str],
     openrouter_timeout_sec: int = 45,
+    max_concurrency: int = DEFAULT_SIMULATION_MAX_CONCURRENCY,
 ) -> tuple[List[Any], Dict[str, Any]]:
     extract_answer_map = getattr(run_manager, "_extract_answer_map_from_openrouter_result")
     coerce_answer = getattr(run_manager, "_coerce_openrouter_answer_value")
@@ -450,23 +457,42 @@ def _generate_live_response_records_with_debug(
     parsed_count = 0
     records: List[Any] = []
 
-    for respondent_id, model_name, respondent_index, rerun in respondent_model_pairs:
-        persona = persona_profiles[(respondent_index - 1) % len(persona_profiles)]
-        segment_label = persona.segment_label or "General Segment"
-        prompt_payload = _build_prompt_payload_with_override(
+    # Each respondent is an independent provider round-trip, so the requests are
+    # issued concurrently. Only the network calls are parallel: prompts are built
+    # up front and results are folded back in the original respondent order, so a
+    # run stays byte-for-byte deterministic regardless of completion order.
+    prompt_payloads = [
+        _build_prompt_payload_with_override(
             prompt_builder=prompt_builder,
             prompt_user_template_override=prompt_user_template_override,
-            persona=persona,
+            persona=persona_profiles[(respondent_index - 1) % len(persona_profiles)],
             survey_schema=survey_schema,
             business_product_context=business_product_context,
             market_context=market_context,
             audience_filter=audience_filter,
         )
-        result = llm_client.generate_survey_response_with_openrouter(
+        for _respondent_id, _model_name, respondent_index, _rerun in respondent_model_pairs
+    ]
+
+    def _dispatch(index: int) -> dict:
+        _respondent_id, model_name, _respondent_index, _rerun = respondent_model_pairs[index]
+        return llm_client.generate_survey_response_with_openrouter(
             model_name=model_name,
-            prompt_payload=prompt_payload,
+            prompt_payload=prompt_payloads[index],
             timeout=openrouter_timeout_sec,
         )
+
+    worker_count = max(1, min(int(max_concurrency), len(respondent_model_pairs) or 1))
+    if worker_count == 1 or len(respondent_model_pairs) <= 1:
+        results = [_dispatch(index) for index in range(len(respondent_model_pairs))]
+    else:
+        with ThreadPoolExecutor(max_workers=worker_count) as executor:
+            results = list(executor.map(_dispatch, range(len(respondent_model_pairs))))
+
+    for index, (respondent_id, model_name, respondent_index, rerun) in enumerate(respondent_model_pairs):
+        persona = persona_profiles[(respondent_index - 1) % len(persona_profiles)]
+        segment_label = persona.segment_label or "General Segment"
+        result = results[index]
         if not bool(result.get("ok")):
             request_errors += 1
             status_code = result.get("status_code")
@@ -725,6 +751,7 @@ def execute_simulation_run(
                 business_product_context=business_product_context,
                 market_context=market_context,
                 prompt_user_template_override=prompt_user_template_override,
+                max_concurrency=settings.simulation_max_concurrency,
             )
             result = _run_simulation_compat(
                 run_manager,
@@ -946,6 +973,7 @@ def execute_stability_check(
                     business_product_context=business_product_context,
                     market_context=market_context,
                     prompt_user_template_override=None,
+                    max_concurrency=settings.simulation_max_concurrency,
                 )
             run_summaries.append(
                 stability.summarize_run_outputs(records=records, personas=personas)

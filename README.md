@@ -135,6 +135,31 @@ Important variables:
 - `DAILY_STUDY_CREATE_LIMIT`
 - `DAILY_UPLOAD_LIMIT`
 - `DAILY_PROVIDER_RUN_LIMIT`
+- `SIMULATION_MAX_CONCURRENCY`
+
+### Simulation performance
+
+Each respondent in a run is one provider round-trip, so run duration scales with
+sample size. Those requests are issued concurrently, bounded by
+`SIMULATION_MAX_CONCURRENCY` (default `8`, max `32`). Measured on a 20-respondent
+× 32-question × 2-model run: **139.7s at concurrency 1, 22.2s at concurrency 8.**
+
+Results are folded back in respondent order, so raising concurrency changes run
+time only — never the saved output. Lower it if the provider starts rate-limiting.
+
+### Grounding priors
+
+Persona generation samples from ACS prior tables in
+`apps/api/legacy_runtime/data/processed/priors/`. When those tables are missing,
+persona generation silently degrades to rule-based profiles. Regenerate them
+from Census ACS PUMS microdata (no API key needed) with:
+
+```bash
+python apps/api/scripts/build_grounding_priors.py
+```
+
+The production image copies these tables in and the Docker build fails if they
+are absent, so a deployment cannot quietly serve heuristic personas.
 
 Production-like startup rules:
 - `APP_ENV` must not be `development`, `dev`, `test`, or `local`

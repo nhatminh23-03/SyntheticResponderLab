@@ -40,6 +40,12 @@ class AppSettings(BaseSettings):
     daily_study_create_limit: int = Field(default=20, alias="DAILY_STUDY_CREATE_LIMIT")
     daily_upload_limit: int = Field(default=50, alias="DAILY_UPLOAD_LIMIT")
     daily_provider_run_limit: int = Field(default=20, alias="DAILY_PROVIDER_RUN_LIMIT")
+    simulation_max_concurrency: int = Field(
+        default=8,
+        ge=1,
+        le=32,
+        alias="SIMULATION_MAX_CONCURRENCY",
+    )
     admin_clerk_user_ids: str = Field(default="", alias="ADMIN_CLERK_USER_IDS")
     require_authenticated_identity: bool = Field(
         default=False,

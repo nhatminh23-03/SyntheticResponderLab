@@ -287,7 +287,7 @@ def test_bootstrap_neo_demo_endpoint_persists_ready_interview_setup(client, monk
     assert payload["survey"]["status"] == "saved"
     assert payload["survey"]["source_filename"] == "Neo Smart Living — Survey_HighPriority.md"
     assert payload["experiment"]["status"] == "saved"
-    assert payload["experiment"]["value"]["sample_size"] == 100
+    assert payload["experiment"]["value"]["sample_size"] == 20
     assert payload["experiment"]["value"]["experiment_mode"] == "split"
     assert payload["derived"]["workflow"]["ready_for_persona_preview"] is True
     assert payload["derived"]["latest_persona_preview"]["status"] == "completed"
