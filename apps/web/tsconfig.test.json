@@ -12,6 +12,7 @@
   "include": [
     "tests/**/*.ts",
     "src/lib/setup-flow-utils.ts",
-    "src/lib/answer-sourcing.ts"
+    "src/lib/answer-sourcing.ts",
+    "src/lib/run-evidence.ts"
   ]
 }
