@@ -18,6 +18,9 @@
 node_modules/
 .next/
 *.tsbuildinfo
+
+# Local editor/agent config (machine-specific paths, personal permissions)
+.claude/
 out/
 .turbo/
 .test-dist/
