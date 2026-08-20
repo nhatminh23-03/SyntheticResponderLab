@@ -456,6 +456,7 @@ def _generate_live_response_records_with_debug(
     fallback_count = 0
     parsed_count = 0
     records: List[Any] = []
+    record_is_fallback: List[bool] = []
 
     # Each respondent is an independent provider round-trip, so the requests are
     # issued concurrently. Only the network calls are parallel: prompts are built
@@ -509,6 +510,7 @@ def _generate_live_response_records_with_debug(
         for question_index, question in enumerate(survey_schema.questions, start=1):
             answer_value = parsed_answers.get(question.id)
             validated_answer = coerce_answer(question, answer_value)
+            validated_answer_was_replaced = validated_answer is None
             if validated_answer is None:
                 fallback_count += 1
                 validated_answer = generate_mock_answer(
@@ -538,6 +540,10 @@ def _generate_live_response_records_with_debug(
                     run_id=config.run_id,
                 )
             )
+            # Parallel to `records`: whether this answer was synthesized rather than returned by the
+            # model. Tracked here rather than on MockResponseRecord because that schema lives in the
+            # legacy tree, which exists in two copies that can drift (see QA baseline §4).
+            record_is_fallback.append(validated_answer_was_replaced)
 
     generation_debug = {
         "generation_mode": "openrouter_live",
@@ -550,7 +556,7 @@ def _generate_live_response_records_with_debug(
         "questions_fallback_to_mock": int(fallback_count),
         "questions_parsed_from_live": int(parsed_count),
     }
-    return records, generation_debug
+    return records, generation_debug, record_is_fallback
 
 
 def parse_normalize_validate_survey(file_name: str, file_bytes: bytes, legacy_root: Path) -> dict:
@@ -971,7 +977,7 @@ def execute_simulation_run(
                 "OPENROUTER_BASE_URL": settings.openrouter_base_url,
             }
         ):
-            records, generation_debug = _generate_live_response_records_with_debug(
+            records, generation_debug, record_is_fallback = _generate_live_response_records_with_debug(
                 schemas=schemas,
                 run_manager=run_manager,
                 llm_client=llm_client,
@@ -1099,8 +1105,14 @@ def execute_simulation_run(
             "selected_models": list(result.models_used),
         },
         "personas": [persona.model_dump() for persona in personas],
-        "response_records": [record.model_dump() for record in records],
-        "response_record_preview": [record.model_dump() for record in records[:24]],
+        "response_records": [
+            {**record.model_dump(), "is_fallback": bool(flag)}
+            for record, flag in zip(records, record_is_fallback)
+        ],
+        "response_record_preview": [
+            {**record.model_dump(), "is_fallback": bool(flag)}
+            for record, flag in list(zip(records, record_is_fallback))[:24]
+        ],
         "survey_parse_warnings": list(survey_payload.get("parse_warnings", [])),
     }
 
@@ -1193,7 +1205,7 @@ def execute_stability_check(
                     "OPENROUTER_BASE_URL": settings.openrouter_base_url,
                 }
             ):
-                records, generation_debug = _generate_live_response_records_with_debug(
+                records, generation_debug, record_is_fallback = _generate_live_response_records_with_debug(
                     schemas=schemas,
                     run_manager=run_manager,
                     llm_client=llm_client,

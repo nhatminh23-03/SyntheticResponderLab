@@ -846,13 +846,22 @@ function ResponseRecordCard({
   const questionId = toOptionalString(record.question_id) || "Q";
   const questionText = prettifyQuestionText(record.question_text);
   const answer = formatAnswer(record.answer);
+  // Fabricated rows are stamped with the real model name and are otherwise schema-valid, so without
+  // this marker they are indistinguishable from answers the model actually returned.
+  const isFabricated = record.is_fallback === true;
 
   return (
-    <div className="rounded-[1.2rem] border border-white/6 bg-black/10 p-4">
+    <div
+      className={cn(
+        "rounded-[1.2rem] border p-4",
+        isFabricated ? "border-amber-400/35 bg-amber-400/[0.05]" : "border-white/6 bg-black/10"
+      )}
+    >
       <div className="flex flex-wrap items-center gap-2">
         <BadgeChip>{respondentId}</BadgeChip>
         <BadgeChip>{model}</BadgeChip>
         <BadgeChip tone="neutral">{questionId}</BadgeChip>
+        {isFabricated ? <BadgeChip tone="gold">Fabricated — not from the model</BadgeChip> : null}
       </div>
 
       <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,0.9fr)]">

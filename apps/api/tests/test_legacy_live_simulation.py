@@ -305,3 +305,60 @@ def test_execute_simulation_run_fails_fast_on_openrouter_401(test_settings, monk
         assert "user not found" in exc.message.lower()
     else:
         raise AssertionError("Expected execute_simulation_run to fail fast on OpenRouter 401 errors.")
+
+
+def test_saved_records_mark_which_answers_were_fabricated(test_settings, monkeypatch):
+    """F-04: a fabricated answer must be identifiable at the row level.
+
+    The mock generator emits schema-valid answers stamped with the real provider model name, so a
+    fabricated row is indistinguishable from a live one — during QA it was impossible to tell which
+    records were invented even with full database access and the survey schema. Charts, exports and
+    the raw-record view all need a per-row flag to exclude or mark them.
+
+    Q1 is single_choice Yes/No and the model answers "Maybe", which fails exact option matching and is
+    replaced. Q2 is open_text and is accepted as returned.
+    """
+    settings = _settings_with_openrouter(test_settings)
+    payloads = _base_run_payloads(sample_size=1)
+    payloads["experiment_payload"]["selected_models"] = ["openai/gpt-4o-mini", "google/gemini-2.5-flash"]
+    _patch_grounded_personas(monkeypatch, settings, sample_size=1)
+
+    llm_client = load_module("backend.simulation.llm_client", settings.legacy_app_root)
+    monkeypatch.setattr(
+        llm_client.requests,
+        "post",
+        lambda url, headers, json, timeout: _FakeOpenRouterResponse(
+            '{"answers":[{"question_id":"Q1","answer":"Maybe"},'
+            '{"question_id":"Q2","answer":"I still like the concept overall."}]}'
+        ),
+    )
+
+    result = execute_simulation_run(
+        settings=settings,
+        audience_payload=payloads["audience_payload"],
+        survey_payload=payloads["survey_payload"],
+        experiment_payload=payloads["experiment_payload"],
+        product_payload=payloads["product_payload"],
+        market_payload=payloads["market_payload"],
+        geography_context=None,
+    )
+
+    records = result["response_records"]
+    assert records, "expected saved response records"
+
+    by_question = {}
+    for record in records:
+        by_question.setdefault(record["question_id"], []).append(record)
+
+    assert all(
+        record["is_fallback"] is True for record in by_question["Q1"]
+    ), "the discarded single-choice answer must be marked as fabricated"
+    assert all(
+        record["is_fallback"] is False for record in by_question["Q2"]
+    ), "an answer used as the model returned it must not be marked as fabricated"
+
+    fabricated = [record for record in records if record["is_fallback"]]
+    debug = result.get("run_debug_summary") or {}
+    assert len(fabricated) == debug.get("fallback_answers"), (
+        "the per-row flags must reconcile with the reported fallback count"
+    )
