@@ -3157,18 +3157,26 @@ def _question_positive_share(qdf: pd.DataFrame) -> Optional[float]:
     return float(positives.mean() * 100)
 
 
-def _compute_strongest_segment(df: pd.DataFrame) -> str:
+def _compute_strongest_segment(df: pd.DataFrame) -> Optional[str]:
+    """Highest-scoring segment, or None when the run cannot support the comparison.
+
+    `_segment_score_table` only scores segments that have numeric answers for Q0B/Q1/Q2, so a survey
+    using different question ids scores nothing. Ranking needs at least two scored segments: with
+    none there is nothing to rank, and with one `max` and `min` return the same label, which
+    previously surfaced the same segment as both strongest and weakest. Returning None keeps the
+    metric out of the evidence package handed to the summarising model.
+    """
     segment_scores = _segment_score_table(df)
-    if not segment_scores:
-        segments = _list_segments(df)
-        return segments[0] if segments else "N/A"
+    if len(segment_scores) < 2:
+        return None
     return max(segment_scores.items(), key=lambda item: item[1])[0]
 
 
-def _compute_weakest_segment(df: pd.DataFrame) -> str:
+def _compute_weakest_segment(df: pd.DataFrame) -> Optional[str]:
+    """Lowest-scoring segment, or None when fewer than two segments could be scored."""
     segment_scores = _segment_score_table(df)
-    if not segment_scores:
-        return "N/A"
+    if len(segment_scores) < 2:
+        return None
     return min(segment_scores.items(), key=lambda item: item[1])[0]
 
 
