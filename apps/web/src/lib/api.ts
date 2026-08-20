@@ -1407,6 +1407,69 @@ export async function loadNeoSurveyPreset(studyId: string) {
   };
 }
 
+export type GeneratedSurveyResult = {
+  survey_schema: Record<string, unknown>;
+  summary: string;
+  warnings: string[];
+  question_count: number;
+};
+
+export async function generateSurvey(
+  studyId: string,
+  payload: {
+    question_count: number;
+    instructions?: string | null;
+    previous_schema?: Record<string, unknown> | null;
+    conversation?: Array<{ role: string; content: string }>;
+  }
+) {
+  const apiBaseUrl = getApiBaseUrl();
+
+  const response = await fetch(`${apiBaseUrl}/api/v1/studies/${studyId}/survey/generate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      await readApiErrorMessage(response, `Survey generation failed with status ${response.status}`)
+    );
+  }
+
+  const result = (await response.json()) as { data?: GeneratedSurveyResult };
+  if (!result.data?.survey_schema) {
+    throw new Error("Survey generation returned no survey.");
+  }
+  return result.data;
+}
+
+export async function acceptGeneratedSurvey(
+  studyId: string,
+  surveySchema: Record<string, unknown>
+) {
+  const apiBaseUrl = getApiBaseUrl();
+
+  const response = await fetch(`${apiBaseUrl}/api/v1/studies/${studyId}/survey/generated`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ survey_schema: surveySchema }),
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      await readApiErrorMessage(response, `Saving the generated survey failed with status ${response.status}`)
+    );
+  }
+
+  const result = (await response.json()) as SurveyUploadResponse;
+  return {
+    asset: result.data?.asset ?? null,
+    survey: normalizeSurveyResponse(result.data?.survey),
+    workflow: result.data?.workflow ?? null,
+  };
+}
+
 export async function saveExperiment(studyId: string, payload: ExperimentPayload) {
   const apiBaseUrl = getApiBaseUrl();
 

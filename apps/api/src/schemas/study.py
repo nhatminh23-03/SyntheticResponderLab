@@ -131,6 +131,22 @@ class ProductUrlAutofillRequest(BaseModel):
     apply_to_product: bool = False
 
 
+class SurveyGenerationTurn(BaseModel):
+    role: str
+    content: str
+
+
+class SurveyGenerationRequest(BaseModel):
+    question_count: int = Field(default=20, ge=3, le=60)
+    instructions: Optional[str] = None
+    previous_schema: Optional[Dict[str, Any]] = None
+    conversation: List[SurveyGenerationTurn] = Field(default_factory=list)
+
+
+class SurveyGenerationAcceptRequest(BaseModel):
+    survey_schema: Dict[str, Any]
+
+
 class PersonaPreviewRequest(BaseModel):
     sample_size: int = 12
     use_grounded_priors: bool = True

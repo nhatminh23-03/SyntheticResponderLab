@@ -580,6 +580,224 @@ def parse_normalize_validate_survey(file_name: str, file_bytes: bytes, legacy_ro
         raise LegacyModuleApiError(f"Survey parsing failed: {exc}") from exc
 
 
+SURVEY_GENERATION_MIN_QUESTIONS = 3
+SURVEY_GENERATION_MAX_QUESTIONS = 60
+SURVEY_GENERATION_MODEL = "anthropic/claude-sonnet-4.5"
+
+_SURVEY_GENERATION_SYSTEM_PROMPT = """You are a senior quantitative market researcher. \
+You design survey instruments that will be answered by synthetic respondents in a \
+simulation, so every question must be machine-scorable.
+
+Return STRICT JSON only, with no markdown fences and no commentary, in this shape:
+{
+  "survey_title": "string",
+  "description": "string",
+  "summary": "2-3 sentences explaining the survey's structure and what it measures",
+  "questions": [
+    {
+      "id": "Q1",
+      "text": "full question wording shown to the respondent",
+      "question_type": "single_choice" | "multi_choice" | "likert" | "numeric" | "open_text",
+      "options": ["only for single_choice and multi_choice"],
+      "min_value": 1,
+      "max_value": 5,
+      "required": true,
+      "help_text": null
+    }
+  ]
+}
+
+Rules:
+- Produce EXACTLY the requested number of questions.
+- Every question id must be unique, short, and uppercase (Q1, Q2, S1, ...).
+- likert questions MUST set min_value 1 and max_value 5 and MUST leave options empty.
+- single_choice and multi_choice MUST provide 2-7 mutually exclusive, concretely worded options.
+- numeric and open_text MUST leave options empty.
+- Favour likert and single_choice; use open_text sparingly (at most 2) because it is
+  the hardest to analyse quantitatively.
+- Ground every question in the supplied product, market, and audience context. Reference
+  real attributes, prices, and competitors from that context rather than generic wording.
+- Include screening, category baseline, post-exposure evaluation, barriers, and
+  positioning coverage when the question count allows.
+- Never invent facts that contradict the supplied context."""
+
+
+def _survey_generation_context(
+    *,
+    product: Optional[Dict[str, Any]],
+    market: Optional[Dict[str, Any]],
+    audience: Optional[Dict[str, Any]],
+) -> str:
+    """Render saved study context into the prompt body."""
+
+    def block(label: str, payload: Optional[Dict[str, Any]]) -> str:
+        if not payload:
+            return f"{label}: (not provided)"
+        cleaned = {
+            key: value
+            for key, value in payload.items()
+            if value not in (None, "", [], {}) and not key.endswith("_at")
+        }
+        return f"{label}:\n{json.dumps(cleaned, indent=2, ensure_ascii=False)}"
+
+    return "\n\n".join(
+        [
+            block("PRODUCT CONTEXT", product),
+            block("MARKET CONTEXT", market),
+            block("AUDIENCE CONTEXT", audience),
+        ]
+    )
+
+
+def generate_survey_schema(
+    *,
+    settings: AppSettings,
+    product: Optional[Dict[str, Any]],
+    market: Optional[Dict[str, Any]],
+    audience: Optional[Dict[str, Any]],
+    question_count: int,
+    instructions: Optional[str] = None,
+    previous_schema: Optional[Dict[str, Any]] = None,
+    conversation: Optional[List[Dict[str, str]]] = None,
+) -> Dict[str, Any]:
+    """Draft a survey schema from saved study context using the configured LLM.
+
+    Returns a validated schema plus the model's summary. Nothing is persisted;
+    the caller decides whether to save the draft.
+    """
+    if not settings.openrouter_api_key:
+        raise ProviderUnavailableApiError(
+            "OPENROUTER_API_KEY is required to generate a survey."
+        )
+
+    if question_count < SURVEY_GENERATION_MIN_QUESTIONS or question_count > SURVEY_GENERATION_MAX_QUESTIONS:
+        raise ValidationApiError(
+            f"question_count must be between {SURVEY_GENERATION_MIN_QUESTIONS} "
+            f"and {SURVEY_GENERATION_MAX_QUESTIONS}."
+        )
+
+    sections = [
+        _survey_generation_context(product=product, market=market, audience=audience),
+        f"Produce exactly {question_count} questions.",
+    ]
+
+    if previous_schema and previous_schema.get("questions"):
+        sections.append(
+            "You previously drafted this survey:\n"
+            + json.dumps(
+                {
+                    "survey_title": previous_schema.get("survey_title"),
+                    "questions": previous_schema.get("questions"),
+                },
+                indent=2,
+                ensure_ascii=False,
+            )[:12000]
+            + "\n\nRevise it according to the latest instruction. Keep everything the "
+            "instruction does not ask you to change."
+        )
+
+    for turn in conversation or []:
+        role = str(turn.get("role") or "").strip()
+        content = str(turn.get("content") or "").strip()
+        if role and content:
+            sections.append(f"{role.upper()} SAID: {content}")
+
+    if instructions:
+        sections.append(f"LATEST INSTRUCTION FROM THE RESEARCHER:\n{instructions.strip()}")
+
+    endpoint = f"{settings.openrouter_base_url.rstrip('/')}/chat/completions"
+    try:
+        response = requests.post(
+            endpoint,
+            headers={
+                "Authorization": f"Bearer {settings.openrouter_api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": SURVEY_GENERATION_MODEL,
+                "messages": [
+                    {"role": "system", "content": _SURVEY_GENERATION_SYSTEM_PROMPT},
+                    {"role": "user", "content": "\n\n".join(sections)},
+                ],
+                "temperature": 0.4,
+                "max_tokens": 8000,
+            },
+            timeout=180,
+        )
+    except requests.RequestException as exc:
+        raise ProviderUnavailableApiError(f"Survey generation request failed: {exc}") from exc
+
+    if response.status_code >= 400:
+        detail = _extract_provider_error_detail({"raw_text": response.text})
+        raise ProviderUnavailableApiError(
+            f"Survey generation provider returned HTTP {response.status_code}: {detail}"
+        )
+
+    try:
+        raw_content = response.json()["choices"][0]["message"]["content"]
+    except (KeyError, IndexError, TypeError, ValueError) as exc:
+        raise ProviderUnavailableApiError("Survey generation returned an unreadable response.") from exc
+
+    parsed = _parse_survey_generation_json(raw_content)
+    summary = str(parsed.get("summary") or "").strip()
+
+    validator = load_module("backend.survey.validator", settings.legacy_app_root)
+    normalizer = load_module("backend.survey.schema_normalizer", settings.legacy_app_root)
+    payload = {
+        "survey_title": parsed.get("survey_title") or "Generated survey",
+        "description": parsed.get("description"),
+        "source_format": "ai_generated",
+        "questions": parsed.get("questions") or [],
+    }
+    try:
+        normalized = normalizer.normalize_survey_payload(payload)
+        validated = validator.validate_survey_schema(normalized)
+    except ValueError as exc:
+        raise ValidationApiError(f"Generated survey failed validation: {exc}") from exc
+    except Exception as exc:
+        raise LegacyModuleApiError(f"Generated survey could not be normalized: {exc}") from exc
+
+    schema = validated.model_dump()
+    warnings: List[str] = []
+    actual = len(schema.get("questions") or [])
+    if actual != question_count:
+        warnings.append(
+            f"Requested {question_count} questions but the model returned {actual}."
+        )
+
+    return {"survey_schema": schema, "summary": summary, "warnings": warnings}
+
+
+def _parse_survey_generation_json(raw_content: Any) -> Dict[str, Any]:
+    """Parse the model's survey JSON, tolerating markdown fences and stray prose."""
+    text = str(raw_content or "").strip()
+    if not text:
+        raise ProviderUnavailableApiError("Survey generation returned an empty response.")
+
+    fenced = re.search(r"```(?:json)?\s*(.+?)\s*```", text, re.DOTALL | re.IGNORECASE)
+    if fenced:
+        text = fenced.group(1).strip()
+
+    try:
+        parsed = json.loads(text)
+    except ValueError:
+        start, end = text.find("{"), text.rfind("}")
+        if start == -1 or end <= start:
+            raise ProviderUnavailableApiError(
+                "Survey generation did not return valid JSON."
+            ) from None
+        try:
+            parsed = json.loads(text[start : end + 1])
+        except ValueError as exc:
+            raise ProviderUnavailableApiError(
+                "Survey generation did not return valid JSON."
+            ) from exc
+
+    if not isinstance(parsed, dict):
+        raise ProviderUnavailableApiError("Survey generation returned an unexpected JSON shape.")
+    return parsed
+
+
 def load_bundled_survey_schema(legacy_root: Path, filename: str) -> tuple[str, bytes, dict]:
     """Load and validate a survey markdown file bundled under `Provided Info/`.
 
@@ -3045,10 +3263,58 @@ def product_image_analysis(*, settings: AppSettings, file_bytes: bytes) -> dict:
     }
 
 
+_IMAGE_MAGIC_BYTES = (
+    (b"\x89PNG\r\n\x1a\n", "image/png", "PNG"),
+    (b"\xff\xd8\xff", "image/jpeg", "JPEG"),
+)
+
+# Formats a browser or phone will happily hand over with a .jpg/.png filename
+# but which the vision providers reject.
+_UNSUPPORTED_IMAGE_SIGNATURES = (
+    ("HEIC/HEIF (iPhone photo)", lambda b: b[4:12] in {b"ftypheic", b"ftypheix", b"ftypmif1", b"ftypmsf1"}),
+    ("WEBP", lambda b: b[:4] == b"RIFF" and b[8:12] == b"WEBP"),
+    ("GIF", lambda b: b[:6] in {b"GIF87a", b"GIF89a"}),
+    ("TIFF", lambda b: b[:4] in {b"II*\x00", b"MM\x00*"}),
+    ("BMP", lambda b: b[:2] == b"BM"),
+    ("PDF", lambda b: b[:5] == b"%PDF-"),
+)
+
+
+def detect_product_image_mime(file_bytes: bytes) -> str:
+    """Return the real MIME type of `file_bytes`, or explain why it is unusable.
+
+    The upload endpoint only checks the filename extension, so the actual bytes
+    can be anything. Sending an unsupported format to the provider produced an
+    opaque "HTTP 400", so the format is resolved here and named in the error.
+    """
+    header = file_bytes[:32]
+    for magic, mime, _label in _IMAGE_MAGIC_BYTES:
+        if header.startswith(magic):
+            return mime
+
+    for label, matches in _UNSUPPORTED_IMAGE_SIGNATURES:
+        try:
+            if matches(header):
+                raise ValidationApiError(
+                    f"This file is {label}, not JPG or PNG. "
+                    "Re-save or export it as JPG or PNG and upload again."
+                )
+        except ValidationApiError:
+            raise
+        except Exception:
+            continue
+
+    raise ValidationApiError(
+        "This file does not look like a JPG or PNG image. "
+        "Please upload a valid jpg, jpeg, or png file."
+    )
+
+
 def _openrouter_product_image_analysis(*, settings: AppSettings, file_bytes: bytes) -> dict:
     """Use the configured multimodal LLM when Google Vision is unavailable locally."""
     endpoint = f"{settings.openrouter_base_url.rstrip('/')}/chat/completions"
-    image_data_url = "data:image/jpeg;base64," + base64.b64encode(file_bytes).decode("ascii")
+    mime_type = detect_product_image_mime(file_bytes)
+    image_data_url = f"data:{mime_type};base64," + base64.b64encode(file_bytes).decode("ascii")
     prompt = (
         "Analyze this product image for a market-research product brief. Return strict JSON only with this shape: "
         '{"labels":["short label"],"objects":["short object"],'
@@ -3081,8 +3347,9 @@ def _openrouter_product_image_analysis(*, settings: AppSettings, file_bytes: byt
         raise ProviderUnavailableApiError(f"Image analysis provider request failed: {exc}") from exc
 
     if response.status_code >= 400:
+        detail = _extract_provider_error_detail({"raw_text": response.text})
         raise ProviderUnavailableApiError(
-            f"Image analysis provider returned HTTP {response.status_code}."
+            f"Image analysis provider returned HTTP {response.status_code}: {detail}"
         )
 
     try:

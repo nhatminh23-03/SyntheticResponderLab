@@ -171,6 +171,26 @@ Add a preset by appending a `DemoPreset` to `DEMO_PRESETS` in
 `apps/api/src/services/study_service.py`; a preset that ships its own survey
 markdown places it in `apps/api/legacy_runtime/Provided Info/`.
 
+### AI survey generation
+
+In General Custom Study mode the survey step offers an AI generator as an
+alternative to uploading a file. It drafts questions from the study's saved
+product, market, and audience context:
+
+```
+POST /api/v1/studies/{study_id}/survey/generate    # draft, nothing persisted
+POST /api/v1/studies/{study_id}/survey/generated   # save an approved draft
+```
+
+`generate` takes `question_count` (3-60), an optional `instructions` string, and
+the `previous_schema` plus `conversation` history for iterative refinement, so
+the UI can keep revising a draft in a chat until the researcher accepts it. Every
+draft is run through the same normalizer and validator as an uploaded file, and
+generation counts against `DAILY_PROVIDER_RUN_LIMIT`.
+
+Saved Product details are required; market and audience are optional but their
+absence is reported as a warning because it weakens the generated questions.
+
 ### Grounding priors
 
 Persona generation samples from ACS prior tables in

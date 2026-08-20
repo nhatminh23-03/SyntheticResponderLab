@@ -1332,3 +1332,23 @@ def test_insights_endpoint_caches_llm_summary_per_run(client, monkeypatch, test_
     assert first_response.json()["data"]["insights"]["llm_summary"]["cached"] is False
     assert second_response.json()["data"]["insights"]["llm_summary"]["cached"] is True
     assert call_count["value"] == 1
+
+
+def test_request_body_validation_error_returns_clean_400(client):
+    """FastAPI's RequestValidationError.errors() takes no kwargs.
+
+    The shared sanitizer must handle it, or every malformed request body 500s.
+    """
+    created = client.post("/api/v1/studies", json={}).json()["data"]["study"]
+    study_id = created["study_id"]
+
+    response = client.post(
+        f"/api/v1/studies/{study_id}/survey/generate",
+        json={"question_count": "not-a-number"},
+    )
+
+    assert response.status_code == 400
+    payload = response.json()["error"]
+    assert payload["code"] == "validation_error"
+    # Must be JSON-serializable all the way down.
+    assert json.loads(json.dumps(payload["details"]))

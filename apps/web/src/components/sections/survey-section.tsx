@@ -16,6 +16,7 @@ import {
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useStudy } from "@/providers/study-provider";
+import { SurveyGeneratorPanel } from "@/components/sections/survey-generator-panel";
 import { BadgeChip } from "@/components/ui/badge-chip";
 import { Button } from "@/components/ui/button";
 import { GlassPanel } from "@/components/ui/glass-panel";
@@ -339,6 +340,23 @@ export function SurveySection() {
                   </Button>
                 ) : null}
               </div>
+
+              {studyMode === "general" ? (
+                <div className="mt-6 border-t border-app-border pt-6">
+                  <SurveyGeneratorPanel
+                    studyId={studyId}
+                    disabled={isUploading || isCreatingStudy || isHydratingStudy}
+                    onEnsureStudy={async () => (await createOrLoadStudy()) ?? studyId}
+                    onAccepted={async () => {
+                      await refreshStudy(studyId ?? undefined);
+                      setStatus({
+                        tone: "success",
+                        message: "Generated survey saved. Continue to Experiment setup.",
+                      });
+                    }}
+                  />
+                </div>
+              ) : null}
 
               <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-app-border pt-6">
                 <div>

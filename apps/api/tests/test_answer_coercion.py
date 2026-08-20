@@ -80,3 +80,43 @@ def test_single_choice_question_coerces_trailing_period(run_manager):
         run_manager._coerce_openrouter_answer_value(question, "Moderately interested.")
         == "Moderately interested"
     )
+
+
+@pytest.mark.parametrize(
+    "header,expected",
+    [
+        (b"\x89PNG\r\n\x1a\n", "image/png"),
+        (b"\xff\xd8\xff\xe0", "image/jpeg"),
+    ],
+)
+def test_supported_image_formats_are_detected(header, expected):
+    from src.adapters.legacy_backend.domain import detect_product_image_mime
+
+    assert detect_product_image_mime(header + b"\x00" * 32) == expected
+
+
+@pytest.mark.parametrize(
+    "header,expected_label",
+    [
+        (b"\x00\x00\x00\x18ftypheic", "HEIC/HEIF"),
+        (b"RIFF\x00\x00\x00\x00WEBP", "WEBP"),
+        (b"GIF89a", "GIF"),
+        (b"%PDF-1.7", "PDF"),
+    ],
+)
+def test_unsupported_image_formats_are_named_not_sent_to_the_provider(header, expected_label):
+    """A renamed HEIC used to surface as an opaque provider HTTP 400."""
+    from src.adapters.legacy_backend.domain import detect_product_image_mime
+    from src.services.exceptions import ValidationApiError
+
+    with pytest.raises(ValidationApiError) as excinfo:
+        detect_product_image_mime(header + b"\x00" * 32)
+    assert expected_label in excinfo.value.message
+
+
+def test_non_image_bytes_are_rejected():
+    from src.adapters.legacy_backend.domain import detect_product_image_mime
+    from src.services.exceptions import ValidationApiError
+
+    with pytest.raises(ValidationApiError):
+        detect_product_image_mime(b"this is definitely not an image file")

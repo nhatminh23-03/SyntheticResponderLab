@@ -20,6 +20,7 @@ from src.adapters.legacy_backend.domain import (
     execute_simulation_run,
     execute_stability_check,
     list_model_catalog,
+    generate_survey_schema,
     load_bundled_survey_schema,
     load_neo_survey_schema_default,
     parse_normalize_validate_survey,
@@ -70,6 +71,7 @@ from src.services.interview_service import save_research_brief
 from src.services.url_security import validate_public_http_url
 from src.services.usage_limits import (
     METRIC_PRODUCT_IMAGE_ANALYSIS,
+    METRIC_SURVEY_GENERATION,
     METRIC_SIMULATION_RUN,
     METRIC_STABILITY_CHECK,
     METRIC_STUDY_CREATE,
@@ -883,6 +885,98 @@ def handle_neo_survey_preset(
     study: Study,
 ) -> Dict[str, Any]:
     asset = _save_neo_survey_preset_to_study(session, settings, study)
+    _recompute_lifecycle_status(session, study)
+    session.commit()
+    session.refresh(study)
+
+    study_view = serialize_study(session, study)
+    return {
+        "asset": _asset_payload(asset),
+        "survey": study_view.survey.model_dump(mode="json", by_alias=True),
+        "workflow": study_view.derived.workflow.model_dump(mode="json"),
+    }
+
+
+def handle_survey_generation(
+    session: Session,
+    settings: AppSettings,
+    study: Study,
+    *,
+    question_count: int,
+    instructions: Optional[str],
+    previous_schema: Optional[Dict[str, Any]],
+    conversation: Optional[List[Dict[str, str]]],
+) -> Dict[str, Any]:
+    """Draft a survey from saved study context. Nothing is persisted."""
+    if study.owner_user_id:
+        consume_daily_quota(
+            session,
+            settings,
+            owner_user_id=study.owner_user_id,
+            metric_key=METRIC_SURVEY_GENERATION,
+        )
+
+    sections = _get_sections(session, study)
+    product = sections["product"].value_json if sections["product"].status == "saved" else None
+    market = sections["market"].value_json if sections["market"].status == "saved" else None
+    audience = sections["audience"].value_json if sections["audience"].status == "saved" else None
+
+    if not product:
+        raise ValidationApiError(
+            "Save Product details before generating a survey so the questions can be grounded in your product."
+        )
+
+    result = generate_survey_schema(
+        settings=settings,
+        product=product,
+        market=market,
+        audience=audience,
+        question_count=question_count,
+        instructions=instructions,
+        previous_schema=previous_schema,
+        conversation=conversation,
+    )
+    session.commit()
+
+    context_warnings: List[str] = []
+    if not market:
+        context_warnings.append("Market context is not saved; competitor framing may be generic.")
+    if not audience:
+        context_warnings.append("Audience is not saved; screening questions may be generic.")
+
+    return {
+        "survey_schema": result["survey_schema"],
+        "summary": result["summary"],
+        "warnings": list(result["warnings"]) + context_warnings,
+        "question_count": len(result["survey_schema"].get("questions") or []),
+    }
+
+
+def accept_generated_survey(
+    session: Session,
+    settings: AppSettings,
+    study: Study,
+    *,
+    survey_schema: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Persist a generated survey draft as the study's survey section."""
+    validator = load_module("backend.survey.validator", settings.legacy_app_root)
+    try:
+        validated = validator.validate_survey_schema(survey_schema).model_dump()
+    except ValueError as exc:
+        raise ValidationApiError(f"Survey draft is not valid: {exc}") from exc
+
+    payload = json.dumps(validated, indent=2, ensure_ascii=False).encode("utf-8")
+    asset = _create_asset_from_bytes(
+        session,
+        settings,
+        study,
+        asset_type="survey_upload",
+        original_filename="ai-generated-survey.json",
+        mime_type="application/json",
+        payload=payload,
+    )
+    _save_section(session, study, "survey", validated, source_asset=asset)
     _recompute_lifecycle_status(session, study)
     session.commit()
     session.refresh(study)

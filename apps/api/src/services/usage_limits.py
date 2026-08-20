@@ -18,11 +18,13 @@ METRIC_PRODUCT_IMAGE_ANALYSIS: Final[str] = "product_image_analysis"
 METRIC_SIMULATION_RUN: Final[str] = "simulation_run"
 METRIC_STABILITY_CHECK: Final[str] = "stability_check"
 METRIC_INTERVIEW_RUN: Final[str] = "interview_run"
+METRIC_SURVEY_GENERATION: Final[str] = "survey_generation"
 
 PROVIDER_BACKED_METRICS: Final[set[str]] = {
     METRIC_SIMULATION_RUN,
     METRIC_STABILITY_CHECK,
     METRIC_INTERVIEW_RUN,
+    METRIC_SURVEY_GENERATION,
 }
 PROVIDER_BACKED_JOB_TYPES: Final[set[str]] = {
     "simulation_run",
