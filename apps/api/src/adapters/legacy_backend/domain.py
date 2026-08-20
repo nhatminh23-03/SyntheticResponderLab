@@ -1539,10 +1539,10 @@ def build_insights_view(
         realism_module=realism,
     )
 
-    barrier_ranking = _build_barrier_ranking(df)
-    message_performance = _build_message_performance(df)
-    use_case_share = _build_use_case_share(df)
-    interest_ladder = _build_interest_ladder(df)
+    barrier_ranking = _build_barrier_ranking(df, study_mode)
+    message_performance = _build_message_performance(df, study_mode)
+    use_case_share = _build_use_case_share(df, study_mode)
+    interest_ladder = _build_interest_ladder(df, study_mode)
     segment_heatmap = _build_segment_heatmap(df, barrier_ranking, message_performance)
     model_difference_chart = _build_model_difference_chart(df)
 
@@ -2791,13 +2791,34 @@ def _build_segment_story(
     }
 
 
-def _build_barrier_ranking(df: pd.DataFrame) -> dict[str, Any]:
+GENERIC_INSIGHT_UNAVAILABLE_MESSAGE = "This insight is not applicable to this survey."
+
+
+def _insight_unavailable_message(study_mode: Optional[str], neo_detail: str) -> str:
+    """Explain an unavailable insight in terms the reader can act on.
+
+    The Neo metrics key on that survey's question ids, so naming the missing question is useful *in Neo*
+    and meaningless anywhere else — a coffee-subscription study being told "Primary use question Q3 was
+    not found" implies the researcher mis-numbered something. Custom studies get generic wording.
+    """
+    if str(study_mode or "") == "neo_smart":
+        return neo_detail
+    return GENERIC_INSIGHT_UNAVAILABLE_MESSAGE
+
+
+def _build_barrier_ranking(df: pd.DataFrame, study_mode: Optional[str] = None) -> dict[str, Any]:
     if df.empty or "question_id" not in df.columns:
         return {"available": False, "message": "No records available.", "rows": []}
 
     barrier_df = df[df["question_id"].astype(str).str.startswith("Q5_")].copy()
     if barrier_df.empty:
-        return {"available": False, "message": "Barrier matrix items were not found in this run.", "rows": []}
+        return {
+            "available": False,
+            "message": _insight_unavailable_message(
+                study_mode, "Barrier matrix items were not found in this run."
+            ),
+            "rows": [],
+        }
 
     rows: list[dict[str, Any]] = []
     for question_id, qdf in barrier_df.groupby("question_id"):
@@ -2818,7 +2839,7 @@ def _build_barrier_ranking(df: pd.DataFrame) -> dict[str, Any]:
     return {"available": True, "rows": rows}
 
 
-def _build_message_performance(df: pd.DataFrame) -> dict[str, Any]:
+def _build_message_performance(df: pd.DataFrame, study_mode: Optional[str] = None) -> dict[str, Any]:
     if df.empty:
         return {"available": False, "message": "No records available.", "rows": []}
 
@@ -2842,16 +2863,24 @@ def _build_message_performance(df: pd.DataFrame) -> dict[str, Any]:
     if not rows:
         return {
             "available": False,
-            "message": "Positioning concept pairs were not found in this run.",
+            "message": _insight_unavailable_message(
+                study_mode, "Positioning concept pairs were not found in this run."
+            ),
             "rows": [],
         }
     return {"available": True, "rows": rows}
 
 
-def _build_use_case_share(df: pd.DataFrame) -> dict[str, Any]:
+def _build_use_case_share(df: pd.DataFrame, study_mode: Optional[str] = None) -> dict[str, Any]:
     distribution = _compute_question_answer_distribution(df, "Q3")
     if getattr(distribution, "empty", True):
-        return {"available": False, "message": "Primary use question Q3 was not found.", "rows": []}
+        return {
+            "available": False,
+            "message": _insight_unavailable_message(
+                study_mode, "Primary use question Q3 was not found."
+            ),
+            "rows": [],
+        }
 
     rows = [
         {
@@ -2864,7 +2893,7 @@ def _build_use_case_share(df: pd.DataFrame) -> dict[str, Any]:
     return {"available": True, "rows": rows}
 
 
-def _build_interest_ladder(df: pd.DataFrame) -> dict[str, Any]:
+def _build_interest_ladder(df: pd.DataFrame, study_mode: Optional[str] = None) -> dict[str, Any]:
     if df.empty:
         return {"available": False, "message": "No records available.", "rows": []}
 
@@ -2891,7 +2920,13 @@ def _build_interest_ladder(df: pd.DataFrame) -> dict[str, Any]:
         )
 
     if not rows:
-        return {"available": False, "message": "Core decision-ladder questions were not found.", "rows": []}
+        return {
+            "available": False,
+            "message": _insight_unavailable_message(
+                study_mode, "Core decision-ladder questions were not found."
+            ),
+            "rows": [],
+        }
     return {"available": True, "rows": rows}
 
 
