@@ -381,6 +381,20 @@ body {
     color 220ms ease;
 }
 
+.theme-select,
+.theme-select option {
+  color: var(--color-text-primary);
+  background-color: var(--color-surface);
+}
+
+:root .theme-select {
+  color-scheme: dark;
+}
+
+[data-theme="light"] .theme-select {
+  color-scheme: light;
+}
+
 ::selection {
   background: var(--selection-bg);
 }

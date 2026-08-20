@@ -243,6 +243,7 @@ INSTRUCTIONS:
 - Do NOT give generic marketing-speak answers. Reflect the real tensions, trade-offs, and priorities your persona would have.
 - Keep each answer substantive: 3–6 sentences minimum, conversational in tone.
 - When asked about the product, engage with it honestly — you may be skeptical, curious, excited, or uncertain depending on your situation.
+- Treat every supplied list (features, use cases, barriers, answer options, and similar items) as unordered context. Do not infer ranking, preference, or importance from the order in which items appear.
 - You will be given a JSON schema to follow. Return ONLY valid JSON — no preamble, no markdown fences."""
 
     return system_prompt

@@ -7,6 +7,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -40,6 +41,7 @@ export function StudyProvider({ children }: PropsWithChildren) {
   const [studyBootstrapError, setStudyBootstrapError] = useState<string | null>(
     null
   );
+  const bootstrapStartedRef = useRef(false);
 
   const persistStudy = useCallback((nextStudy: CanonicalStudy | null) => {
     setStudyState(nextStudy);
@@ -143,6 +145,21 @@ export function StudyProvider({ children }: PropsWithChildren) {
         return;
       }
 
+      if (bootstrapStartedRef.current) {
+        // React Strict Mode may run this effect a second time after the first
+        // pass has been cleaned up. If a saved study exists, let the second
+        // pass retry its detail request so a transient 500 cannot leave the
+        // hero permanently stuck on “Preparing Setup…”.
+        const savedStudyId = window.sessionStorage.getItem(
+          ACTIVE_STUDY_SESSION_STORAGE_KEY
+        );
+        if (savedStudyId) {
+          void refreshStudy(savedStudyId);
+        }
+        return;
+      }
+      bootstrapStartedRef.current = true;
+
       window.localStorage.removeItem(LEGACY_LOCAL_STORAGE_KEY);
 
       const savedStudyId = window.sessionStorage.getItem(
@@ -177,7 +194,7 @@ export function StudyProvider({ children }: PropsWithChildren) {
     return () => {
       cancelled = true;
     };
-  }, [createNewStudy, persistStudy]);
+  }, [createNewStudy, persistStudy, refreshStudy]);
 
   const setStudy = useCallback(
     (nextStudy: CanonicalStudy | null) => {

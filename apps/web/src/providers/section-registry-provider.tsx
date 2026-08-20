@@ -22,7 +22,7 @@ type SectionRegistryContextValue = {
     id: WorkflowSectionId,
     element: HTMLElement | null
   ) => void;
-  scrollToSection: (id: WorkflowSectionId) => void;
+  scrollToSection: (id: WorkflowSectionId, options?: { resetTarget?: boolean }) => void;
   goNextSection: () => void;
   goPrevSection: () => void;
   goActiveSectionDown: () => void;
@@ -251,7 +251,7 @@ export function SectionRegistryProvider({ children }: PropsWithChildren) {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  const scrollToSection = useCallback((id: WorkflowSectionId) => {
+  const scrollToSection = useCallback((id: WorkflowSectionId, options?: { resetTarget?: boolean }) => {
     if (navigationLockedRef.current) {
       return;
     }
@@ -273,11 +273,13 @@ export function SectionRegistryProvider({ children }: PropsWithChildren) {
     const top = element.getBoundingClientRect().top + window.scrollY - navHeight - (isDesktopRef.current ? 0 : 12);
 
     if (scrollContainer) {
+      const rememberedTargetTop = rememberedScrollPositionsRef.current[id] ?? 0;
+      const targetTop = options?.resetTarget ? 0 : rememberedTargetTop;
       scrollContainer.scrollTo({
-        top: 0,
+        top: targetTop,
         behavior: "auto",
       });
-      rememberedScrollPositionsRef.current[id] = 0;
+      rememberedScrollPositionsRef.current[id] = targetTop;
     }
 
     window.scrollTo({

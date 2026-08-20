@@ -17,6 +17,7 @@ import { BadgeChip } from "@/components/ui/badge-chip";
 import { Button } from "@/components/ui/button";
 import {
   Field,
+  SelectInput,
   TextAreaInput,
   TextInput,
   TokenInput,
@@ -117,6 +118,25 @@ const NEO_PRODUCT_DEFAULTS: ProductDraft = {
   notes: "Demo preset based on Neo Smart Living materials.",
 };
 
+const INDUSTRY_OPTIONS = [
+  "Consumer goods",
+  "Apparel and accessories",
+  "Beauty and personal care",
+  "Food and beverage",
+  "Home and garden",
+  "Technology and software",
+  "Financial services",
+  "Healthcare",
+  "Education",
+  "Travel and hospitality",
+  "Media and entertainment",
+  "Professional services",
+  "Real estate and construction",
+  "Automotive and transportation",
+  "Energy and utilities",
+  "Nonprofit and public sector",
+];
+
 export function ProductSection() {
   const {
     studyId,
@@ -129,6 +149,7 @@ export function ProductSection() {
   const { scrollToSection } = useSectionRegistry();
   const [draft, setDraft] = useState<ProductDraft>(EMPTY_PRODUCT_DRAFT);
   const [savedSnapshot, setSavedSnapshot] = useState<string>("");
+  const [isProductReset, setIsProductReset] = useState(false);
   const [studyMode, setStudyMode] = useState<string | null>(null);
   const [status, setStatus] = useState<ProductStatusState>({
     tone: "neutral",
@@ -177,7 +198,9 @@ export function ProductSection() {
         studyMode: study.study_mode.value,
       });
       const nextDraft =
-        seedSource === "saved"
+        isProductReset
+          ? EMPTY_PRODUCT_DRAFT
+          : seedSource === "saved"
           ? productPayloadToDraft(study.product?.value)
           : seedSource === "neo_default"
             ? { ...NEO_PRODUCT_DEFAULTS }
@@ -203,7 +226,9 @@ export function ProductSection() {
         setStatus({
           tone: seedSource === "saved" ? "success" : "neutral",
           message:
-            seedSource === "saved"
+            isProductReset
+              ? "Product details were cleared. Add your own details, then save when ready."
+              : seedSource === "saved"
               ? "Loaded your saved product details."
               : seedSource === "neo_default"
                 ? "Neo demo defaults loaded. Review and save if you want to keep them."
@@ -222,6 +247,7 @@ export function ProductSection() {
     study?.product?.updated_at,
     study?.product?.status,
     study?.study_mode?.value,
+    isProductReset,
   ]);
 
   useEffect(() => {
@@ -296,6 +322,7 @@ export function ProductSection() {
 
       await saveProduct(resolvedStudyId, draftPayload);
       await refreshStudy(resolvedStudyId);
+      setIsProductReset(false);
       setSavedSnapshot(JSON.stringify(draftPayload));
       setStatus({
         tone: "success",
@@ -316,19 +343,21 @@ export function ProductSection() {
   }
 
   function handleClearSavedContext() {
+    setIsProductReset(true);
     setDraft(EMPTY_PRODUCT_DRAFT);
     setStatus({
       tone: "warning",
       message:
-        "Product details were reset locally. Save new details if you want to replace what is currently saved.",
+        "Product details were cleared. Add your own details, then save when ready. Neo content will not return unless you load the demo examples.",
     });
   }
 
   function handleResetToNeoDefaults() {
+    setIsProductReset(false);
     setDraft(NEO_PRODUCT_DEFAULTS);
     setStatus({
       tone: "neutral",
-      message: "Neo demo defaults loaded. Review and save if you want to keep them.",
+      message: "Neo demo examples loaded. Review them carefully; they are examples until you save.",
     });
   }
 
@@ -577,10 +606,19 @@ export function ProductSection() {
                     />
                   </Field>
                   <Field label="Industry">
-                    <TextInput
+                    <SelectInput
                       value={draft.industry}
                       onChange={(value) => updateDraft("industry", value)}
-                      placeholder="Backyard modular studios"
+                      options={[
+                        ...(draft.industry && !INDUSTRY_OPTIONS.includes(draft.industry)
+                          ? [{ label: `${draft.industry} (current)`, value: draft.industry }]
+                          : []),
+                        { label: "Choose an industry", value: "" },
+                        ...INDUSTRY_OPTIONS.map((industry) => ({
+                          label: industry,
+                          value: industry,
+                        })),
+                      ]}
                     />
                   </Field>
                 </div>
@@ -735,8 +773,8 @@ export function ProductSection() {
                         Upload Product Image
                       </div>
                       <p className="mt-2 max-w-xs text-sm leading-6 text-app-muted">
-                        Upload a product image when you want Google Vision to add
-                        visual cues like labels, objects, colors, and text.
+                        Upload a product image to let AI extract visual cues like
+                        labels, objects, colors, and text.
                       </p>
                       <div className="mt-3 text-xs uppercase tracking-[0.22em] text-app-muted">
                         JPG, JPEG, PNG
@@ -858,7 +896,7 @@ export function ProductSection() {
                 title="Notes"
                 description="Optional notes, caveats, or special context for this study."
               >
-                <Field label="Notes">
+                <Field label="Anything else you want to add to improve research accuracy.">
                   <TextAreaInput
                     value={draft.notes}
                     onChange={(value) => updateDraft("notes", value)}

@@ -70,7 +70,7 @@ export function WorkflowNav() {
         <div className="mx-auto flex h-[var(--nav-height)] w-full max-w-[92rem] items-center gap-2 px-4 xl:gap-4 xl:px-8">
           <button
             type="button"
-            onClick={() => scrollToSection("main")}
+            onClick={() => scrollToSection("main", { resetTarget: true })}
             className="flex min-w-0 w-[clamp(10rem,18vw,18rem)] max-w-[18rem] items-center gap-3 px-1 py-1 text-left"
           >
             <AppLogoMark className="h-10 w-10" />
@@ -93,7 +93,7 @@ export function WorkflowNav() {
                   <button
                     key={section.id}
                     type="button"
-                    onClick={() => scrollToSection(section.id)}
+                    onClick={() => scrollToSection(section.id, { resetTarget: true })}
                     disabled={navigationLocked}
                     aria-current={isActive ? "page" : undefined}
                     className={cn(
@@ -147,7 +147,7 @@ export function WorkflowNav() {
           <div className="flex items-start justify-between gap-3">
             <button
               type="button"
-              onClick={() => scrollToSection("main")}
+              onClick={() => scrollToSection("main", { resetTarget: true })}
               className="flex min-w-0 flex-1 items-center gap-2.5 px-0 py-0 text-left"
             >
               <AppLogoMark className="h-9 w-9" />

@@ -269,6 +269,7 @@ export function RunSimulationSection() {
     <SectionWrapper
       id="run-simulation"
       scrollable
+      className="lg:isolate lg:overflow-hidden"
       contentClassName="relative scrollbar-hidden"
     >
       <div className="grid items-start gap-8">
@@ -539,9 +540,14 @@ function buildRunStatus(
   if (latestRun?.status === "completed" && latestRun.result) {
     const warningCount = latestRun.result.warnings?.length ?? 0;
     if (warningCount > 0) {
+      const warningPreview = (latestRun.result.warnings ?? [])
+        .slice(0, 2)
+        .map((warning) => String(warning).trim())
+        .filter(Boolean)
+        .join(" | ");
       return {
         tone: "warning",
-        message: `Run completed with ${warningCount} warning${warningCount === 1 ? "" : "s"}. Review the prompt setup and result summary before moving to Analysis.`,
+        message: `Run completed with ${warningCount} warning${warningCount === 1 ? "" : "s"}. ${warningPreview ? `What happened: ${warningPreview} ` : ""}See the “Run warnings” panel below for the full details and where to look before moving to Result.`,
       };
     }
     return {

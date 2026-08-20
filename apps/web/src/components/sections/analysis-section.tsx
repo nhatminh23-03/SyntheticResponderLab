@@ -107,6 +107,7 @@ export function AnalysisSection() {
     <SectionWrapper
       id="analysis"
       scrollable
+      className="lg:isolate lg:overflow-hidden"
       contentClassName="relative scrollbar-hidden"
     >
       <div className="grid items-start gap-8">

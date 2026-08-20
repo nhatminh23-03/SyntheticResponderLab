@@ -76,6 +76,7 @@ async function forward(request: NextRequest, params: Promise<{ path: string[] }>
   headers.delete("host");
   headers.delete("content-length");
   headers.delete("connection");
+  headers.delete("expect");
 
   // Strip any client-supplied identity headers to prevent spoofing through the proxy.
   headers.delete(AUTH_HEADER_USER_ID);

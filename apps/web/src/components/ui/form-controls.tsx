@@ -60,17 +60,33 @@ export function SelectInput({
   options,
 }: SelectInputProps) {
   return (
-    <select
-      value={value}
-      onChange={(event) => onChange(event.target.value)}
-      className="w-full appearance-none rounded-2xl border px-4 py-3 text-sm text-app-text outline-none transition [background:var(--control-bg)] [border-color:var(--control-border)] focus:[border-color:var(--color-border-strong)] focus:[background:var(--control-bg-hover)] focus:[box-shadow:var(--focus-ring-shadow)]"
-    >
-      {options.map((option) => (
-        <option key={option.value} value={option.value}>
-          {option.label}
-        </option>
-      ))}
-    </select>
+    <div className="relative">
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="theme-select w-full appearance-none rounded-2xl border px-4 py-3 pr-11 text-sm text-app-text outline-none transition [background:var(--control-bg)] [border-color:var(--control-border)] focus:[border-color:var(--color-border-strong)] focus:[background:var(--control-bg-hover)] focus:[box-shadow:var(--focus-ring-shadow)]"
+      >
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+      <span
+        aria-hidden="true"
+        className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-app-muted"
+      >
+        <ChevronDownIcon />
+      </span>
+    </div>
+  );
+}
+
+function ChevronDownIcon() {
+  return (
+    <svg viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="m5 7.5 5 5 5-5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }
 
@@ -181,6 +197,7 @@ type TokenInputProps = {
   onChange: (value: string[]) => void;
   placeholder?: string;
   addLabel?: string;
+  suggestions?: string[];
 };
 
 export function TokenInput({
@@ -188,6 +205,7 @@ export function TokenInput({
   onChange,
   placeholder = "Type and press Enter",
   addLabel = "Add",
+  suggestions = [],
 }: TokenInputProps) {
   function addToken(rawValue: string) {
     const nextToken = rawValue.trim();
@@ -207,6 +225,35 @@ export function TokenInput({
         placeholder={placeholder}
         addLabel={addLabel}
       />
+      {suggestions.length > 0 ? (
+        <div className="mt-3">
+          <div className="mb-2 text-xs uppercase tracking-[0.18em] text-app-muted">
+            Suggestions — click to add
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {suggestions.map((suggestion) => {
+              const isAdded = value.includes(suggestion);
+              return (
+                <button
+                  key={suggestion}
+                  type="button"
+                  onClick={() => addToken(suggestion)}
+                  disabled={isAdded}
+                  className={cn(
+                    "rounded-full border px-3 py-1.5 text-sm transition",
+                    isAdded
+                      ? "cursor-default text-app-muted/60 [border-color:var(--control-border)] [background:var(--status-neutral-bg)]"
+                      : "text-app-muted [border-color:var(--control-border)] hover:border-app-cyan/30 hover:text-app-cyan [background:var(--button-secondary-bg)]"
+                  )}
+                >
+                  {isAdded ? "Added · " : "+ "}
+                  {suggestion}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
       <div className="mt-3 flex flex-wrap gap-2">
         {value.length === 0 ? (
           <span className="text-xs text-app-muted">
@@ -214,15 +261,20 @@ export function TokenInput({
           </span>
         ) : null}
         {value.map((token) => (
-          <button
+          <div
             key={token}
-            type="button"
-            onClick={() => onChange(value.filter((item) => item !== token))}
             className="inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm text-app-text transition [background:var(--control-bg-hover)] [border-color:var(--control-border)] hover:border-app-cyan/25 hover:text-app-cyan"
           >
             <span>{token}</span>
-            <span className="text-app-muted">×</span>
-          </button>
+            <button
+              type="button"
+              aria-label={`Remove ${token}`}
+              onClick={() => onChange(value.filter((item) => item !== token))}
+              className="text-app-muted transition hover:text-app-cyan"
+            >
+              ×
+            </button>
+          </div>
         ))}
       </div>
     </div>

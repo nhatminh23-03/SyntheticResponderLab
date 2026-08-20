@@ -177,6 +177,58 @@ export function AudienceSection() {
   const [isClearing, setIsClearing] = useState(false);
 
   useEffect(() => {
+    const zip = draft.zip_code.trim();
+    if (!/^\d{5}$/.test(zip)) {
+      return;
+    }
+
+    const controller = new AbortController();
+    const lookupZip = async () => {
+      try {
+        const response = await fetch(`https://api.zippopotam.us/us/${zip}`, {
+          signal: controller.signal,
+        });
+        if (!response.ok) {
+          return;
+        }
+
+        const payload = (await response.json()) as {
+          places?: Array<{
+            [key: string]: string | undefined;
+            "place name"?: string;
+            state?: string;
+          }>;
+        };
+        const place = payload.places?.[0];
+        const city = place?.["place name"]?.trim();
+        const state = place?.state?.trim();
+        if (!city && !state) {
+          return;
+        }
+
+        setDraft((current) => ({
+          ...current,
+          metro: current.metro.trim() ? current.metro : city ?? current.metro,
+          state: current.state === "Any" ? state ?? current.state : current.state,
+        }));
+        setStatus((current) =>
+          current.tone === "error"
+            ? current
+            : {
+                tone: "neutral",
+                message: `ZIP ${zip} matched ${[city, state].filter(Boolean).join(", ")}.`,
+              }
+        );
+      } catch {
+        // ZIP lookup is an enhancement; the audience form remains usable offline.
+      }
+    };
+
+    void lookupZip();
+    return () => controller.abort();
+  }, [draft.zip_code]);
+
+  useEffect(() => {
     let cancelled = false;
 
     async function hydrateAudience() {
@@ -521,7 +573,7 @@ export function AudienceSection() {
                     addLabel="Add Tag"
                   />
                 </Field>
-                <Field label="Notes">
+                <Field label="Anything else you want to add to improve research accuracy.">
                   <TextAreaInput
                     value={draft.notes}
                     onChange={(value) => updateDraft("notes", value)}

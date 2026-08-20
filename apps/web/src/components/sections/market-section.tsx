@@ -81,6 +81,14 @@ const NEO_MARKET_DEFAULT_SEEDS: Array<
   },
 ];
 
+const SUBSTITUTE_SUGGESTIONS = [
+  "DIY alternative",
+  "Traditional contractor-built option",
+  "Rental or shared-space alternative",
+  "Do nothing / delay purchase",
+  "Used or secondhand option",
+];
+
 export function MarketSection() {
   const {
     studyId,
@@ -359,6 +367,7 @@ export function MarketSection() {
                     value={draft.substitutes}
                     onChange={(value) => updateDraft("substitutes", value)}
                     placeholder="Add a substitute"
+                    suggestions={SUBSTITUTE_SUGGESTIONS}
                   />
                 </Field>
 
@@ -430,7 +439,7 @@ export function MarketSection() {
                 title="Notes"
                 description="Optional notes for market assumptions or caveats."
               >
-                <Field label="Notes">
+                <Field label="Anything else you want to add to improve research accuracy.">
                   <TextAreaInput
                     value={draft.notes}
                     onChange={(value) => updateDraft("notes", value)}

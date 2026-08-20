@@ -41,8 +41,8 @@ export function MainHeroSection() {
       contentClassName="relative lg:justify-center"
     >
       <div className="grid gap-8 lg:min-h-[min(calc(100svh-var(--nav-height)-2rem),46rem)] lg:items-center xl:grid-cols-[minmax(0,0.98fr)_minmax(24rem,0.92fr)] xl:gap-10">
-        <RevealOnScroll className="relative z-10 max-w-2xl">
-          <div className="max-w-[42rem]">
+        <RevealOnScroll className="relative z-10 min-w-0 max-w-2xl">
+          <div className="min-w-0 max-w-[42rem]">
             <h1 className="text-balance font-display text-[2.7rem] font-medium leading-[0.94] tracking-[-0.065em] text-app-text sm:text-[3.35rem] md:text-[4rem] xl:text-[5rem]">
               Grounded{" "}
               <span className="text-app-cyan [text-shadow:var(--hero-title-accent-shadow)]">
@@ -51,7 +51,7 @@ export function MainHeroSection() {
               Respondent Lab
             </h1>
 
-            <p className="mt-4 max-w-xl text-[0.98rem] leading-7 text-app-muted sm:mt-5 md:text-[1.05rem]">
+            <p className="mt-4 max-w-xl break-words text-[0.98rem] leading-7 text-app-muted sm:mt-5 md:text-[1.05rem]">
               Simulate survey responses with realistic AI personas before you
               run live research. Define your audience, product, market, and
               survey, then explore likely insights with confidence.
@@ -86,7 +86,7 @@ export function MainHeroSection() {
             </div>
           ) : null}
 
-          <div className="mt-6 grid max-w-2xl gap-3 md:grid-cols-3">
+          <div className="mt-6 grid min-w-0 max-w-2xl gap-3 md:grid-cols-3">
             <MetricPill value="Realistic" label="grounded personas" accent="gold" />
             <MetricPill value="Connected" label="live data" />
             <MetricPill value="Guided" label="step-by-step flow" />

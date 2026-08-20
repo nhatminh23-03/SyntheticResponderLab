@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import Counter
 from datetime import datetime, timezone
 from html import unescape
+import base64
 import inspect
 import json
 from pathlib import Path
@@ -11,6 +12,7 @@ from typing import Any, Dict, List, Optional
 from urllib.parse import urlsplit
 
 import pandas as pd
+import requests
 from pydantic import ValidationError
 
 from src.adapters.legacy_backend.runtime import load_module, load_service_account_info, temporary_env
@@ -2963,14 +2965,21 @@ def product_image_analysis(*, settings: AppSettings, file_bytes: bytes) -> dict:
     if not settings.google_cloud_api_key and service_account is None:
         raise ProviderUnavailableApiError("Google Vision credentials are required for product image analysis.")
 
-    vision = load_module("backend.vision", settings.legacy_app_root)
-    try:
-        with temporary_env({"GOOGLE_CLOUD_API_KEY": settings.google_cloud_api_key}):
-            analysis = vision.extract_full_analysis(file_bytes, service_account_info=service_account)
-    except RuntimeError as exc:
-        raise ProviderUnavailableApiError(str(exc)) from exc
-    except Exception as exc:
-        raise LegacyModuleApiError("Product image analysis failed.") from exc
+    if service_account is None and settings.openrouter_api_key:
+        analysis = _openrouter_product_image_analysis(settings=settings, file_bytes=file_bytes)
+    else:
+        vision = load_module("backend.vision", settings.legacy_app_root)
+        try:
+            with temporary_env({"GOOGLE_CLOUD_API_KEY": settings.google_cloud_api_key}):
+                analysis = vision.extract_full_analysis(file_bytes, service_account_info=service_account)
+        except RuntimeError as exc:
+            if not settings.openrouter_api_key:
+                raise ProviderUnavailableApiError(str(exc)) from exc
+            analysis = _openrouter_product_image_analysis(settings=settings, file_bytes=file_bytes)
+        except Exception as exc:
+            if not settings.openrouter_api_key:
+                raise LegacyModuleApiError("Product image analysis failed.") from exc
+            analysis = _openrouter_product_image_analysis(settings=settings, file_bytes=file_bytes)
 
     colors = []
     for color in analysis.get("colors", []):
@@ -2990,4 +2999,77 @@ def product_image_analysis(*, settings: AppSettings, file_bytes: bytes) -> dict:
             "product_image_objects": analysis.get("objects", []),
             "product_image_colors": colors,
         },
+    }
+
+
+def _openrouter_product_image_analysis(*, settings: AppSettings, file_bytes: bytes) -> dict:
+    """Use the configured multimodal LLM when Google Vision is unavailable locally."""
+    endpoint = f"{settings.openrouter_base_url.rstrip('/')}/chat/completions"
+    image_data_url = "data:image/jpeg;base64," + base64.b64encode(file_bytes).decode("ascii")
+    prompt = (
+        "Analyze this product image for a market-research product brief. Return strict JSON only with this shape: "
+        '{"labels":["short label"],"objects":["short object"],'
+        '"colors":[{"hex":"#000000","percentage":0}],"text":"detected text"}. '
+        "Use up to 12 labels, up to 12 objects, and up to 6 dominant colors. "
+        "Use an empty string when no text is legible and estimate color percentages as whole numbers."
+    )
+    try:
+        response = requests.post(
+            endpoint,
+            headers={
+                "Authorization": f"Bearer {settings.openrouter_api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": "openai/gpt-4o-mini",
+                "messages": [
+                    {"role": "user", "content": [
+                        {"type": "text", "text": prompt},
+                        {"type": "image_url", "image_url": {"url": image_data_url}},
+                    ]}
+                ],
+                "temperature": 0.1,
+                "max_tokens": 900,
+                "response_format": {"type": "json_object"},
+            },
+            timeout=35,
+        )
+    except requests.RequestException as exc:
+        raise ProviderUnavailableApiError(f"Image analysis provider request failed: {exc}") from exc
+
+    if response.status_code >= 400:
+        raise ProviderUnavailableApiError(
+            f"Image analysis provider returned HTTP {response.status_code}."
+        )
+
+    try:
+        payload = response.json()
+        raw_content = payload["choices"][0]["message"]["content"]
+        parsed = json.loads(raw_content if isinstance(raw_content, str) else "")
+    except (KeyError, IndexError, TypeError, ValueError) as exc:
+        raise ProviderUnavailableApiError("Image analysis provider returned malformed JSON.") from exc
+
+    if not isinstance(parsed, dict):
+        raise ProviderUnavailableApiError("Image analysis provider returned an invalid result.")
+
+    labels = [str(item).strip() for item in parsed.get("labels", []) if str(item).strip()][:12]
+    objects = [str(item).strip() for item in parsed.get("objects", []) if str(item).strip()][:12]
+    colors = parsed.get("colors", []) if isinstance(parsed.get("colors", []), list) else []
+    normalized_colors = []
+    for color in colors[:6]:
+        if not isinstance(color, dict):
+            continue
+        hex_value = str(color.get("hex", "")).strip()
+        if not hex_value:
+            continue
+        normalized_colors.append({
+            "hex": hex_value,
+            "percentage": color.get("percentage", 0),
+        })
+
+    return {
+        "labels": labels,
+        "objects": objects,
+        "colors": normalized_colors,
+        "text": str(parsed.get("text", "") or "").strip(),
     }

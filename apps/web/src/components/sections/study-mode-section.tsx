@@ -221,29 +221,39 @@ export function StudyModeSection() {
           </div>
         </RevealOnScroll>
 
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid items-stretch gap-4 md:grid-cols-2">
           {studyModeCards.map((card, index) => {
             const isSelected = selectedMode === card.value;
 
             return (
-              <RevealOnScroll key={card.value} delay={0.05 + index * 0.08}>
+              <RevealOnScroll
+                key={card.value}
+                delay={0.05 + index * 0.08}
+                className="h-full"
+              >
                 <motion.button
                   type="button"
                   onClick={() => handleSelectMode(card.value)}
                   whileHover={{ y: -3 }}
                   transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
-                  className="w-full text-left"
+                  aria-pressed={isSelected}
+                  className="group h-full w-full text-left"
                   disabled={isBusy}
                 >
                   <GlassPanel
                     className={cn(
-                      "h-full p-4 transition duration-300 sm:p-5",
+                      "h-full min-h-[31rem] p-4 transition duration-300 sm:p-5",
                       isSelected
-                        ? "[border-color:var(--color-border-strong)] [background:var(--color-brand-primary-soft)] [box-shadow:var(--button-primary-shadow)]"
+                        ? "[border-color:var(--color-border-strong)] [background:var(--color-brand-primary-soft)] [box-shadow:0_0_0_2px_var(--color-brand-primary),var(--button-primary-shadow)]"
                         : "hover:[border-color:var(--color-border-strong)] hover:[background:var(--button-secondary-bg-hover)]"
                     )}
                   >
-                    <div className="flex h-full flex-col rounded-[1.35rem] border border-app-border p-4 sm:rounded-[1.45rem] sm:p-5 [background:var(--theme-panel-gradient)]">
+                    <div className={cn(
+                      "flex h-full flex-col rounded-[1.35rem] border p-4 transition sm:rounded-[1.45rem] sm:p-5 [background:var(--theme-panel-gradient)]",
+                      isSelected
+                        ? "[border-color:var(--color-brand-primary)] [box-shadow:inset_0_0_0_1px_var(--color-brand-primary),0_0_26px_var(--color-brand-primary-soft)]"
+                        : "border-app-border"
+                    )}>
                       <div className="flex items-start justify-between gap-4">
                         <div>
                           <div className="flex flex-wrap items-center gap-3">
