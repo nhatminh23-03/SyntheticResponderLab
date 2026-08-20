@@ -1352,3 +1352,40 @@ def test_request_body_validation_error_returns_clean_400(client):
     assert payload["code"] == "validation_error"
     # Must be JSON-serializable all the way down.
     assert json.loads(json.dumps(payload["details"]))
+
+def test_simulation_run_reports_unavailable_not_server_error_for_retired_model(client, monkeypatch):
+    """F-04b: a model the provider no longer serves is a configuration problem, not a crash.
+
+    It should surface like the missing-credentials case — 503 provider_unavailable with the
+    provider's own message and a saved failed job — rather than a 500 that reads as an app bug.
+    """
+    import json as _json
+
+    from src.adapters.legacy_backend.runtime import load_module
+
+    study_id = _create_ready_to_run_study(client)
+    settings = client.app.state.settings
+    settings.openrouter_api_key = "test-openrouter-key"
+
+    llm_client = load_module("backend.simulation.llm_client", settings.legacy_app_root)
+
+    class _NotFound:
+        status_code = 404
+        text = _json.dumps(
+            {"error": {"message": "No endpoints found for google/gemini-2.0-flash-001.", "code": 404}}
+        )
+
+        def json(self):
+            return _json.loads(self.text)
+
+    monkeypatch.setattr(llm_client.requests, "post", lambda url, headers, json, timeout: _NotFound())
+
+    response = client.post(f"/api/v1/studies/{study_id}/simulation-runs")
+
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "provider_unavailable"
+    assert "No endpoints found" in response.json()["error"]["message"]
+
+    latest = client.get(f"/api/v1/studies/{study_id}/simulation-runs/latest").json()["data"]["simulation_run"]
+    assert latest["status"] == "failed"
+    assert "No endpoints found" in latest["error"]["message"]

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from html import unescape
 import base64
@@ -20,7 +20,7 @@ from src.api.errors import serializable_validation_errors
 from src.adapters.legacy_backend.runtime import load_module, load_service_account_info, temporary_env
 from src.adapters.legacy_backend.survey_docx_fallback import parse_aytm_style_docx_to_validated_schema
 from src.config.settings import AppSettings
-from src.services.exceptions import LegacyModuleApiError, ProviderUnavailableApiError, ValidationApiError
+from src.services.exceptions import ApiError, LegacyModuleApiError, ProviderUnavailableApiError, ValidationApiError
 
 
 # Respondent requests are independent provider round-trips, so they are issued
@@ -390,6 +390,14 @@ def _build_prompt_payload_with_override(
     }
 
 
+# Provider statuses that will not resolve by trying again: the account cannot pay for the request, or
+# the requested model does not exist. Retrying or filling the gap with deterministic answers would
+# produce a complete-looking dataset that is entirely fabricated, so the run stops instead.
+# Verified against OpenRouter: 402 "requires more credits", 404 "No endpoints found for <model>",
+# 400 "<model> is not a valid model ID". Transient statuses (408, 429, 5xx) keep their fallback.
+_NON_RETRYABLE_PROVIDER_STATUSES = frozenset({400, 402, 404})
+
+
 def _extract_provider_error_detail(result: Dict[str, Any]) -> str:
     raw_text = str(result.get("raw_text") or "").strip()
     if raw_text:
@@ -410,6 +418,31 @@ def _extract_provider_error_detail(result: Dict[str, Any]) -> str:
     return str(result.get("error") or "Unknown provider error").strip()
 
 
+def _terminal_provider_error(result: Dict[str, Any], model_name: str) -> Optional[ApiError]:
+    """Return the error to raise if this provider result cannot be recovered by falling back.
+
+    Bad credentials and non-retryable statuses fail identically for every remaining respondent, so
+    filling their answers in would produce a complete-looking dataset that is entirely invented.
+    Returns ``None`` for transient failures (408, 429, 5xx), which keep the fallback path.
+
+    Kept separate from the record-assembly loop so the check can run as each response lands rather
+    than after the whole batch has been paid for.
+    """
+    if bool(result.get("ok")):
+        return None
+    status_code = result.get("status_code")
+    if status_code in {401, 403}:
+        return LegacyModuleApiError(
+            f"OpenRouter authentication failed: {_extract_provider_error_detail(result)}"
+        )
+    if status_code in _NON_RETRYABLE_PROVIDER_STATUSES:
+        return ProviderUnavailableApiError(
+            f"OpenRouter could not run model {model_name} (HTTP {status_code}): "
+            f"{_extract_provider_error_detail(result)}"
+        )
+    return None
+
+
 def _generate_live_response_records_with_debug(
     *,
     schemas: Any,
@@ -425,7 +458,7 @@ def _generate_live_response_records_with_debug(
     prompt_user_template_override: Optional[str],
     openrouter_timeout_sec: int = 45,
     max_concurrency: int = DEFAULT_SIMULATION_MAX_CONCURRENCY,
-) -> tuple[List[Any], Dict[str, Any]]:
+) -> tuple[List[Any], Dict[str, Any], List[bool]]:
     extract_answer_map = getattr(run_manager, "_extract_answer_map_from_openrouter_result")
     coerce_answer = getattr(run_manager, "_coerce_openrouter_answer_value")
     generate_mock_answer = getattr(run_manager, "_generate_mock_answer")
@@ -483,24 +516,47 @@ def _generate_live_response_records_with_debug(
             timeout=openrouter_timeout_sec,
         )
 
+    # A failure that will repeat for every respondent -- bad credentials, no credit, a model the
+    # provider does not serve -- is checked as each response lands rather than after the whole batch,
+    # so a misconfigured study costs a handful of requests instead of sample_size x models.
     worker_count = max(1, min(int(max_concurrency), len(respondent_model_pairs) or 1))
+    results: List[Optional[dict]] = [None] * len(respondent_model_pairs)
+
     if worker_count == 1 or len(respondent_model_pairs) <= 1:
-        results = [_dispatch(index) for index in range(len(respondent_model_pairs))]
+        for index in range(len(respondent_model_pairs)):
+            results[index] = _dispatch(index)
+            terminal = _terminal_provider_error(results[index], respondent_model_pairs[index][1])
+            if terminal is not None:
+                raise terminal
     else:
-        with ThreadPoolExecutor(max_workers=worker_count) as executor:
-            results = list(executor.map(_dispatch, range(len(respondent_model_pairs))))
+        executor = ThreadPoolExecutor(max_workers=worker_count)
+        try:
+            pending = {
+                executor.submit(_dispatch, index): index
+                for index in range(len(respondent_model_pairs))
+            }
+            for future in as_completed(pending):
+                index = pending[future]
+                results[index] = future.result()
+                terminal = _terminal_provider_error(results[index], respondent_model_pairs[index][1])
+                if terminal is not None:
+                    raise terminal
+        finally:
+            # Requests that have not started yet are dropped; the handful already in flight are left
+            # to finish on their own rather than blocking the error from reaching the caller. Their
+            # results are discarded.
+            executor.shutdown(wait=False, cancel_futures=True)
 
     for index, (respondent_id, model_name, respondent_index, rerun) in enumerate(respondent_model_pairs):
         persona = persona_profiles[(respondent_index - 1) % len(persona_profiles)]
         segment_label = persona.segment_label or "General Segment"
         result = results[index]
         if not bool(result.get("ok")):
+            # Anything terminal already stopped the run at dispatch, so every failure reaching this
+            # point is transient and is counted, reported, and filled from the fallback generator.
             request_errors += 1
             status_code = result.get("status_code")
             error_text = str(result.get("error") or "").lower()
-            if status_code in {401, 403}:
-                detail = _extract_provider_error_detail(result)
-                raise LegacyModuleApiError(f"OpenRouter authentication failed: {detail}")
             if status_code and int(status_code) >= 400:
                 provider_error_count += 1
             if "json" in error_text:
@@ -998,7 +1054,9 @@ def execute_simulation_run(
                 provider_model_name=provider_model_name,
                 records=records,
             )
-    except LegacyModuleApiError:
+    except ApiError:
+        # Already-classified failures (provider unavailable, validation, auth) carry their own status
+        # and message; re-wrapping them as a 500 would hide an actionable cause behind a crash.
         raise
     except Exception as exc:
         raise LegacyModuleApiError(f"Simulation execution failed: {exc}") from exc
