@@ -1986,6 +1986,8 @@ def _build_question_options(
                 "response_count": int(response_counts.get(question_id, 0)),
                 "question_order": index + 1,
                 "option_values": _extract_question_option_values(question),
+                "scale_min": question.get("min_value"),
+                "scale_max": question.get("max_value"),
             }
         )
 
@@ -2080,6 +2082,8 @@ def _build_analysis_dashboard_questions(
                 distribution_df,
                 chart_kind=chart_kind,
                 declared_options=list(option.get("option_values") or []),
+                scale_min=option.get("scale_min"),
+                scale_max=option.get("scale_max"),
             )
         elif chart_kind == "histogram":
             question_payload["histogram_bins"] = _compute_histogram_bins(question_df)
@@ -2116,11 +2120,39 @@ def _resolve_dashboard_chart_kind(question_df: pd.DataFrame, question_type: str)
     return "categorical_bar"
 
 
+def _likert_scale_position_labels(
+    declared_options: list[str],
+    scale_min: Optional[int],
+    scale_max: Optional[int],
+) -> dict[str, str]:
+    """Map a numeric answer onto the scale point it represents.
+
+    Models answer Likert questions with numbers while the question declares named scale points, so
+    "4" has to be resolved to the 4th declared option before counts can be matched. Only applied when
+    the declared options really are named and their count matches the declared range, so an
+    out-of-range or unexpected value is left alone and stays visible.
+    """
+    if scale_min is None or scale_max is None:
+        return {}
+    if scale_max < scale_min:
+        return {}
+    if len(declared_options) != (scale_max - scale_min + 1):
+        return {}
+    if all(str(option).strip().isdigit() for option in declared_options):
+        return {}
+    return {
+        str(value): str(declared_options[value - scale_min])
+        for value in range(scale_min, scale_max + 1)
+    }
+
+
 def _shape_distribution_rows(
     distribution_df: pd.DataFrame,
     *,
     chart_kind: str,
     declared_options: Optional[list[str]] = None,
+    scale_min: Optional[int] = None,
+    scale_max: Optional[int] = None,
 ) -> list[dict[str, Any]]:
     if distribution_df.empty and not declared_options:
         return []
@@ -2129,10 +2161,16 @@ def _shape_distribution_rows(
     total = sum(int(row.get("count") or 0) for row in rows)
 
     if declared_options:
-        counts_by_label = {
-            str(row.get("answer_display") or "No answer"): int(row.get("count") or 0)
-            for row in rows
-        }
+        scale_labels = (
+            _likert_scale_position_labels(declared_options, scale_min, scale_max)
+            if chart_kind == "likert"
+            else {}
+        )
+        counts_by_label: dict[str, int] = {}
+        for row in rows:
+            raw_label = str(row.get("answer_display") or "No answer")
+            label = scale_labels.get(raw_label, raw_label)
+            counts_by_label[label] = counts_by_label.get(label, 0) + int(row.get("count") or 0)
         ordered_rows = []
         seen_labels: set[str] = set()
         for option in declared_options:
@@ -2151,12 +2189,21 @@ def _shape_distribution_rows(
 
         extras = [
             {
-                "label": str(row.get("answer_display") or "No answer"),
+                "label": scale_labels.get(
+                    str(row.get("answer_display") or "No answer"),
+                    str(row.get("answer_display") or "No answer"),
+                ),
                 "count": int(row.get("count") or 0),
                 "percentage": float(row.get("percentage") or 0),
             }
             for row in rows
-            if str(row.get("answer_display") or "No answer") not in seen_labels
+            # Compare the *mapped* label: a numeric answer resolved onto a declared scale point has
+            # already been counted above, so re-emitting it would duplicate the bar.
+            if scale_labels.get(
+                str(row.get("answer_display") or "No answer"),
+                str(row.get("answer_display") or "No answer"),
+            )
+            not in seen_labels
         ]
         if chart_kind == "likert":
             extras.sort(key=lambda row: _likert_sort_key(str(row.get("label") or "")))
