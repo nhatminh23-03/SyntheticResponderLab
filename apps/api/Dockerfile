@@ -12,12 +12,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY apps/api /app/apps/api
-RUN mkdir -p /app/NeoSmart-Hackathon-App \
-    && cp -R /app/apps/api/legacy_runtime/backend /app/NeoSmart-Hackathon-App/backend \
-    && cp -R "/app/apps/api/legacy_runtime/Provided Info" "/app/NeoSmart-Hackathon-App/Provided Info" \
-    && cp -R /app/apps/api/legacy_runtime/data /app/NeoSmart-Hackathon-App/data \
-    && test -d /app/NeoSmart-Hackathon-App/backend \
-    && test -f /app/NeoSmart-Hackathon-App/data/processed/priors/age_income_priors.parquet
+# The legacy engine ships in-tree at apps/api/legacy_runtime and is used directly, so there is one
+# copy for local development and production rather than two that can drift.
+#
+# The ACS prior tables are part of that tree. Persona generation catches a missing-priors error and
+# substitutes heuristic profiles without failing, so an image built without them would quietly serve
+# demo-shaped people while reporting success. Fail the build instead.
+RUN test -d /app/apps/api/legacy_runtime/backend \
+    && test -f /app/apps/api/legacy_runtime/data/processed/priors/age_income_priors.parquet
 
 WORKDIR /app/apps/api
 

@@ -112,7 +112,7 @@ Required:
 | `APP_DEBUG` | Yes | `false` |
 | `DATABASE_URL` | Yes | Neon pooled Postgres connection string on the free path, or Render Postgres connection string on the paid path |
 | `ARTIFACTS_ROOT` | Yes | `/var/data/artifacts` |
-| `LEGACY_APP_ROOT` | Yes | `/app/NeoSmart-Hackathon-App` |
+| `LEGACY_APP_ROOT` | Yes | `/app/apps/api/legacy_runtime` |
 | `DEPLOYMENT_SHARED_SECRET` | Yes | Must match frontend |
 | `CORS_ALLOW_ORIGINS` | Yes | Frontend origin, e.g. `https://app.example.com` |
 | `ADMIN_CLERK_USER_IDS` | Yes | Comma-separated Clerk admin user ids |
@@ -156,9 +156,9 @@ Required in Clerk dashboard:
 `LEGACY_APP_ROOT` will exist in deployment by being **copied into the backend Docker image** from the vendored runtime at `apps/api/legacy_runtime`.
 
 Concrete path:
-- container path: `/app/NeoSmart-Hackathon-App`
+- container path: `/app/apps/api/legacy_runtime`
 - backend env:
-  - `LEGACY_APP_ROOT=/app/NeoSmart-Hackathon-App`
+  - `LEGACY_APP_ROOT=/app/apps/api/legacy_runtime`
 
 Why this is the simplest safe choice:
 - no separate mount is required for the legacy source tree

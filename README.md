@@ -22,8 +22,7 @@ SyntheticResponderLab/
 │   ├── api/                     # FastAPI backend for the new product
 │   └── web/                     # Next.js frontend for the new product
 ├── Documentation/              # migration docs, specs, and implementation notes
-├── UI Prototype/               # visual reference files
-└── NeoSmart-Hackathon-App/     # legacy Streamlit app kept as reference
+└── UI Prototype/               # visual reference files
 ```
 
 ## Architecture
@@ -40,10 +39,11 @@ SyntheticResponderLab/
 - SQLite for local development
 - wraps legacy Python logic instead of rewriting it in JavaScript
 
-### `NeoSmart-Hackathon-App`
-- the original multipage Streamlit prototype
-- kept in the repo as the reference logic source
-- not the primary app to run for the new product
+### `apps/api/legacy_runtime`
+- the simulation engine originally written for the Streamlit prototype
+- vendored in-tree and used directly by `apps/api` in both local development and production
+- `LEGACY_APP_ROOT` points here; there is a single copy, so local and deployed behaviour cannot drift
+- also carries the Neo survey presets and the `scripts/` pipeline that builds the grounding priors
 
 ## Current Workflow
 

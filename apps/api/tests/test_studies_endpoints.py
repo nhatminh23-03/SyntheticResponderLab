@@ -468,10 +468,8 @@ def test_load_neo_survey_preset_endpoint(client):
 
 
 def test_upload_aytm_docx_succeeds_with_fallback_parser(client):
-    workspace_root = Path(__file__).resolve().parents[3]
     docx_path = (
-        workspace_root
-        / "NeoSmart-Hackathon-App"
+        Path(client.app.state.settings.legacy_app_root)
         / "Provided Info"
         / "aytm Survey #760085  (Neo Smart Living — Tahoe Mini Survey).docx"
     )
@@ -1178,9 +1176,11 @@ def test_analysis_endpoint_returns_summary_and_question_explorer(client, monkeyp
     assert open_text_question["quotes"]
     assert payload["benchmark_snapshot"]["available"] is True
     assert payload["run_debug_summary"]["truly_live_answers"] == 4
-    # No realism_targets_neo_smart_template.json benchmark file ships in the
-    # vendored legacy runtime yet, so the scorecard degrades gracefully.
-    assert payload["realism_scorecard"]["available"] is False
+    # realism_targets_neo_smart_template.json now ships inside the canonical runtime, so the scorecard
+    # is available here for the same reason it is available in production. This assertion previously
+    # read `is False`, which passed only because tests and the deployed image disagreed about which
+    # files existed.
+    assert payload["realism_scorecard"]["available"] is True
     assert payload["open_text"]["available"] is True
     assert payload["records_preview"]["total"] == 4
 

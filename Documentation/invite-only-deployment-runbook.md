@@ -113,7 +113,7 @@ APP_ENV=production
 APP_DEBUG=false
 DATABASE_URL=<real-db-url>
 ARTIFACTS_ROOT=<writable-absolute-or-resolved-path>
-LEGACY_APP_ROOT=<path-to-NeoSmart-Hackathon-App>
+LEGACY_APP_ROOT=./legacy_runtime
 DEPLOYMENT_SHARED_SECRET=<same-value-as-frontend>
 CORS_ALLOW_ORIGINS=https://app.example.com
 ADMIN_CLERK_USER_IDS=user_xxx,user_yyy
@@ -186,7 +186,7 @@ Create or confirm:
 The backend still depends on the legacy tree.
 
 Before backend startup, ensure:
-- the repository or deploy artifact includes `NeoSmart-Hackathon-App/`, or
+- the repository or deploy artifact includes `apps/api/legacy_runtime/`, or
 - the host mounts/provisions that directory separately
 
 `LEGACY_APP_ROOT` must resolve to a directory that contains:
