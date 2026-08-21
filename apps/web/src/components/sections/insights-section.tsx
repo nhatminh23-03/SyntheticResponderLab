@@ -7,6 +7,7 @@ import { HeatmapGrid } from "@/components/charts/heatmap-grid";
 import { HorizontalBarChart } from "@/components/charts/horizontal-bar-chart";
 import { LadderChart } from "@/components/charts/ladder-chart";
 import { ModelDifferenceChart as InsightsModelDifferenceChart } from "@/components/charts/model-difference-chart";
+import { formatAnswerSourcing } from "@/lib/answer-sourcing";
 import { BadgeChip } from "@/components/ui/badge-chip";
 import { Button } from "@/components/ui/button";
 import { GlassPanel } from "@/components/ui/glass-panel";
@@ -153,6 +154,17 @@ export function InsightsSection() {
                     insights?.message ??
                     "No saved run is available yet. Complete Run Simulation first, then come here for executive summary and recommendations."}
                 </p>
+                {(() => {
+                  // When the refusal is caused by the answers themselves, the numbers behind it belong
+                  // next to it -- otherwise the reader is told the run is unusable and given nothing
+                  // to check that against.
+                  const sourcing = formatAnswerSourcing(insights?.answer_sourcing ?? null);
+                  return sourcing.shown ? (
+                    <p className="mt-3 max-w-2xl text-sm leading-7 text-app-muted">
+                      {sourcing.summary}
+                    </p>
+                  ) : null;
+                })()}
                 <div className="mt-5">
                   <Button variant="secondary" onClick={() => scrollToSection("run-simulation")}>
                     Return to Run Simulation

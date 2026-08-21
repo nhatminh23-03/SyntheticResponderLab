@@ -1579,10 +1579,23 @@ def build_insights_view(
     records, fallback_records = _split_live_and_fallback_records(all_records)
     answer_sourcing = _answer_sourcing_summary(records, fallback_records)
     personas = list(latest_run_payload.get("personas") or [])
-    if not records:
+    if not all_records:
         return {
             "available": False,
             "message": "The latest run does not include response records yet.",
+            "transparency_note": transparency_note,
+        }
+    if not records:
+        # The run stored a full set of records; every one of them is deterministic filler. Saying it
+        # holds nothing would name the wrong cause and send the reader off to wait for data that has
+        # already arrived. The sourcing summary travels with the refusal so the claim can be checked.
+        return {
+            "available": False,
+            "message": (
+                "Every answer in this run was deterministic filler rather than a model response, so "
+                "there is nothing to summarise. Check the run diagnostics before relying on it."
+            ),
+            "answer_sourcing": answer_sourcing,
             "transparency_note": transparency_note,
         }
 

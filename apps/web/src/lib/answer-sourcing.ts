@@ -38,12 +38,20 @@ export function formatAnswerSourcing(payload: AnswerSourcingPayload): FormattedA
   const rate = payload.live_answer_rate;
   const ratePercent = typeof rate === "number" ? Math.round(rate * 1000) / 10 : null;
 
-  const summary =
-    excluded === 0
-      ? `All ${liveAnswers} answers came from a live model.`
-      : `Built from ${liveAnswers} live answers. ${excluded} fabricated ${
-          excluded === 1 ? "answer was" : "answers were"
-        } excluded — they remain in the saved records, flagged.`;
+  let summary: string;
+  if (excluded === 0) {
+    summary = `All ${liveAnswers} answers came from a live model.`;
+  } else if (liveAnswers === 0) {
+    // "Built from 0 live answers" describes a construction that did not happen. Nothing was built,
+    // and that is the thing the reader needs to know.
+    summary = `No live model answers were returned. All ${totalAnswers} ${
+      totalAnswers === 1 ? "answer is" : "answers are"
+    } deterministic filler and remain in the saved records, flagged.`;
+  } else {
+    summary = `Built from ${liveAnswers} live answers. ${excluded} fabricated ${
+      excluded === 1 ? "answer was" : "answers were"
+    } excluded — they remain in the saved records, flagged.`;
+  }
 
   return { shown: true, liveAnswers, excluded, totalAnswers, ratePercent, summary };
 }
