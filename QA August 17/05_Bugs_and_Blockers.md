@@ -22,13 +22,13 @@ Severity: **P0** blocks classroom use or invalidates research output · **P1** i
 | F-07 | Neo interview fixture undetectable by any client | **P0** | **FIXED+VERIFIED** (`fix/f-07-interview-fixture-transparency`, `e332726`) | ~~Yes~~ | **Yes** |
 | F-08 | PDF parser inverted; markdown format sensitivity | P1 | **PARTIALLY FIXED** (`e9c51f4`) — the upload blocker is closed; option recovery and non-survey acceptance remain | ~~Yes~~ | **Yes** |
 | F-09 | Fallback model catalog contains a retired model | P1 | **FIXED UPSTREAM+VERIFIED** (`b3bd4b5`) | ~~No~~ | Covered by F-04b scenario C |
-| F-10 | No LICENSE file | P1 | OPEN | No (blocks CARLE deposit) | N/A |
+| F-10 | No LICENSE file | P1 | **OPEN — awaiting project-owner decision**, not an engineering task | No (blocks CARLE deposit) | N/A |
 | F-11 | Concurrent first-of-day request 500s (usage-counter race) | **P0** | **FIXED+VERIFIED** (`fix/f-11-quota-race`) | ~~Yes~~ | **Yes** |
 | F-12 | Mode-card selected state 1.61:1, no `aria-pressed` | P1 | **FIXED upstream in `2691642`** (re-measured 9.76:1 + `aria-pressed`) | ~~No~~ | No |
 | F-13 | Likert charts show empty named scale + unlabelled numeric buckets | P1 | **FIXED+VERIFIED** (`ca67ecb`) — scope corrected to **17 of 24**, not 24 | ~~Yes~~ | **Yes** |
 | F-14 | Parser rejects non-numeric question IDs — forces the Neo `Q*` collision | **P0** | **FIXED+VERIFIED** (`33ecf21`) | ~~Yes~~ | **Yes** |
 | F-15 | Strongest and weakest segment can be the same segment | P1 | **FIXED+VERIFIED** (`15dffc9`) | ~~Yes~~ | **Yes** |
-| F-16 | Reset Product Details claims Neo content will not return — untrue after reload | P1 | OPEN (new in `2691642`) | No | No |
+| F-16 | Reset Product Details claims Neo content will not return — untrue after reload | P1 | **FIXED+VERIFIED** (`1b46df2`) — copy now matches behaviour | ~~No~~ | **Yes** |
 | F-17 | Insights explains an all-fabricated run as "no response records yet" | P1 | **FIXED+VERIFIED** (`627660e`) | ~~No~~ | **Yes** |
 | R-01 | Undocumented third-party runtime dependency (`api.zippopotam.us`) | P2 | OPEN (new in `2691642`) | Possibly (locked-down networks) | No |
 | R-02 | Image analysis has no provenance: Vision vs `gpt-4o-mini` indistinguishable | P2 | OPEN (new in `2691642`) | No | No |
@@ -39,10 +39,10 @@ Severity: **P0** blocks classroom use or invalidates research output · **P1** i
 onto `yaza_Aug_work` @ `d340d14`). Commit SHAs below are the rebased ones; the pre-rebase branch is
 preserved at `backup/qa-aug-17-pre-rebase`.
 
-**Open: 0 P0 · 3 P1 · 4 P2** as of `bcb4626` (21 Aug). F-08 is partial, not closed.
+**Open: 0 P0 · 2 P1 · 4 P2** as of `1b46df2` (21 Aug). F-08 is partial, not closed; F-10 awaits a project-owner decision.
 
 - **P0 — none.** F-06 was the last one; its third and final defect closed in `71bbf3b`.
-- **P1 open** — F-08 (partial), F-10, F-16. (F-05 `72d2368`, F-17 `627660e`, F-03 `bcb4626`.)
+- **P1 open** — F-08 (partial) and F-10. (F-05 `72d2368`, F-17 `627660e`, F-03 `bcb4626`, F-16 `1b46df2`.)
 - **P2 open** — R-01, R-02, R-03, R-04.
 
 Closed in this pass and verified on `f048fdd`: F-01 (`a3e6d8a`), F-04 (`2fcbea6`, `7b132c4`, `0fc672f`),
@@ -685,7 +685,7 @@ The client guard alone is not sufficient.** F-11 remains OPEN on `yaza_Aug_work`
 ---
 
 ## F-16 — "Reset Product Details" now makes a claim that is untrue after a reload
-**Severity P1 · OPEN · introduced in `2691642`**
+**Severity P1 · FIXED+VERIFIED (`1b46df2`) · copy corrected; behaviour deliberately unchanged**
 
 `2691642` adds an `isProductReset` flag so the product re-seed effect yields `EMPTY_PRODUCT_DRAFT` rather than
 re-seeding Neo defaults. Within a single session this is a real improvement over the previously recorded

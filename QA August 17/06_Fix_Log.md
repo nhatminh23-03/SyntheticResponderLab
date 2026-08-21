@@ -1469,3 +1469,43 @@ apps/api  pytest -q          195 passed, 0 failed
 ```
 
 README now states which database `alembic upgrade head` targets.
+
+---
+
+## F-16 — Reset Product Details described more than it did
+
+**Commit** `1b46df2`.
+
+### Root cause
+
+`handleClearSavedContext` clears the form and sets `isProductReset`, which stops the re-seed effect
+restoring the demo product. It makes no API call, and the flag is `useState` — so the saved section is
+untouched and loads again on reload. The message claimed *"Neo content will not return unless you load
+the demo examples."*
+
+`2691642` genuinely improved the behaviour: within a session, reset no longer re-seeds Neo defaults. The
+copy was then rewritten past what the change delivered.
+
+### Fix chosen, and the one not chosen
+
+Copy, not behaviour. The message now depends on whether a saved product exists: with one it says the
+saved version is unchanged, that a reload brings it back, and that saving is what replaces it; with
+nothing saved it does not warn about a saved copy that is not there.
+
+Clearing the persisted section through the API is the other option in the finding. It changes what the
+button does to a user's data, which is a project-owner decision rather than a QA fix, so it is recorded
+rather than taken.
+
+### Regression tests added
+
+`tests/product-reset.test.ts` (4). The one that matters asserts that **no** variant of the message claims
+the cleared content will not return — the specific false claim, tested directly rather than by matching
+the replacement string.
+
+### Verification
+
+```
+apps/web  npm run test:unit   67 passed
+apps/web  tsc --noEmit        clean
+apps/api  pytest -q          195 passed, 0 failed
+```
