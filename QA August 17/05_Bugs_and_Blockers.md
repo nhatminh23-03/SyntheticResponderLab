@@ -17,7 +17,7 @@ Severity: **P0** blocks classroom use or invalidates research output · **P1** i
 | F-03 | Alembic migrates the wrong database locally | P1 | OPEN | No (onboarding) | No |
 | F-04 | Fully fabricated run reports success | **P0** | **FIXED+VERIFIED** (`340d482`, `fd0615e`, `901cf3b`, `34d7635`) — hard errors stop the run, diagnostics render, rows carry provenance, and fabricated answers are excluded from analysis by default | **Yes** | Partial |
 | F-04b | Retired model ID silently fabricates its half | **P0** | **FIXED+VERIFIED** (`340d482`) | ~~Yes~~ | **Yes** |
-| F-05 | Three conflicting "responses" counts | P1 | OPEN | **Yes** (grading integrity) | Wrong value is codified |
+| F-05 | Three conflicting "responses" counts | P1 | **FIXED+VERIFIED** (`72d2368`) — personas, executions and answer records named separately | ~~Yes~~ | **Yes** |
 | F-06 | Insights fabricates Strongest Segment; Neo `Q*` coupling | **P0** | **FIXED+VERIFIED** (`15dffc9`, `b60242b`, `71bbf3b`) — fabrication closed, Neo wording removed, and Neo metrics now gated to Neo studies | ~~Yes~~ | **Yes** |
 | F-07 | Neo interview fixture undetectable by any client | **P0** | **FIXED+VERIFIED** (`fix/f-07-interview-fixture-transparency`, `e332726`) | ~~Yes~~ | **Yes** |
 | F-08 | PDF parser inverted; markdown format sensitivity | P1 | OPEN | **Yes** (PDF) | No |
@@ -39,10 +39,10 @@ Severity: **P0** blocks classroom use or invalidates research output · **P1** i
 onto `yaza_Aug_work` @ `d340d14`). Commit SHAs below are the rebased ones; the pre-rebase branch is
 preserved at `backup/qa-aug-17-pre-rebase`.
 
-**Open: 0 P0 · 6 P1 · 4 P2** as of `71bbf3b` (21 Aug).
+**Open: 0 P0 · 5 P1 · 4 P2** as of `72d2368` (21 Aug).
 
 - **P0 — none.** F-06 was the last one; its third and final defect closed in `71bbf3b`.
-- **P1 open** — F-03, F-05, F-08, F-10, F-16, F-17.
+- **P1 open** — F-03, F-08, F-10, F-16, F-17. (F-05 closed in `72d2368`.)
 - **P2 open** — R-01, R-02, R-03, R-04.
 
 Closed in this pass and verified on `f048fdd`: F-01 (`a3e6d8a`), F-04 (`2fcbea6`, `7b132c4`, `0fc672f`),
@@ -190,7 +190,7 @@ warnings: 2
 ---
 
 ## F-05 — Three conflicting "responses" counts
-**Severity P1 · OPEN · blocks grading integrity · wrong value is codified in a test**
+**Severity P1 · FIXED+VERIFIED (`72d2368`) · verified live on a mirror run**
 
 See `04_Experiment_Mode_Verification.md` §3 for the full table and causes.
 

@@ -1243,3 +1243,74 @@ apps/web  tsc --noEmit        clean
 The gate stops false claims; it does not give custom surveys their own version of these metrics. A
 researcher running a coffee study still gets model comparison and nothing else. Declarative semantic roles
 remain the real answer and were deliberately not built here.
+
+---
+
+## F-05 — three quantities, one label
+
+**Commit** `72d2368` on `fix/f-06-gate-neo-metrics` (continued).
+
+### Root cause
+
+A run produces three genuinely different numbers — personas, executions (respondent × model × rerun),
+and answer records (executions × questions) — and all three were presented as "responses".
+
+- `total_generated_responses` was always `sample_size`: `run_manager.run_mock_simulation` sets
+  `total_generated = config.sample_size`, and `_call_with_supported_kwargs` silently drops the `records`
+  kwarg because the function it calls does not accept it. The field ignored models, reruns, questions,
+  and whether any provider call succeeded.
+- `getCompletedResponseCount` counted distinct `respondent_id`. Mirror mode **deliberately reuses**
+  respondent ids across models so the same persona can be compared, so the tile returned N for a run
+  that produced N × M.
+- `generation_debug["respondents"]` was `len(respondent_model_pairs)` — the execution count under the
+  wrong name. Nothing read it, so it was corrected rather than duplicated.
+
+### Regression tests added
+
+`tests/test_run_counts.py` (5) and `tests/run-counts.test.ts` (6). Watched fail first:
+
+```
+KeyError: 'run_counts'
+AssertionError: a 2-persona x 2-model mirror run produces four completed responses, not two
+  assert 2 == 4
+```
+
+The reconciliation test is the one that matters: the reported counts must equal what is actually
+stored — `answer_records == len(records)`, `executions == distinct (respondent, model)` pairs, and
+`executions × questions == answer_records`. A number that cannot be checked against the data is just
+another claim.
+
+### Verified live, mirror mode, Neo preset, 2 personas × 2 models × 32 questions
+
+```
+run_counts                : {"personas": 2, "executions": 4, "questions": 32, "answer_records": 128}
+total_generated_responses : 4          (was 2)
+distinct respondent_id    : 2          <- what the tile showed
+distinct (respondent, model): 4
+analysis total_records    : 128        (agrees)
+```
+
+The tile now reads **4** under "Responses", captioned *"2 personas · 4 completed surveys · 128 answers"*.
+At the sample size the teaching module uses — 20 personas, 2 models, 32 questions — the old tile showed
+**20** for 40 completed surveys and 1,280 stored answers.
+
+### One existing test changed
+
+`test_execute_simulation_run_uses_live_selected_models` asserted `total_generated_responses == 2` while
+also asserting 8 saved rows, locking the mis-count in as expected behaviour. It now asserts the full
+count block.
+
+### Verification
+
+```
+apps/api  pytest -q          180 passed, 0 failed
+apps/web  npm run test:unit   62 passed
+apps/web  tsc --noEmit        clean
+```
+
+### Note on process
+
+The first attempt at this commit used `git add -A` and swept in untracked working files —
+`.tours/`, several `Documentation/` drafts, a local database backup, and the `NeoSmart-Hackathon-App`
+checkout as an embedded git repository. Caught on the commit output and amended; the files are untracked
+again and unchanged on disk. Recorded because the embedded-repo case is exactly the defect F-01 removed.
