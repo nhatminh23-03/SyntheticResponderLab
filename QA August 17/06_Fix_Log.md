@@ -1367,3 +1367,56 @@ apps/api  pytest -q          184 passed, 0 failed
 apps/web  npm run test:unit   63 passed
 apps/web  tsc --noEmit        clean
 ```
+
+---
+
+## F-08 (first slice) — ids invented from list positions
+
+**Commit** `e9c51f4`. The upload blocker only; two sub-defects deliberately left open, see
+`05_Bugs_and_Blockers.md`.
+
+### Root cause
+
+`_match_question_start` mapped any bare list number `N.` to `QN`. A Google Forms export numbers every
+field including the email capture, so `1. Email*` became `Q1` while the survey's own `Q1.` was also `Q1`,
+and the validator rejected the file outright. The document is valid; the parser invented the collision.
+
+Separately, `normalize_survey_payload` assigned `Q{index}` to any question that declared no id without
+checking what the document already used — the same hazard from the other direction.
+
+### Regression tests added
+
+`tests/test_survey_id_collisions.py` (6). Watched fail first:
+
+```
+AssertionError: the upload still collides: ['Q1', 'Q1']
+AssertionError: a silent rename is worse than the error it replaces: []
+ValueError: Duplicate question ids found: Q1        (the real PDF, end to end)
+```
+
+One guards the unchanged case: a survey that names nothing is still numbered `Q1..Qn` exactly as before,
+so the fix only moves behaviour where a collision actually exists.
+
+### A regression the suite caught
+
+`test_upload_aytm_docx_succeeds_with_fallback_parser` failed after the parser change. The `.docx`
+fallback had been reached only when the primary parser raised on duplicate ids. That was an accident
+that correlated with the primary parser having done badly rather than a check that it had — with the
+collision gone it "succeeded" and returned **32 questions, all open text**, against the fallback's **39
+with a real type mix**, silently. The fallback is now selected on the result.
+
+Worth stating plainly: the fix was correct and still made one path worse, and only an existing test
+that asserted *which parser ran* revealed it.
+
+### Verification
+
+```
+apps/api  pytest -q          190 passed, 0 failed
+```
+
+Upload matrix re-measured; see the F-08 entry in `05_Bugs_and_Blockers.md`.
+
+### What remains
+
+Google Forms PDFs now upload but parse as all open text, so they produce no charts. A brochure with no
+questions is still accepted as a survey. Both are recorded rather than half-fixed.

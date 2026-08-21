@@ -20,7 +20,7 @@ Severity: **P0** blocks classroom use or invalidates research output · **P1** i
 | F-05 | Three conflicting "responses" counts | P1 | **FIXED+VERIFIED** (`72d2368`) — personas, executions and answer records named separately | ~~Yes~~ | **Yes** |
 | F-06 | Insights fabricates Strongest Segment; Neo `Q*` coupling | **P0** | **FIXED+VERIFIED** (`15dffc9`, `b60242b`, `71bbf3b`) — fabrication closed, Neo wording removed, and Neo metrics now gated to Neo studies | ~~Yes~~ | **Yes** |
 | F-07 | Neo interview fixture undetectable by any client | **P0** | **FIXED+VERIFIED** (`fix/f-07-interview-fixture-transparency`, `e332726`) | ~~Yes~~ | **Yes** |
-| F-08 | PDF parser inverted; markdown format sensitivity | P1 | OPEN | **Yes** (PDF) | No |
+| F-08 | PDF parser inverted; markdown format sensitivity | P1 | **PARTIALLY FIXED** (`e9c51f4`) — the upload blocker is closed; option recovery and non-survey acceptance remain | ~~Yes~~ | **Yes** |
 | F-09 | Fallback model catalog contains a retired model | P1 | **FIXED UPSTREAM+VERIFIED** (`b3bd4b5`) | ~~No~~ | Covered by F-04b scenario C |
 | F-10 | No LICENSE file | P1 | OPEN | No (blocks CARLE deposit) | N/A |
 | F-11 | Concurrent first-of-day request 500s (usage-counter race) | **P0** | **FIXED+VERIFIED** (`fix/f-11-quota-race`) | ~~Yes~~ | **Yes** |
@@ -39,10 +39,10 @@ Severity: **P0** blocks classroom use or invalidates research output · **P1** i
 onto `yaza_Aug_work` @ `d340d14`). Commit SHAs below are the rebased ones; the pre-rebase branch is
 preserved at `backup/qa-aug-17-pre-rebase`.
 
-**Open: 0 P0 · 4 P1 · 4 P2** as of `627660e` (21 Aug).
+**Open: 0 P0 · 4 P1 · 4 P2** as of `e9c51f4` (21 Aug). F-08 is partial, not closed.
 
 - **P0 — none.** F-06 was the last one; its third and final defect closed in `71bbf3b`.
-- **P1 open** — F-03, F-08, F-10, F-16. (F-05 closed in `72d2368`, F-17 in `627660e`.)
+- **P1 open** — F-03, F-08 (partial), F-10, F-16. (F-05 closed in `72d2368`, F-17 in `627660e`.)
 - **P2 open** — R-01, R-02, R-03, R-04.
 
 Closed in this pass and verified on `f048fdd`: F-01 (`a3e6d8a`), F-04 (`2fcbea6`, `7b132c4`, `0fc672f`),
@@ -364,7 +364,7 @@ surveys their own version of them.
 ---
 
 ## F-08 — PDF support is inverted; plain markdown collapses to open text
-**Severity P1 (PDF path blocks classroom use) · OPEN · no regression test**
+**Severity P1 · PARTIALLY FIXED (`e9c51f4`) · the blocker is closed; two sub-defects remain open**
 
 | Input | Result |
 |---|---|
@@ -387,6 +387,52 @@ plain markdown (student-style)      Neo-style markdown
 Requires `**ID. Title** text`, `- [ ]` checkbox options, and a markdown table for Likert scales. Plain `1.` numbering with `- Yes` bullets yields **all open_text**, warning only *"Inferred open_text … because type was missing"* — never *"options were present but not recognised"*. **Numeric is never inferred.** Open text can never exceed "Low confidence" in `assess_question_trust`, and no choice/Likert/numeric charts are produced.
 
 **This is the entry point to F-06:** plain markdown is auto-numbered `Q1..Q4`.
+
+### Status after `e9c51f4` — blocker closed, two sub-defects open
+
+| Sub-defect | Status |
+|---|---|
+| Google Forms PDF rejected with `Duplicate question ids found: Q1` | **CLOSED** |
+| Google Forms PDF parses as all `open_text` — no options, so no charts | **OPEN** |
+| A brochure with no questions is accepted as a survey | **OPEN** |
+| Plain markdown (`1.` + `- Yes`) collapses to `open_text`; numeric never inferred | **OPEN** |
+
+**Root cause of the blocker.** The parser mapped any bare list number `N.` to `QN`. A Google Forms
+export numbers every field including the email capture, so `1. Email*` became `Q1` while the survey's own
+`Q1.` was also `Q1`. A number in a list is a position, not a name; the parser now returns an id only when
+the document named one, and the normalizer assigns the rest while skipping ids the document claims.
+
+**A regression this exposed.** The `.docx` fallback was reached only when the primary parser happened to
+raise on duplicate ids — an accident that correlated with the primary parser having done badly, not a
+check that it had. With the collision gone the primary parser "succeeded" on the AYTM docx and returned
+**32 questions, all open text**, against the fallback's **39 with a real type mix**, and nothing would
+have reported the downgrade. The fallback is now chosen on the result rather than on an incidental error.
+
+**Upload matrix, re-measured on `e9c51f4`:**
+
+```
+PDF  Google Forms Neo survey    400 -> OK, 43 questions (all open_text)
+DOCX aytm Neo survey            OK,  39 questions {single_choice 9, likert 26, open_text 2, multi_choice 2}
+PDF  aytm joint challenge       still rejected - it is a design brief, not a survey
+PDF  Neo background brochure    still accepted as a 5-question open_text survey   <-- open
+```
+
+**Why option recovery was not attempted.** In the Google Forms export, `pypdf` returns a question's
+options separated from the question by page headers and footers:
+
+```
+'Q1. Purchase interest at $23,000'
+'Based on the product description above, how interested would you be in'
+...
+'3/12/26, 11:43 AM Neo Smart Living — Tahoe Mini Survey'
+'https://docs.google.com/forms/d/16_X6.../edit 5/25'
+'7.'
+'Mark only one oval.'
+```
+
+Reassembling options across that is a parsing project, not a small change, and was deliberately left
+rather than half-built. Until it is done, a PDF upload produces a survey with no scorable questions:
+no distributions, no means, no charts, and nothing above "Low confidence" in the trust assessment.
 
 **Root component.** `legacy_runtime/backend/survey/parser.py`, `schema_normalizer.py`, `adapters/legacy_backend/survey_docx_fallback.py`.
 
