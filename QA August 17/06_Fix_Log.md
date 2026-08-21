@@ -1314,3 +1314,56 @@ The first attempt at this commit used `git add -A` and swept in untracked workin
 `.tours/`, several `Documentation/` drafts, a local database backup, and the `NeoSmart-Hackathon-App`
 checkout as an embedded git repository. Caught on the commit output and amended; the files are untracked
 again and unchanged on disk. Recorded because the embedded-repo case is exactly the defect F-01 removed.
+
+---
+
+## F-17 — Insights named the wrong cause for an all-fabricated run
+
+**Commit** `627660e`.
+
+### Root cause
+
+`build_insights_view` splits live answers from filler and then tests `if not records:`. For an
+all-fabricated run that test is true even though the run holds a full set of records, so it returned the
+message written for a run that has not stored anything yet, and omitted `answer_sourcing`.
+
+`build_analysis_view` tests `if not all_records:` first and only then the live subset, which is why it
+was accurate. The fix gives insights the same two-step check.
+
+### Regression tests added
+
+`tests/test_insights_all_fabricated.py` (4). Watched fail first:
+
+```
+AssertionError: the run holds four records; saying it has none names the wrong cause
+KeyError: 'answer_sourcing'
+```
+
+One is a guard against over-correcting: a genuinely empty run keeps its own message. And one asserts the
+two surfaces agree about the same run, which is the property that was broken.
+
+### Verified live, stub provider returning off-option answers, Neo preset
+
+```
+run_counts  {"personas": 2, "executions": 2, "questions": 32, "answer_records": 64}
+
+analysis  available=false  sourcing: live 0 / excluded 64 / rate 0.0
+          "Every answer in this run was deterministic filler ... nothing to analyse."
+insights  available=false  sourcing: live 0 / excluded 64 / rate 0.0
+          "Every answer in this run was deterministic filler ... nothing to summarise."
+```
+
+### Two things found while fixing it
+
+- `formatAnswerSourcing` rendered "Built from 0 live answers" — describing a construction that did not
+  happen. A run with no live answers now says so instead.
+- The Insights unavailable state rendered the message alone, which is exactly where the wrong reason was
+  read. It now shows the sourcing summary beside it, so the refusal comes with the numbers behind it.
+
+### Verification
+
+```
+apps/api  pytest -q          184 passed, 0 failed
+apps/web  npm run test:unit   63 passed
+apps/web  tsc --noEmit        clean
+```

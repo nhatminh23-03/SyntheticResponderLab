@@ -29,7 +29,7 @@ Severity: **P0** blocks classroom use or invalidates research output · **P1** i
 | F-14 | Parser rejects non-numeric question IDs — forces the Neo `Q*` collision | **P0** | **FIXED+VERIFIED** (`33ecf21`) | ~~Yes~~ | **Yes** |
 | F-15 | Strongest and weakest segment can be the same segment | P1 | **FIXED+VERIFIED** (`15dffc9`) | ~~Yes~~ | **Yes** |
 | F-16 | Reset Product Details claims Neo content will not return — untrue after reload | P1 | OPEN (new in `2691642`) | No | No |
-| F-17 | Insights explains an all-fabricated run as "no response records yet" | P1 | OPEN (found on the combined tree) | No | No |
+| F-17 | Insights explains an all-fabricated run as "no response records yet" | P1 | **FIXED+VERIFIED** (`627660e`) | ~~No~~ | **Yes** |
 | R-01 | Undocumented third-party runtime dependency (`api.zippopotam.us`) | P2 | OPEN (new in `2691642`) | Possibly (locked-down networks) | No |
 | R-02 | Image analysis has no provenance: Vision vs `gpt-4o-mini` indistinguishable | P2 | OPEN (new in `2691642`) | No | No |
 | R-03 | `lg:overflow-hidden` on scrollable sections may clip overlays at ≥lg | P2 | OPEN (new in `2691642`) | No | No |
@@ -39,10 +39,10 @@ Severity: **P0** blocks classroom use or invalidates research output · **P1** i
 onto `yaza_Aug_work` @ `d340d14`). Commit SHAs below are the rebased ones; the pre-rebase branch is
 preserved at `backup/qa-aug-17-pre-rebase`.
 
-**Open: 0 P0 · 5 P1 · 4 P2** as of `72d2368` (21 Aug).
+**Open: 0 P0 · 4 P1 · 4 P2** as of `627660e` (21 Aug).
 
 - **P0 — none.** F-06 was the last one; its third and final defect closed in `71bbf3b`.
-- **P1 open** — F-03, F-08, F-10, F-16, F-17. (F-05 closed in `72d2368`.)
+- **P1 open** — F-03, F-08, F-10, F-16. (F-05 closed in `72d2368`, F-17 in `627660e`.)
 - **P2 open** — R-01, R-02, R-03, R-04.
 
 Closed in this pass and verified on `f048fdd`: F-01 (`a3e6d8a`), F-04 (`2fcbea6`, `7b132c4`, `0fc672f`),
@@ -663,7 +663,7 @@ a teaching tool is the worse half of the trade.
 ---
 
 ## F-17 — Insights explains an all-fabricated run with the wrong reason
-**Severity P1 · OPEN · found on the combined tree `f048fdd` · no regression test**
+**Severity P1 · FIXED+VERIFIED (`627660e`) · verified live against a stub provider**
 
 **Reproduction.** Scenario B below: a Neo run in which every answer failed coercion, so all 128 saved
 records are fabricated and none are live.
