@@ -185,10 +185,58 @@ Verified: `git worktree add` of either commit produced an **empty** directory at
 
 ## 6. Persona grounding — verified, not inferred
 
-> **Superseded in part by `b3bd4b5` (20 Aug).** The four ACS prior tables now exist in the repository,
-> which removes the cause described below. Whether they *load* — and whether the Run path still takes the
-> silent `heuristic_only` branch — is a separate question and is re-verified against the combined tree
-> rather than assumed from the files' presence. See §1b.
+> **Closed, verified on the combined tree `f048fdd` (20 Aug).** Evidence below in §6b. The finding as
+> originally written is kept unchanged for the record.
+
+### 6b. Grounding after the merge — verified, not inferred from file presence
+
+`b3bd4b5` committed the four ACS prior tables. Files existing is not files loading, so each claim was
+probed separately, and the prior-loading probe was run in **separate processes per root** — `load_module`
+caches by module name, so a single process reports whichever root it saw first.
+
+**The tables only load because F-01 landed.** Same code, two roots:
+
+```
+legacy_runtime  (canonical after F-01)
+  priors dir              : True (4 parquet)
+  grounded_priors_available(): True
+  load_grounding_priors() : ['age_income', 'household_size', 'ownership_home_type', 'work_mode']
+
+NeoSmart-Hackathon-App  (where apps/api/.env pointed before this pass)
+  priors dir              : False (0 parquet)
+  grounded_priors_available(): False
+  load_grounding_priors() -> FileNotFoundError: Missing prior file: .../data/processed/priors/...
+```
+
+The two fixes are load-bearing for each other: the prior tables live inside `legacy_runtime`, so without
+F-01 a local checkout keeps resolving the engine from the nested checkout and grounding stays off — while
+reporting success, exactly as before. **A local `apps/api/.env` carrying the old absolute path silently
+reintroduces the original defect**; it is untracked, so it survives a branch switch. It must read
+`LEGACY_APP_ROOT=./legacy_runtime`.
+
+**Preview and Run now agree.** The original finding was that they took different paths — the UI hardcodes
+`use_grounded_priors: true` while the run passed the availability flag, so the run took the silent
+`heuristic_only` branch and emitted no warning. On `f048fdd`, live, Neo preset:
+
+| Surface | `persona_generation_mode` |
+|---|---|
+| `POST /studies/{id}/personas/preview` | `grounded_priors` |
+| `POST /studies/{id}/simulation-runs` → `result` | `grounded_priors` |
+
+Preview `prior_notes` name the resolved files, e.g.
+`.../apps/api/legacy_runtime/data/processed/priors/age_income_priors.parquet`.
+No grounding warning is emitted, which is now correct rather than silent.
+
+`/api/v1/health` reports `grounding_priors: ok`. Overall status is `degraded` for two optional
+integrations only — `google_vision` (no credentials) and `hud_lookups` (no token).
+
+**Residual gap:** `cex_affordability_available` is still **False**. `b3bd4b5` built four tables; the CEX
+affordability priors are not among them, so that half of the grounding story remains unbuilt. The
+`build_cex_affordability_priors.py` stage vendored by F-01 is what would produce it.
+
+---
+
+
 
 Runtime probe at the target SHA:
 

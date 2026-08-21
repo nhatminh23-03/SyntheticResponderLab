@@ -1027,3 +1027,133 @@ NEO study    : all four -> available   (unchanged)
    and unrendered, so it cannot reach a custom-study reader.
 3. Generic wording is honest but not instructive — it does not tell a researcher what a survey would need to
    make the insight computable. That guidance arrives naturally with option (c).
+
+---
+
+# Reconciliation with `yaza_Aug_work` @ `d340d14` — 20 Aug
+
+The eleven fixes were built on `2691642`. The target branch moved eight commits, two of which rewrite the
+same functions. Rebased rather than merged, so the eight land first and the eleven stay readable on top;
+one-fix-per-commit history intact. Result: `integration/qa-aug-17-all-fixes` @ `f048fdd`. Pre-rebase state
+preserved at `backup/qa-aug-17-pre-rebase` (`19dd733`) and in eleven `fix/*` branches, all pushed.
+
+## Conflicts, and how each was settled
+
+| File | Shape | Resolution |
+|---|---|---|
+| `apps/api/Dockerfile` | Both rewrote the same `RUN` | Neither side wholesale — see below |
+| `apps/api/tests/conftest.py` | Both set `LEGACY_APP_ROOT` to the same tree | Their `API_ROOT`-relative form; ours referenced `WORKSPACE_ROOT`, which they had deleted |
+| `apps/api/tests/test_studies_endpoints.py` | Both appended independent tests at the same point (twice) | Kept both sets |
+
+### Dockerfile — not a choice between the two
+
+Theirs reconstructed `/app/NeoSmart-Hackathon-App/` and asserted a prior table existed inside it. Ours
+deleted the reconstruction. Taking either alone loses something real: their version keeps the two-copy
+drift F-01 removed; ours drops a guard that stops an image shipping without the prior tables, which
+matters because persona generation catches a missing-priors error and substitutes heuristic profiles
+without failing. Combined: one tree, guard kept, retargeted at `legacy_runtime/data/processed/priors/`.
+
+### `realism_scorecard` — a contradiction, not a conflict
+
+`b3bd4b5` relaxed the assertion to `available is False`, commenting that the benchmark template
+*"does not ship in the vendored legacy runtime yet."* F-01 ships it — that is why it was vendored. Git
+auto-merged and kept `False`, which would have passed while describing the opposite of what the tree does.
+Restored to `True` and verified live: `GET /analysis` returns `realism_scorecard.available: true`.
+
+The `False` version had passed only because the test suite and the deployed image disagreed about which
+files existed — the same class of defect F-01 exists to remove.
+
+### Two `build_grounding_priors.py`, not a duplicate
+
+The plan assumed the two `scripts/` locations duplicated each other and one should go. They do not:
+
+- `apps/api/scripts/build_grounding_priors.py` (316 lines) is self-contained, downloads PUMS, and produced
+  the four tables committed in `b3bd4b5`.
+- `legacy_runtime/scripts/build_grounding_priors.py` (138 lines) is the last stage of the older
+  multi-stage pipeline and reads normalized ACS/AHS/CEX inputs that do not ship.
+
+Both kept. Deleting the legacy tree would have destroyed the research pipeline F-01 was vendored to
+preserve. Recorded because the shared filename is a real trip hazard.
+
+## F-04b × concurrent dispatch — the reconciliation that mattered
+
+`1c99e92` dispatches every respondent request through a `ThreadPoolExecutor` and only inspects results
+afterwards. F-04b raises on 400/402/404. Both merged cleanly **and the result was wrong**: the raise now
+sat downstream of a fully drained batch, so a study with a wrong model id or an empty balance still paid
+for every call before reporting the error — the exact cost F-04b exists to avoid.
+
+Neither side is at fault and neither can simply win. Settled by checking each response as it lands:
+
+```python
+for future in as_completed(pending):
+    results[index] = future.result()
+    terminal = _terminal_provider_error(results[index], model_name)
+    if terminal is not None:
+        raise terminal          # finally: executor.shutdown(wait=False, cancel_futures=True)
+```
+
+Queued requests are dropped; the few already in flight are left to finish rather than delaying the error,
+and their results are discarded. Healthy runs are untouched — results still fold in respondent order, so
+output stays deterministic.
+
+**Watched fail first.** With the merged-but-unreconciled version, at 40 respondents and concurrency 4:
+
+```
+AssertionError: the run issued 40 of 40 provider calls before stopping --
+every result was collected before any status was inspected
+```
+
+Measured end to end afterwards (scenario D, 20 respondents, concurrency 8): **13 of 20** calls issued
+before the run stopped. The bound is looser than the worker pool because the stub answers instantly and
+workers pull queued items faster than the abort propagates; against a real provider the saving is larger.
+The property the test asserts is the honest one — the run stops without paying for every respondent.
+
+## Provenance × the teammate's concurrency tests
+
+`test_live_run_concurrency.py` arrived in `1c99e92` unpacking a 2-tuple from
+`_generate_live_response_records_with_debug`. Fallback provenance had made it a 3-tuple, so three of their
+tests failed with `ValueError: too many values to unpack`. Fixed inside the commit that changed the
+signature rather than left for the merge to trip over.
+
+`test_parallel_and_sequential_produce_identical_records` now also compares the flag lists. Provenance is
+positional and per-row, so a list that drifted with completion order would mislabel which answers were
+fabricated while the records themselves still matched — the assertion that existed would not have caught it.
+
+## Verification on `f048fdd`
+
+```
+apps/api  pytest -q          170 passed, 0 failed      (first fully green run of this QA pass)
+apps/web  npm run test:unit   56 passed                 (.test-dist cleaned first — R-04)
+apps/web  tsc --noEmit        clean
+regression-test census        37 introduced by the eleven commits, all still collected
+```
+
+`/api/v1/health`: everything `ok` except `google_vision` and `hud_lookups`, both `warn` for missing
+optional credentials. `grounding_priors: ok`.
+
+### Fallback scenarios
+
+| | Scenario | Method | Status | Live | Fallback | Provenance | Enters analysis? | Diagnostics shown |
+|---|---|---|---|---|---|---|---|---|
+| A | Healthy run, valid models | **live** | completed | 64 | 0 | all `is_fallback: false` | n/a — none to exclude | rate 1.0, no warnings, `grounded_priors` |
+| B | Every answer off-option | stub | completed | 0 | 128 | all 128 flagged | **no** — analysis refuses | 2 warnings incl. "completed with temporary deterministic fallback for every saved answer" |
+| C | Retired model id | **live** | **503 provider_unavailable** | — | — | no run saved as complete | n/a | "No endpoints found for google/gemini-2.0-flash-001" |
+| D | HTTP 402 out of credits | stub | **503 provider_unavailable** | — | — | n/a | n/a | provider's own remedy text; **13 of 20** calls issued |
+
+B and D use a local stub because neither can be induced on demand on a funded account — a model cannot be
+made to answer off-option, and 402 needs an empty balance. The stub replaces only the provider; routing,
+coercion, provenance, exclusion, the job envelope and the diagnostics are all the real code paths. A and C
+are genuinely live. No stubbed result is reported here as live.
+
+Scenario B is where **F-17** was found: analysis refuses the run accurately, insights refuses it with the
+wrong reason and no sourcing summary.
+
+### Custom Study smoke test
+
+Bootstrapped the Cortado Roasters coffee preset shipped by `ff9e36f`; 4 respondents, 2 models, **128 live
+answers, 0 fabricated**, `persona_generation_mode: grounded_priors`. Insights renders, `answer_sourcing`
+reports 128/0/1.0, `strongest_segment` correctly `None`.
+
+It also reproduced F-06's residual defect from the repository's own demo data — `Q1` "Category interest"
+labelled "Price-point interest", `Q2` "Current spend" labelled "Purchase likelihood" at 0.0, `Q3` "Where
+you buy today" labelled "Primary intended use". See the F-06 entry in `05_Bugs_and_Blockers.md`.

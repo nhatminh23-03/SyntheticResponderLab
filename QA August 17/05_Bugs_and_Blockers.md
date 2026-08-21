@@ -13,7 +13,7 @@ Severity: **P0** blocks classroom use or invalidates research output · **P1** i
 | ID | Title | Sev | Status | Blocks classroom? | Regression test? |
 |---|---|---|---|---|---|
 | F-01 | Fresh checkout cannot run — broken gitlink | **P0** | **FIXED+VERIFIED** (`83da8c9`) | ~~Yes~~ | **Yes** |
-| F-02 | Backend test regression + non-hermetic suite | P1 | OPEN (new in target commit) | No | Test exists but now fails |
+| F-02 | Backend test regression + non-hermetic suite | P1 | **FIXED UPSTREAM+VERIFIED** (`b3bd4b5`) — suite is hermetic and fully green on `f048fdd` | ~~No~~ | **Yes** |
 | F-03 | Alembic migrates the wrong database locally | P1 | OPEN | No (onboarding) | No |
 | F-04 | Fully fabricated run reports success | **P0** | **FIXED+VERIFIED** (`340d482`, `fd0615e`, `901cf3b`, `34d7635`) — hard errors stop the run, diagnostics render, rows carry provenance, and fabricated answers are excluded from analysis by default | **Yes** | Partial |
 | F-04b | Retired model ID silently fabricates its half | **P0** | **FIXED+VERIFIED** (`340d482`) | ~~Yes~~ | **Yes** |
@@ -21,7 +21,7 @@ Severity: **P0** blocks classroom use or invalidates research output · **P1** i
 | F-06 | Insights fabricates Strongest Segment; Neo `Q*` coupling | **P0** | **PARTIALLY FIXED** (`15dffc9`, `b60242b`) — fabrication closed and Neo wording removed from custom studies; the underlying `Q*` coupling remains (option (c), deferred) | **Yes** | **Yes** |
 | F-07 | Neo interview fixture undetectable by any client | **P0** | **FIXED+VERIFIED** (`fix/f-07-interview-fixture-transparency`, `e332726`) | ~~Yes~~ | **Yes** |
 | F-08 | PDF parser inverted; markdown format sensitivity | P1 | OPEN | **Yes** (PDF) | No |
-| F-09 | Fallback model catalog contains a retired model | P1 | OPEN | No | No |
+| F-09 | Fallback model catalog contains a retired model | P1 | **FIXED UPSTREAM+VERIFIED** (`b3bd4b5`) | ~~No~~ | Covered by F-04b scenario C |
 | F-10 | No LICENSE file | P1 | OPEN | No (blocks CARLE deposit) | N/A |
 | F-11 | Concurrent first-of-day request 500s (usage-counter race) | **P0** | **FIXED+VERIFIED** (`fix/f-11-quota-race`) | ~~Yes~~ | **Yes** |
 | F-12 | Mode-card selected state 1.61:1, no `aria-pressed` | P1 | **FIXED upstream in `2691642`** (re-measured 9.76:1 + `aria-pressed`) | ~~No~~ | No |
@@ -29,22 +29,32 @@ Severity: **P0** blocks classroom use or invalidates research output · **P1** i
 | F-14 | Parser rejects non-numeric question IDs — forces the Neo `Q*` collision | **P0** | **FIXED+VERIFIED** (`33ecf21`) | ~~Yes~~ | **Yes** |
 | F-15 | Strongest and weakest segment can be the same segment | P1 | **FIXED+VERIFIED** (`15dffc9`) | ~~Yes~~ | **Yes** |
 | F-16 | Reset Product Details claims Neo content will not return — untrue after reload | P1 | OPEN (new in `2691642`) | No | No |
+| F-17 | Insights explains an all-fabricated run as "no response records yet" | P1 | OPEN (found on the combined tree) | No | No |
 | R-01 | Undocumented third-party runtime dependency (`api.zippopotam.us`) | P2 | OPEN (new in `2691642`) | Possibly (locked-down networks) | No |
 | R-02 | Image analysis has no provenance: Vision vs `gpt-4o-mini` indistinguishable | P2 | OPEN (new in `2691642`) | No | No |
 | R-03 | `lg:overflow-hidden` on scrollable sections may clip overlays at ≥lg | P2 | OPEN (new in `2691642`) | No | No |
 | R-04 | `npm run test:unit` never cleans `.test-dist`, so stale compiled tests still run | P2 | OPEN (found during F-04 work) | No (undermines test trust) | No |
 
-**P0 count: 1 open — F-06, partial.** Two of its three defects are closed: the fabricated strongest
-segment (`15dffc9`) and the Neo vocabulary leaking into custom studies (`b60242b`). **Defect 2 — silent
-mislabeling on question-ID collision — is still live** and is the whole of what "partial" means. See the
-F-06 entry below for the reproduction run on the composed branches.
-F-07 (`e332726`), F-15 (`15dffc9`), F-14 (`33ecf21`) and F-04b (`340d482`) are **FIXED+VERIFIED**. With F-14 fixed, a researcher
-can finally choose ids that avoid the Neo collision — verified end to end. See `06_Fix_Log.md`.
+**Counted against the combined tree `f048fdd`** (`integration/qa-aug-17-all-fixes`, eleven fixes rebased
+onto `yaza_Aug_work` @ `d340d14`). Commit SHAs below are the rebased ones; the pre-rebase branch is
+preserved at `backup/qa-aug-17-pre-rebase`.
 
-F-11 is **FIXED+VERIFIED on `fix/f-11-quota-race` (`84b30ed`)** — see `06_Fix_Log.md` — but is **still OPEN on
-`yaza_Aug_work`**, where only a client-side StrictMode guard was added. F-12 is **FIXED upstream in
-`2691642`**. As of `2691642` the open register is: **6 P0** · **9 P1** (F-02, F-03, F-05, F-08, F-09, F-10,
-F-13, F-15, F-16) · **3 P2 risks** (R-01, R-02, R-03).
+**Open: 1 P0 · 6 P1 · 4 P2.**
+
+- **P0 — F-06 only, and only its second defect.** The fabricated strongest segment (`b1a7841`) and the
+  Neo vocabulary in custom studies (`ddcc6b4`) are closed. Silent mislabeling on question-id collision is
+  not, and is now reproducible from the repository's own coffee preset.
+- **P1 open** — F-03, F-05, F-08, F-10, F-16, F-17.
+- **P2 open** — R-01, R-02, R-03, R-04.
+
+Closed in this pass and verified on `f048fdd`: F-01 (`a3e6d8a`), F-04 (`2fcbea6`, `7b132c4`, `0fc672f`),
+F-04b (`98f08fe`), F-07 (`3dae8f6`), F-11 (`8ca47ea`), F-13 (`353b01a`), F-14 (`f048fdd`), F-15 (`b1a7841`).
+Closed upstream and verified here: F-02 and F-09 (`b3bd4b5`), F-12 (`2691642`).
+
+**F-17 is new**, found while verifying the combined tree rather than inherited from the original pass.
+
+The backend suite on `f048fdd` is **170 passed, 0 failed** — the first fully green run in this QA pass,
+because F-02 was the only red test and it is now closed. Frontend **56 passed**, typecheck clean.
 
 (F-04 and F-04b are related but distinct failure modes and are counted separately.)
 
@@ -66,7 +76,13 @@ F-13, F-15, F-16) · **3 P2 risks** (R-01, R-02, R-03).
 ---
 
 ## F-02 — Backend test regression, and the suite is no longer hermetic
-**Severity P1 · OPEN (new in `7645dfa`) · does not block classroom use**
+**Severity P1 · FIXED UPSTREAM in `b3bd4b5` · verified on the combined tree `f048fdd`**
+
+> **Closed 20 Aug, both halves.** `conftest` now passes `_env_file=None`, so the developer's `.env` no
+> longer leaks into tests, and `test_product_provider_gaps_fail_clearly` was replaced by
+> `test_product_url_autofill_falls_back_without_openrouter_key`, which monkeypatches the scraper instead
+> of reaching `example.com`. On the combined tree the whole backend suite is **170 passed, 0 failed** —
+> the first fully green run recorded in this pass. The original finding is kept below unchanged.
 
 **Reproduction.** `cd apps/api && pytest -q`
 
@@ -278,6 +294,23 @@ on-screen signal that distinguishes it from a correct Neo reading.
 `schema_normalizer.py:49` still assigns `f"Q{index}"` to any question that declares no id, so a plain
 markdown survey — the common classroom case — still lands on `Q1..Qn` and still hits the colliding column.
 
+**Now reproducible from the repository's own demo data.** `ff9e36f` ships a Cortado Roasters coffee
+subscription preset. Bootstrapping it and running it on the combined tree (`f048fdd`, 4 respondents,
+2 models, 128 live answers, no fabrication) produces:
+
+| Coffee survey question | What it actually asks | What the Neo metric calls it |
+|---|---|---|
+| `Q1` Category interest | interest in a subscription, 1–5 | **"Price-point interest"** — 75.0 |
+| `Q2` Current spend | monthly spend band in dollars | **"Purchase likelihood"** — 0.0 |
+| `Q3` Where you buy today | current purchase channel | **"Primary intended use"** — Local coffee shop or roaster, 75% |
+
+`average_interest` reports **3.75**, computed across category interest and a dollar spend band.
+`strongest_segment` is correctly `None` — `15dffc9` holds — so the incoherent tell that used to expose
+this is gone while the mislabeling remains.
+
+This is no longer a contrived reproduction: it is the team's own demo preset, and a professor running
+the coffee study sees "Purchase likelihood 0.0" for a question about what people currently spend.
+
 **What closing defect 2 requires** — option (c), deferred by your decision on 20 Aug: give each metric an
 explicit semantic role (`price_sensitivity`, `purchase_intent`, `primary_use`) resolved from survey metadata
 rather than from an id literal, so a metric renders when the survey *declares* that role and is unavailable
@@ -334,7 +367,13 @@ Requires `**ID. Title** text`, `- [ ]` checkbox options, and a markdown table fo
 ---
 
 ## F-09 — Fallback model catalog contains a retired model
-**Severity P1 · OPEN · no regression test**
+**Severity P1 · FIXED UPSTREAM in `b3bd4b5` · verified on the combined tree `f048fdd`**
+
+> **Closed 20 Aug.** `google/gemini-2.0-flash-001` was replaced with `anthropic/claude-sonnet-4.5` in the
+> fallback catalog, so the degraded menu no longer offers a model the provider will reject. Confirmed
+> against the live provider: selecting the retired id now returns 503 with *"No endpoints found for
+> google/gemini-2.0-flash-001"* rather than a fabricated half-run (scenario C below). The original
+> finding is kept below unchanged.
 
 `domain.py:150-163` hardcodes a **two-entry** fallback catalog served when the live `/models` fetch fails:
 `openai/gpt-4o-mini` and **`google/gemini-2.0-flash-001`**.
@@ -594,6 +633,38 @@ a teaching tool is the worse half of the trade.
 
 **Fix options:** clear the persisted section through the API on reset, or restore honest wording.
 **Root component.** `apps/web/src/components/sections/product-section.tsx`.
+
+---
+
+## F-17 — Insights explains an all-fabricated run with the wrong reason
+**Severity P1 · OPEN · found on the combined tree `f048fdd` · no regression test**
+
+**Reproduction.** Scenario B below: a Neo run in which every answer failed coercion, so all 128 saved
+records are fabricated and none are live.
+
+```
+GET /studies/{id}/analysis
+  available       : False
+  message         : "Every answer in this run was deterministic filler rather than a model response,
+                     so there is nothing to analyse. Check the run diagnostics before relying on it."
+  answer_sourcing : live 0, excluded 128, rate 0.0
+
+GET /studies/{id}/insights
+  available       : False
+  message         : "The latest run does not include response records yet."   <-- untrue
+  answer_sourcing : null                                                      <-- omitted
+```
+
+The run has 128 response records. Analysis says so accurately and reports the sourcing; Insights
+reports a different, incorrect reason and drops the sourcing summary entirely. A reader on the Insights
+page is told to wait for data that already exists, instead of being told the run was unusable.
+
+**Why it matters.** The two surfaces disagree about the same run, and the one that disagrees is the one
+that omits the evidence a reader would use to check. This is the failure mode F-04 exists to prevent,
+reappearing one screen over.
+
+**Root component.** `apps/api/src/adapters/legacy_backend/domain.py` — `build_insights_view` checks for
+records before the live/fallback split, so an all-fallback run reads as an empty one.
 
 ---
 

@@ -4,7 +4,7 @@
 
 Rule: a box is ticked only with attached evidence (command output, API response, screenshot, or test run) recorded against a specific SHA.
 
-**Candidate SHA:** `19dd733` on branch **`integration/qa-aug-17-all-fixes`**
+**Candidate SHA:** `f048fdd` on branch **`integration/qa-aug-17-all-fixes`** (rebased onto `yaza_Aug_work` @ `d340d14`; the pre-rebase stack is preserved at `backup/qa-aug-17-pre-rebase` @ `19dd733`)
 **Verified by:** QA pass, 20 Aug 2026 (composition verified; the checklist below is still ungated)
 **Date:** 2026-08-20
 
@@ -40,10 +40,13 @@ tests at the same point in a file — and were resolved by keeping both:
 **Composition evidence, 20 Aug:**
 
 ```
-apps/api  pytest -q          116 passed, 1 failed   (the one failure is F-02, pre-existing and non-hermetic)
-apps/web  npm run test:unit   52 passed             (.test-dist cleaned first — see R-04)
+apps/api  pytest -q          170 passed, 0 failed   (on f048fdd; F-02 is closed upstream)
+apps/web  npm run test:unit   56 passed             (.test-dist cleaned first — see R-04)
 apps/web  tsc --noEmit        clean
 ```
+
+The pre-rebase figures were 116 passed / 1 failed and 52 frontend tests. The single failure was F-02,
+which `b3bd4b5` closed.
 
 All **36** regression tests introduced by the eleven fixes are collected and passing on this branch —
 verified by extracting every `+def test_*` from the eleven commits and diffing against `pytest --collect-only`.
@@ -60,16 +63,16 @@ LEGACY_APP_ROOT=./legacy_runtime
 ---
 
 ## A. Reproducibility
-- [ ] A fresh `git clone` produces a runnable application (F-01)
+- [x] A fresh `git clone` produces a runnable application (F-01) — verified by a `git archive HEAD` checkout
 - [ ] Documented local setup works verbatim, including migrations (F-03)
 - [ ] A `LICENSE` file exists and the CARLE deposit is unblocked (F-10)
-- [ ] One interpreter and pinned dependency versions are documented
-- [ ] `/api/v1/health` reports `ok` or an explained `degraded`
+- [x] One interpreter and pinned dependency versions are documented — Python 3.11.15, see §2
+- [x] `/api/v1/health` reports `degraded`, explained: `google_vision` and `hud_lookups` warn for missing optional credentials; everything else `ok`
 
 ## B. Automated tests
-- [ ] `cd apps/api && pytest -q` — all pass
-- [ ] `cd apps/web && npm run test:unit` — all pass
-- [ ] Backend suite runs offline with no outbound network calls (F-02)
+- [x] `cd apps/api && pytest -q` — 170 passed, 0 failed on `f048fdd`
+- [x] `cd apps/web && npm run test:unit` — 56 passed on `f048fdd` (clean `.test-dist`)
+- [x] Backend suite runs offline with no outbound network calls (F-02) — closed by `b3bd4b5`
 - [ ] Regression test: live-vs-fallback accounting
 - [ ] Regression test: Split / Mirror / Stability execution and record counts (F-05)
 - [ ] Regression test: Insights on a non-Neo survey (F-06)
