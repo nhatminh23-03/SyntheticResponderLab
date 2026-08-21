@@ -10,6 +10,7 @@ import {
   saveProduct,
 } from "@/lib/api";
 import { resolveSetupSeedSource } from "@/lib/setup-flow-utils";
+import { describeProductReset } from "@/lib/product-reset";
 import { cn } from "@/lib/utils";
 import { useStudy } from "@/providers/study-provider";
 import { useSectionRegistry } from "@/providers/section-registry-provider";
@@ -346,11 +347,11 @@ export function ProductSection() {
   function handleClearSavedContext() {
     setIsProductReset(true);
     setDraft(EMPTY_PRODUCT_DRAFT);
-    setStatus({
-      tone: "warning",
-      message:
-        "Product details were cleared. Add your own details, then save when ready. Neo content will not return unless you load the demo examples.",
-    });
+    // Reset clears the form only. It makes no API call, and isProductReset does not survive a reload,
+    // so the saved section is still there and will load again -- which the message has to say.
+    setStatus(
+      describeProductReset({ hasSavedProduct: study?.product?.status === "saved" })
+    );
   }
 
   function handleResetToNeoDefaults() {

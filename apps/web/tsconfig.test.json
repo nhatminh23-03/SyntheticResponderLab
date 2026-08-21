@@ -15,6 +15,7 @@
     "src/lib/answer-sourcing.ts",
     "src/lib/run-evidence.ts",
     "src/lib/interview-provenance.ts",
-    "src/lib/run-counts.ts"
+    "src/lib/run-counts.ts",
+    "src/lib/product-reset.ts"
   ]
 }
