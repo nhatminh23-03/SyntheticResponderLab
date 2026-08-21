@@ -8,7 +8,7 @@ Rule: a box is ticked only with evidence recorded against the candidate SHA. An 
 evidence was gathered, or the item is deferred — never that it was assumed.
 
 **Candidate branch:** `release/classroom-readiness-august`
-**Candidate SHA:** `c64c797461f52c5a36f9bc08b8ba49738862a01e`
+**Candidate SHA:** `f05785f42aabdeac12066761f6a8dc0be8fe46df`
 **Base SHA:** `1bc1c1c61e840c0a57c130749f93e0edaea57efd` (`yaza_Aug_work` after PR #12)
 **Verified:** 21 Aug 2026 · **Interpreter:** Python 3.11.15 (the pin in `00_QA_Baseline.md` §2)
 
@@ -21,10 +21,15 @@ Commits on the candidate, one per finding:
 | `d4193d2` | transparency note rendered on Analysis |
 | `231f9c2` | experiment-mode count coverage and the Stability Check repeat loop |
 | `c64c797` | R-02 — image-analysis provenance |
+| `f05785f` | README — survey upload formats and the PDF caveats (documentation only) |
 
 ---
 
-## Automated verification — fresh on `c64c797`
+## Automated verification — fresh on `f05785f`
+
+The E2E runs below were executed on `c64c797`. `f05785f` adds a README section and nothing else
+(`git diff --stat c64c797 f05785f` is one file, +26 lines), so the application code the E2E
+exercised is byte-identical. The three suites were re-run on `f05785f` regardless.
 
 ```
 cd apps/api && pytest -q            235 passed, 0 failed
@@ -211,7 +216,7 @@ clipping.
 # Release Candidate Summary
 
 **Candidate branch:** `release/classroom-readiness-august`
-**Candidate SHA:** `c64c797461f52c5a36f9bc08b8ba49738862a01e`
+**Candidate SHA:** `f05785f42aabdeac12066761f6a8dc0be8fe46df`
 **Base SHA:** `1bc1c1c61e840c0a57c130749f93e0edaea57efd`
 
 ### Automated verification

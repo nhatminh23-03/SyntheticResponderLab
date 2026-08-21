@@ -141,15 +141,23 @@ Command: `cd apps/web && npm run test:unit` → **36 passed, 0 failed**
 Runner is Node's built-in `node:test`. All are pure-function unit tests — no rendering, no DOM, no Playwright. There is **no `lint` and no `typecheck` script**.
 
 ### Verified coverage gaps
-| Capability | Covered |
-|---|---|
-| Fallback synthesis + live/fallback accounting | Yes |
-| Mirror N×M record count | Yes — **but the same test asserts `total_generated_responses == 2`, codifying the wrong count as expected** |
-| Insights on a non-Neo survey | **No — largest gap** |
-| PDF survey parsing | **No** |
-| Stability check (real repeat loop) | **No** — fully stubbed |
-| Google Vision real path | **No** — fully monkeypatched |
-| Alembic migrations, Postgres, React components, Next.js proxy route | **No** |
+
+The middle column is the finding as recorded on the target SHA. The right column is where each stands on
+the release candidate `c64c797` — the table was being read as a standing list long after most of it had
+moved.
+
+| Capability | At the target SHA | On `c64c797` |
+|---|---|---|
+| Fallback synthesis + live/fallback accounting | Yes | Yes, extended — per-row provenance and exclusion |
+| Mirror N×M record count | Yes — **but the same test asserted `total_generated_responses == 2`, codifying the wrong count** | **Closed** (`681dc4a`); parameterized across all three modes (`231f9c2`) |
+| Insights on a non-Neo survey | **No — largest gap** | **Closed** — `test_neo_metric_gating.py` (`71bbf3b`) |
+| PDF survey parsing | **No** | **Closed** — `test_pdf_survey_support.py`, 16 tests (`c3219b7`) |
+| Stability check (real repeat loop) | **No** — fully stubbed | **Closed** — `test_stability_check_loop.py` (`231f9c2`) |
+| Google Vision real path | **No** — fully monkeypatched | Still monkeypatched; provenance is now asserted (`c64c797`) |
+| Alembic migrations | **No** | Target resolution covered (`bcb4626`); the migrations themselves still are not run in tests |
+| Postgres, React components, Next.js proxy route | **No** | **Still not covered** |
+
+Backend went from 65 tests to **235**, frontend from 36 to **67**.
 
 Two further test hazards: `test_upload_aytm_docx_succeeds_with_fallback_parser` reads a `.docx` that is **not vendored** into `legacy_runtime` (so it cannot pass in Docker/CI), and after F-02 the suite makes **real outbound HTTP requests**.
 

@@ -68,6 +68,16 @@ Reproduce or refute in the browser:
 Preferred behaviour for an unavailable metric is an explicit *"not applicable to this survey"* — **not** 0,
 not "N/A" presented as evidence, not an alphabetically chosen segment, not a fabricated finding.
 
+> **All four reproduced, and all four are now closed** (`15dffc9`, `b60242b`, `71bbf3b`). Verified on the
+> release candidate `c64c797` with a live Cortado run (`std_5bf8096f000a`, 96 live answers):
+> `barrier_ranking`, `message_performance`, `segment_heatmap`, `use_case_share` and `interest_ladder` all
+> report *"This insight is not applicable to this survey."*; `average_interest` and `strongest_segment`
+> are `None`; the only finding is *Model comparison*; and a scan for `Tahoe`, `backyard`, `homeowner`,
+> `permit`, `Price-point interest`, `Purchase likelihood`, `Primary intended use`, `Decision ladder` and
+> `Barrier matrix` over the whole payload returns **nothing**.
+>
+> The preferred behaviour above is what the product now does. See `07_Final_Verification.md`.
+
 ## Also verify
 Result: generic charts, filters, raw records, counts correct, no Neo content.
 Counts: base personas vs persona/model executions vs question-answer records (see `04`).

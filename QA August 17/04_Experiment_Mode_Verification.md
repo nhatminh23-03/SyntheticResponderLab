@@ -54,6 +54,14 @@ Models: `openai/gpt-4o-mini`, `google/gemini-2.0-flash-001`.
 
 ## 3. Response-count discrepancy — the reporting layer is wrong
 
+> **CLOSED** (`681dc4a`, `231f9c2`). The section below records the defect as found; it is no longer the
+> product's behaviour. A run now reports `run_counts` with `personas`, `executions`, `questions` and
+> `answer_records` named separately, and both totals carry the execution count. Verified on the release
+> candidate `c64c797` with a live Neo mirror run at N=3, M=2, Q=32:
+> `{"personas": 3, "executions": 6, "questions": 32, "answer_records": 192}` — reconciling with the 192
+> stored rows, where the old tile would have shown **3**. All three modes are covered by parameterized
+> tests, plus mirror respondent-id alignment and stability rerun encoding.
+
 Three different numbers are all presented as "responses":
 
 | Mode | True executions | True records | `total_generated_responses` | Distinct `respondent_id` (UI tile) |
