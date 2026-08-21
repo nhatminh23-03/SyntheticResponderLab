@@ -14,7 +14,7 @@ Severity: **P0** blocks classroom use or invalidates research output · **P1** i
 |---|---|---|---|---|---|
 | F-01 | Fresh checkout cannot run — broken gitlink | **P0** | **FIXED+VERIFIED** (`83da8c9`) | ~~Yes~~ | **Yes** |
 | F-02 | Backend test regression + non-hermetic suite | P1 | **FIXED UPSTREAM+VERIFIED** (`b3bd4b5`) — suite is hermetic and fully green on `f048fdd` | ~~No~~ | **Yes** |
-| F-03 | Alembic migrates the wrong database locally | P1 | OPEN | No (onboarding) | No |
+| F-03 | Alembic migrates the wrong database locally | P1 | **FIXED+VERIFIED** (`bcb4626`) | ~~No~~ | **Yes** |
 | F-04 | Fully fabricated run reports success | **P0** | **FIXED+VERIFIED** (`340d482`, `fd0615e`, `901cf3b`, `34d7635`) — hard errors stop the run, diagnostics render, rows carry provenance, and fabricated answers are excluded from analysis by default | **Yes** | Partial |
 | F-04b | Retired model ID silently fabricates its half | **P0** | **FIXED+VERIFIED** (`340d482`) | ~~Yes~~ | **Yes** |
 | F-05 | Three conflicting "responses" counts | P1 | **FIXED+VERIFIED** (`72d2368`) — personas, executions and answer records named separately | ~~Yes~~ | **Yes** |
@@ -39,10 +39,10 @@ Severity: **P0** blocks classroom use or invalidates research output · **P1** i
 onto `yaza_Aug_work` @ `d340d14`). Commit SHAs below are the rebased ones; the pre-rebase branch is
 preserved at `backup/qa-aug-17-pre-rebase`.
 
-**Open: 0 P0 · 4 P1 · 4 P2** as of `e9c51f4` (21 Aug). F-08 is partial, not closed.
+**Open: 0 P0 · 3 P1 · 4 P2** as of `bcb4626` (21 Aug). F-08 is partial, not closed.
 
 - **P0 — none.** F-06 was the last one; its third and final defect closed in `71bbf3b`.
-- **P1 open** — F-03, F-08 (partial), F-10, F-16. (F-05 closed in `72d2368`, F-17 in `627660e`.)
+- **P1 open** — F-08 (partial), F-10, F-16. (F-05 `72d2368`, F-17 `627660e`, F-03 `bcb4626`.)
 - **P2 open** — R-01, R-02, R-03, R-04.
 
 Closed in this pass and verified on `f048fdd`: F-01 (`a3e6d8a`), F-04 (`2fcbea6`, `7b132c4`, `0fc672f`),
@@ -105,7 +105,7 @@ AssertionError: assert 'OPENROUTER_API_KEY is required' in 'URL returned HTTP 40
 ---
 
 ## F-03 — `alembic upgrade head` migrates the wrong database
-**Severity P1 · OPEN · onboarding**
+**Severity P1 · FIXED+VERIFIED (`bcb4626`) · verified by migrating a temporary database**
 
 **Reproduction.** Set `DATABASE_URL` only in `apps/api/.env`, then run `alembic upgrade head` from `apps/api/`.
 

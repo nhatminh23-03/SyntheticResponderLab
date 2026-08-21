@@ -1420,3 +1420,52 @@ Upload matrix re-measured; see the F-08 entry in `05_Bugs_and_Blockers.md`.
 
 Google Forms PDFs now upload but parse as all open text, so they produce no charts. A brochure with no
 questions is still accepted as a survey. Both are recorded rather than half-fixed.
+
+---
+
+## F-03 — migrations applied to a database the app never opens
+
+**Commit** `bcb4626`.
+
+### Root cause
+
+`alembic/env.py` read `os.getenv("DATABASE_URL")`. `AppSettings` loads `apps/api/.env`; alembic did not.
+With the URL set only in that file — the documented local setup — alembic used `alembic.ini`'s
+`sqlite:///./local-dev.db`, reported success, and created all nine tables in a second database.
+
+The `database_schema` health check added in `7645dfa` is what surfaced it originally, and it worked
+exactly as intended.
+
+### The fix
+
+`src/persistence/migration_target.resolve_migration_database_url()` — an exported variable wins, because
+that is what Render supplies; otherwise the value comes from the same settings object the application
+uses. When neither provides one it raises and names the default it is refusing to use. `alembic.ini`'s
+`sqlalchemy.url` is now empty, since a default there is only ever reachable by accident.
+
+A module rather than another line in `env.py` so the resolution can be tested at all.
+
+### Regression tests added
+
+`tests/test_migration_target.py` (5): the exported case production depends on, the `.env` case local
+development depends on, a whitespace-only value, the refusal, and that migrations and the app resolve the
+same URL. Watched fail first as `ModuleNotFoundError`.
+
+### Verified end to end
+
+`apps/api/.env` temporarily pointed at a temp file, `DATABASE_URL` unset in the environment,
+`alembic upgrade head`:
+
+```
+the app's database (.env)              9 tables
+```
+
+Before this change that database would have had 0 and `local-dev.db` would have had 9.
+
+### Verification
+
+```
+apps/api  pytest -q          195 passed, 0 failed
+```
+
+README now states which database `alembic upgrade head` targets.
