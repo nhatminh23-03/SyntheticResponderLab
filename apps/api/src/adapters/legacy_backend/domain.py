@@ -3561,8 +3561,14 @@ def product_image_analysis(*, settings: AppSettings, file_bytes: bytes) -> dict:
     if not settings.google_cloud_api_key and service_account is None:
         raise ProviderUnavailableApiError("Google Vision credentials are required for product image analysis.")
 
+    # Two very different things can produce this analysis: Google Vision's label and object detection,
+    # or a general-purpose language model looking at the image. They disagree in kind, not just in
+    # quality, and the result carried no record of which one ran -- so a researcher could not tell
+    # whether "labels" came from a detector or from a model's description.
+    analysis_source = "google_vision"
     if service_account is None and settings.openrouter_api_key:
         analysis = _openrouter_product_image_analysis(settings=settings, file_bytes=file_bytes)
+        analysis_source = "openrouter_model"
     else:
         vision = load_module("backend.vision", settings.legacy_app_root)
         try:
@@ -3572,10 +3578,12 @@ def product_image_analysis(*, settings: AppSettings, file_bytes: bytes) -> dict:
             if not settings.openrouter_api_key:
                 raise ProviderUnavailableApiError(str(exc)) from exc
             analysis = _openrouter_product_image_analysis(settings=settings, file_bytes=file_bytes)
+            analysis_source = "openrouter_model"
         except Exception as exc:
             if not settings.openrouter_api_key:
                 raise LegacyModuleApiError("Product image analysis failed.") from exc
             analysis = _openrouter_product_image_analysis(settings=settings, file_bytes=file_bytes)
+            analysis_source = "openrouter_model"
 
     colors = []
     for color in analysis.get("colors", []):
@@ -3590,6 +3598,12 @@ def product_image_analysis(*, settings: AppSettings, file_bytes: bytes) -> dict:
 
     return {
         "analysis": analysis,
+        "analysis_source": analysis_source,
+        "analysis_source_label": (
+            "Google Cloud Vision label and object detection"
+            if analysis_source == "google_vision"
+            else "An OpenRouter language model reading the image"
+        ),
         "product_patch": {
             "product_image_labels": analysis.get("labels", []),
             "product_image_objects": analysis.get("objects", []),
