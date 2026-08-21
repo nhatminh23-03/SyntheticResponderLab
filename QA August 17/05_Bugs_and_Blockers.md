@@ -20,7 +20,7 @@ Severity: **P0** blocks classroom use or invalidates research output · **P1** i
 | F-05 | Three conflicting "responses" counts | P1 | **FIXED+VERIFIED** (`681dc4a`) — personas, executions and answer records named separately | ~~Yes~~ | **Yes** |
 | F-06 | Insights fabricates Strongest Segment; Neo `Q*` coupling | **P0** | **FIXED+VERIFIED** (`15dffc9`, `b60242b`, `71bbf3b`) — fabrication closed, Neo wording removed, and Neo metrics now gated to Neo studies | ~~Yes~~ | **Yes** |
 | F-07 | Neo interview fixture undetectable by any client | **P0** | **FIXED+VERIFIED** (`fix/f-07-interview-fixture-transparency`, `e332726`) | ~~Yes~~ | **Yes** |
-| F-08 | PDF parser inverted; markdown format sensitivity | P1 | **PARTIALLY FIXED** (`e9c51f4`) — the upload blocker is closed; option recovery and non-survey acceptance remain | ~~Yes~~ | **Yes** |
+| F-08 | PDF parser inverted; markdown format sensitivity | P1 | **FIXED+VERIFIED** (`e9c51f4`, `c3219b7`) — Google Forms exports reconstruct into typed questions; non-surveys are refused | ~~Yes~~ | **Yes** |
 | F-09 | Fallback model catalog contains a retired model | P1 | **FIXED UPSTREAM+VERIFIED** (`b3bd4b5`) | ~~No~~ | Covered by F-04b scenario C |
 | F-10 | No LICENSE file | P1 | **OPEN — awaiting project-owner decision**, not an engineering task | No (blocks CARLE deposit) | N/A |
 | F-11 | Concurrent first-of-day request 500s (usage-counter race) | **P0** | **FIXED+VERIFIED** (`fix/f-11-quota-race`) | ~~Yes~~ | **Yes** |
@@ -30,10 +30,60 @@ Severity: **P0** blocks classroom use or invalidates research output · **P1** i
 | F-15 | Strongest and weakest segment can be the same segment | P1 | **FIXED+VERIFIED** (`15dffc9`) | ~~Yes~~ | **Yes** |
 | F-16 | Reset Product Details claims Neo content will not return — untrue after reload | P1 | **FIXED+VERIFIED** (`1b46df2`) — copy now matches behaviour | ~~No~~ | **Yes** |
 | F-17 | Insights explains an all-fabricated run as "no response records yet" | P1 | **FIXED+VERIFIED** (`627660e`) | ~~No~~ | **Yes** |
-| R-01 | Undocumented third-party runtime dependency (`api.zippopotam.us`) | P2 | OPEN (new in `2691642`) | Possibly (locked-down networks) | No |
-| R-02 | Image analysis has no provenance: Vision vs `gpt-4o-mini` indistinguishable | P2 | OPEN (new in `2691642`) | No | No |
-| R-03 | `lg:overflow-hidden` on scrollable sections may clip overlays at ≥lg | P2 | OPEN (new in `2691642`) | No | No |
+| R-01 | Undocumented third-party runtime dependency (`api.zippopotam.us`) | P2 | **DOCUMENTED — DEFERRED for first classroom release** | No (silent no-op offline) | N/A |
+| R-02 | Image analysis has no provenance: Vision vs `gpt-4o-mini` indistinguishable | P2 | **FIXED+VERIFIED** (`c64c797`) | ~~No~~ | **Yes** |
+| R-03 | `lg:overflow-hidden` on scrollable sections may clip overlays at ≥lg | P2 | **DOCUMENTED — DEFERRED**; no clippable overlay exists in either section | No | N/A |
 | R-04 | `npm run test:unit` never cleans `.test-dist`, so stale compiled tests still run | P2 | **FIXED+VERIFIED** (`035520a`) | ~~No~~ | Demonstrated with a planted stale test |
+
+## P2 dispositions for the first classroom release
+
+Each P2 was given one of two dispositions. A P2 may be deferred only if it does not invalidate research
+results, does not block the primary classroom workflow, and is documented here.
+
+### R-01 — ZIP lookup calls a third-party service · DEFERRED
+
+`apps/web/src/components/sections/audience-section.tsx` fetches
+`https://api.zippopotam.us/us/{zip}` from the **browser** when the user types a valid five-digit US ZIP,
+to prefill City/Area and State.
+
+| | |
+|---|---|
+| What is sent | The five-digit ZIP the user typed. Nothing else — no study, audience, product or identifier data. |
+| When | Only on a `^\d{5}$` match, debounced by the field, aborted on unmount. |
+| On failure | Silently ignored (`if (!response.ok) return;` inside a `try`/`catch` whose comment reads "ZIP lookup is an enhancement; the audience form remains usable offline"). No error is shown and nothing is blocked. |
+| If deferred | The researcher types City/Area themselves, as they would if they never entered a ZIP. |
+
+Deferred because it cannot affect a research result — it prefills a free-text field the user can edit —
+and a locked-down network degrades it to a no-op rather than a failure. It is documented here so that
+nobody discovers the outbound call by surprise.
+
+### R-02 — image-analysis provenance · FIXED (`c64c797`)
+
+Cheap enough to fix rather than defer. See the fix log.
+
+### R-03 — `lg:overflow-hidden` clipping · DEFERRED
+
+Both call sites are `SectionWrapper ... className="lg:isolate lg:overflow-hidden"` with a scrollable
+inner pane — the standard containment pattern, where the outer box hides overflow and the inner content
+scrolls. It clips only elements that try to escape the section box.
+
+Checked for anything that would:
+
+- **No custom popovers or dropdown menus** in either section. `run-simulation-section` has no
+  absolutely-positioned layers at all; `analysis-section`'s are chart gridlines (`absolute inset-0`) and
+  axis labels, contained within their own chart boxes.
+- At **2560×1440** the application shell showed no body-level horizontal scroll and no meaningful
+  clipping — one intentional 38 px `rounded-full overflow-hidden` avatar crop.
+
+**Limitation, stated rather than glossed:** the authenticated Result and Analysis pages were **not**
+visually checked at a large viewport. The application is behind an invite-only access gate, and this QA
+pass does not enter credentials. The evidence above is structural (what exists in those sections) plus
+the unauthenticated shell. A human should confirm visually on a wide monitor before the first class.
+
+Deferred because no element in either section is positioned to overflow it, and any residual issue would
+be cosmetic rather than a wrong number.
+
+---
 
 ## Traceability
 
@@ -70,11 +120,11 @@ a SHA that is not reachable from the merge is not evidence.
 onto `yaza_Aug_work` @ `d340d14`). Commit SHAs below are the rebased ones; the pre-rebase branch is
 preserved at `backup/qa-aug-17-pre-rebase`.
 
-**Open: 0 P0 · 2 P1 · 3 P2** as of `035520a` (21 Aug). F-08 is partial, not closed; F-10 awaits a project-owner decision.
+**Open on `c64c797` (21 Aug): 0 P0 · 1 P1 · 0 P2.** The single open P1 is **F-10 (LICENSE), awaiting a project-owner decision** rather than engineering work. R-01 and R-03 are **documented and deferred** for the first classroom release; R-02 and R-04 are closed.
 
 - **P0 — none.** F-06 was the last one; its third and final defect closed in `71bbf3b`.
-- **P1 open** — F-08 (partial) and F-10. (F-05 `681dc4a`, F-17 `627660e`, F-03 `bcb4626`, F-16 `1b46df2`.)
-- **P2 open** — R-01, R-02, R-03. (R-04 closed in `035520a`.)
+- **P1 open** — F-10 only, awaiting a project-owner decision. (F-08 closed in `c3219b7`.)
+- **P2** — R-02 closed (`c64c797`), R-04 closed (`035520a`), R-01 and R-03 documented and deferred.
 
 Closed in this pass and verified on `f048fdd`: F-01 (`a3e6d8a`), F-04 (`2fcbea6`, `7b132c4`, `0fc672f`),
 F-04b (`98f08fe`), F-07 (`3dae8f6`), F-11 (`8ca47ea`), F-13 (`353b01a`), F-14 (`f048fdd`), F-15 (`b1a7841`).
@@ -395,7 +445,7 @@ surveys their own version of them.
 ---
 
 ## F-08 — PDF support is inverted; plain markdown collapses to open text
-**Severity P1 · PARTIALLY FIXED (`e9c51f4`) · the blocker is closed; two sub-defects remain open**
+**Severity P1 · FIXED+VERIFIED (`e9c51f4`, `c3219b7`) · reconstruction and refusal both verified**
 
 | Input | Result |
 |---|---|
@@ -423,10 +473,35 @@ Requires `**ID. Title** text`, `- [ ]` checkbox options, and a markdown table fo
 
 | Sub-defect | Status |
 |---|---|
-| Google Forms PDF rejected with `Duplicate question ids found: Q1` | **CLOSED** |
-| Google Forms PDF parses as all `open_text` — no options, so no charts | **OPEN** |
-| A brochure with no questions is accepted as a survey | **OPEN** |
-| Plain markdown (`1.` + `- Yes`) collapses to `open_text`; numeric never inferred | **OPEN** |
+| Google Forms PDF rejected with `Duplicate question ids found: Q1` | **CLOSED** (`e9c51f4`) |
+| Google Forms PDF parses as all `open_text` — no options, so no charts | **CLOSED** (`c3219b7`) |
+| A brochure with no questions is accepted as a survey | **CLOSED** (`c3219b7`) |
+| Plain markdown (`1.` + `- Yes`) collapses to `open_text`; numeric never inferred | **ACCEPTED KNOWN LIMITATION** |
+
+**Reconstruction result, measured on `c64c797`:**
+
+```
+before   43 questions, all open_text, 0 with options
+after    41 questions - 16 single_choice, 20 likert, 2 multi_choice, 3 open_text; 18 with options
+```
+
+Ids come out as the survey's own (`S3`, `Q0A`, `Q0B`, `Q1`…`Q32B`), options attach to the right
+questions, and page headers and footers never become questions.
+
+**Two things the PDF genuinely does not carry, reported rather than invented:**
+
+- `Q5`'s seven barrier rows are word-wrapped and duplicated by `pypdf` beyond safe reassembly. The 1–5
+  scale is present, so the question is kept as a scale and a warning says the per-row items were lost.
+  A PDF-uploaded Neo survey therefore has no `Q5_1..Q5_7`, and the barrier-ranking metric stays
+  unavailable for it. The `.md` and `.docx` originals still expand correctly.
+- Typographic ligatures do not survive extraction, so "office" arrives as "oce". Which ligature was lost
+  is not recoverable; guessing would put invented words in front of respondents. A warning says so, and
+  the NULs left behind are stripped because Postgres rejects them.
+
+**Accepted known limitation.** A PDF that is a genuine survey but carries no options or scales — an
+all-open-text instrument — is now refused along with the brochures. A refusal is visible and
+correctable; an invented survey is neither. Plain-markdown type inference is unchanged and remains a
+separate, unaddressed weakness.
 
 **Root cause of the blocker.** The parser mapped any bare list number `N.` to `QN`. A Google Forms
 export numbers every field including the email capture, so `1. Email*` became `Q1` while the survey's own

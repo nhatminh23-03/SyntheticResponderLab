@@ -1564,3 +1564,138 @@ apps/web  npm run test:unit   67 passed, 0 failed, 0 skipped
 apps/web  tsc --noEmit        clean
 apps/api  pytest -q          195 passed, 0 failed
 ```
+
+---
+
+# Release candidate — `release/classroom-readiness-august`, base `1bc1c1c`
+
+## F-08 (second slice) — Google Forms PDF reconstruction, and refusing non-surveys
+
+**Commit** `c3219b7`.
+
+### What the investigation found
+
+Before writing anything, the raw `pypdf` output for the reference export was read page by page. It emits
+three groups per page, in this order:
+
+1. one numbered block per question — `7.`, a control line (`Mark only one oval.`,
+   `Check all that apply.`, `Mark only one oval per row.`), then the option labels
+2. the question headings for those same items — `Q5b. Other barrier (optional)` plus wrapped body text
+3. page furniture — the export timestamp and the `docs.google.com` URL
+
+A question is therefore **never adjacent to its own options**, which is exactly why a line-by-line reader
+produced 43 open-text questions and no charts.
+
+The recoverable fact is positional: **the i-th numbered block on a page belongs to the i-th question
+heading on that page.** Verified across all 22 content pages, including page 7, where one of two
+questions has no options at all, and page 6, where a matrix question's heading sits inside its block.
+
+Two false-heading sources had to be excluded: prose lines such as `Dr. Lin…` and `out. The next…` match a
+loose `ID.` pattern. The identifier pattern is therefore one or two letters followed by digits.
+
+### What it produces
+
+```
+before   43 questions, all open_text, 0 with options
+after    41 questions - 16 single_choice, 20 likert, 2 multi_choice, 3 open_text; 18 with options
+```
+
+### A defect found by measuring rather than by testing
+
+The first working version gave the screening question these options:
+
+```
+['Yes', "I'm not sure, but possibly", 'No', 'Thank You',
+ 'This survey focuses on properties with outdoor space...', 'your time.', 'aytm']
+```
+
+Options are contiguous — they run from the control line until the first interruption. The fix stops at a
+section title, the required-question note, another question's heading or body, or the destination title
+of a `Skip to section N (Title)` rule, which Forms renders immediately after that option. The screening
+question now has exactly three.
+
+This was found by printing option counts and lengths for every question, not by a failing test. The
+first display truncated to four options and looked correct, which is worth recording: the measurement
+nearly hid the defect.
+
+### Reported, not invented
+
+- **Matrix rows.** `Q5`'s seven barrier items are word-wrapped and duplicated. The 1–5 scale is real, so
+  the question is kept as a scale and a warning states the per-row items were lost.
+- **Ligatures.** `pypdf` drops ffi/fl/fi entirely — "office" arrives as "oce". Which ligature was lost is
+  not recoverable. A warning says so; the NULs left behind are stripped, because Postgres rejects them
+  and the run would otherwise fail later and further from the cause.
+
+### Refusing documents that are not surveys
+
+Four of the five PDFs here are not surveys: a design brief, a 60-page results report, a marketing
+brochure and a slide deck. Each was accepted, with questions built from prose.
+
+Signals were measured across every fixture first. The result ruled out the obvious approach: **before the
+reconstruction, the real survey was indistinguishable from the brochure** — both parsed to questions with
+zero options and zero types. The gate only became possible once the reconstruction gave real surveys
+structure. A PDF whose parse yields no question with options or a scale is now refused.
+
+Checked **before** validation, because the brief and the report also trip the duplicate-id check — and
+telling a reader a document has duplicate question ids, when it has no questions at all, sends them after
+the wrong problem.
+
+### Regression coverage
+
+`tests/test_pdf_survey_support.py`, 16 tests. Nine were RED before the change. The six that were green
+before and after are the guards — the Neo markdown preset (32 questions, 24 likert / 8 single_choice,
+`Q5` expanding to seven rows), the AYTM docx keeping the fallback's richer 39-question typed schema, and
+the Cortado custom survey. A guard that only passes after the change guards nothing.
+
+Test B is a second, differently-worded export written by hand, so the reconstruction is held to reading
+shape rather than this survey.
+
+### Not done, and why
+
+Plain-markdown type inference (`1.` numbering with `- Yes` bullets collapsing to open text) is unchanged.
+It is a separate weakness in the general parser, not part of the PDF path.
+
+---
+
+## F-07 (quota) — the seeded Neo interview charged for work it never did
+
+**Commit** `49ee7c9`. See the commit message for the reordering. Verified live on a clean database:
+
+```
+demo_fixture: true   fixture_source: generated_fallback   judge_model: demo/stamp-fixture
+interview_run units charged by the fixture: 0
+```
+
+The accompanying test fails the run if the fixture path ever contacts a provider, because the exemption
+would then be wrong.
+
+---
+
+## Transparency note on the Analysis page
+
+**Commit** `d4193d2`. Insights already rendered the caveat, directly under the summary rather than inside
+a collapsed panel — that had been fixed earlier in the pass. Analysis had not, so the page carrying the
+distribution charts and per-question statistics showed numbers with no methodological note at all.
+
+The contract test asserts by meaning rather than by phrase: the two surfaces word the caveat differently
+and both are accurate.
+
+---
+
+## Experiment-mode counts and the Stability Check loop
+
+**Commit** `231f9c2`. Counts are now parameterized across all three modes, plus mirror respondent-id
+alignment and stability rerun encoding. The post-run Stability Check — previously covered only by a test
+that stubbed it out entirely — is now driven at the adapter boundary with the provider stubbed.
+
+A detail worth recording: the shared persona helper only ever yields two personas, which silently capped
+the persona count above N=2. These tests use a local stub that scales, or the parameterization would have
+been asserting against a fixture ceiling rather than the code.
+
+---
+
+## R-02 — image-analysis provenance
+
+**Commit** `c64c797`. The analysis can come from Google Cloud Vision's detection or from a language model
+reading the image; the result said which one only by accident of what was configured. It now carries
+`analysis_source` and a readable label.
