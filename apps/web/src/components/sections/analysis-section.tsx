@@ -164,6 +164,13 @@ export function AnalysisSection() {
                   </p>
                 );
               })()}
+              {/* The same caveat the Insights page carries. Charts and question statistics are findings
+                  too, and this was the one surface showing numbers with no methodological note at all. */}
+              {analysis?.transparency_note ? (
+                <p className="mt-3 rounded-[1.2rem] border border-app-gold/25 bg-[rgba(216,186,103,0.07)] px-4 py-3 text-xs leading-5 text-app-gold">
+                  {analysis.transparency_note}
+                </p>
+              ) : null}
                       <span className="inline-flex items-center rounded-full border border-app-border/70 px-3.5 py-1.5 text-sm font-medium text-app-muted [background:var(--status-neutral-bg)]">
                         {`${questions.length} questions`}
                       </span>
