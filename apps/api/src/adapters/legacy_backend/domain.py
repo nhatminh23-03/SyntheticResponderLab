@@ -627,6 +627,34 @@ def _docx_fallback_schema(parser: Any, validator: Any, file_bytes: bytes) -> dic
         raise LegacyModuleApiError(f"DOCX fallback parsing failed: {fallback_exc}") from fallback_exc
 
 
+NOT_A_SURVEY_MESSAGE = (
+    "This document does not appear to contain a recognizable survey. No questions with answer "
+    "options or scales were found. Upload the survey instrument itself — a Google Forms PDF export, "
+    "or the .md or .docx original — rather than a report, brief, or brochure about it."
+)
+
+
+def _looks_like_a_survey(validated: Any) -> bool:
+    """Whether a parsed document has any structural evidence of being a survey instrument.
+
+    Prose extraction is willing: a marketing brochure, a design brief, a slide deck and a 60-page
+    results report each parsed into "questions" built out of sentences, and each was accepted. What
+    separates a real instrument is that at least one question offers something to answer — options, or
+    a scale.
+
+    The cost of this rule is a genuine all-open-text survey delivered as a PDF, which is refused. That
+    is the intended trade: a refusal is visible and correctable, while an invented survey is neither.
+    """
+    questions = list(getattr(validated, "questions", []) or [])
+    if not questions:
+        return False
+    return any(
+        getattr(question, "options", None)
+        or str(getattr(question, "question_type", "")) != "open_text"
+        for question in questions
+    )
+
+
 def _has_no_scorable_questions(validated: Any) -> bool:
     """Whether every question came out as open text.
 
@@ -648,6 +676,11 @@ def parse_normalize_validate_survey(file_name: str, file_bytes: bytes, legacy_ro
     try:
         raw = parser.parse_uploaded_survey(file_name=file_name, file_bytes=file_bytes)
         normalized = normalizer.normalize_survey_payload(raw)
+        # Checked before validation. A brief or a report also trips the duplicate-id check, because
+        # prose repeats words like "AI" and "ID" -- and being told a document has duplicate question
+        # ids, when it has no questions at all, sends the reader looking for the wrong problem.
+        if extension == "pdf" and not _looks_like_a_survey(normalized):
+            raise ValidationApiError(NOT_A_SURVEY_MESSAGE)
         validated = validator.validate_survey_schema(normalized)
         # The .docx fallback used to be reached only when the primary parser happened to raise on
         # duplicate ids -- an accident that correlated with it having done badly, not a check that it
@@ -656,6 +689,9 @@ def parse_normalize_validate_survey(file_name: str, file_bytes: bytes, legacy_ro
         if extension == "docx" and _has_no_scorable_questions(validated):
             return _docx_fallback_schema(parser, validator, file_bytes)
         return validated.model_dump()
+    except ApiError:
+        # Already classified above -- re-wrapping it as a 500 would hide an actionable message.
+        raise
     except ValueError as exc:
         if extension == "docx":
             return _docx_fallback_schema(parser, validator, file_bytes)
