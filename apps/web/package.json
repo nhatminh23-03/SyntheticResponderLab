@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test:unit": "tsc -p tsconfig.test.json && node --test .test-dist/tests/**/*.js"
+    "test:unit": "rm -rf .test-dist && tsc -p tsconfig.test.json && node --test .test-dist/tests/**/*.js"
   },
   "dependencies": {
     "@clerk/nextjs": "^6.39.2",
