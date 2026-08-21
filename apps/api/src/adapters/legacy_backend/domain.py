@@ -1601,7 +1601,7 @@ def build_insights_view(
     message_performance = _build_message_performance(df, study_mode)
     use_case_share = _build_use_case_share(df, study_mode)
     interest_ladder = _build_interest_ladder(df, study_mode)
-    segment_heatmap = _build_segment_heatmap(df, barrier_ranking, message_performance)
+    segment_heatmap = _build_segment_heatmap(df, barrier_ranking, message_performance, study_mode)
     model_difference_chart = _build_model_difference_chart(df)
 
     executive_summary = _build_executive_summary(
@@ -1610,6 +1610,7 @@ def build_insights_view(
         run_payload=latest_run_payload,
         use_case_share=use_case_share,
         model_notes=model_notes,
+        study_mode=study_mode,
     )
     trust_snapshot = _build_trust_snapshot(
         trust_map=trust_map,
@@ -1628,6 +1629,7 @@ def build_insights_view(
         df=df,
         segment_notes=segment_notes,
         segment_heatmap=segment_heatmap,
+        study_mode=study_mode,
     )
     context_notes = {
         "model_notes": model_notes,
@@ -2592,10 +2594,13 @@ def _build_realism_scorecard(
     records: list[dict],
     realism_module: Any,
 ) -> dict:
-    if study_mode != "neo_smart":
+    if not _is_neo_study(study_mode):
+        # The scorecard compares answers against benchmark targets recorded for the Neo survey, so it
+        # has nothing to say here. Naming the Neo mode would explain the absence in terms of a study
+        # the researcher is not running.
         return {
             "available": False,
-            "message": "Realism scorecard is shown only for Neo Smart mode.",
+            "message": GENERIC_INSIGHT_UNAVAILABLE_MESSAGE,
             "summary": None,
             "question_rows": [],
         }
@@ -2666,6 +2671,7 @@ def _build_executive_summary(
     run_payload: dict[str, Any],
     use_case_share: dict[str, Any],
     model_notes: list[str],
+    study_mode: Optional[str] = None,
 ) -> dict[str, Any]:
     top_use_case = "N/A"
     top_use_case_share = None
@@ -2674,8 +2680,12 @@ def _build_executive_summary(
         top_use_case = str(top_row.get("label") or "N/A")
         top_use_case_share = top_row.get("share")
 
-    average_interest = _first_question_numeric_mean(df, ["Q1", "Q0B", "Q2"])
-    strongest_segment = _compute_strongest_segment(df)
+    # Both of these average the Neo decision-ladder questions. Run against another survey they
+    # average whatever happens to carry those ids -- in the coffee preset, a dollar spend band --
+    # and report the result as an interest score.
+    neo_study = _is_neo_study(study_mode)
+    average_interest = _first_question_numeric_mean(df, ["Q1", "Q0B", "Q2"]) if neo_study else None
+    strongest_segment = _compute_strongest_segment(df) if neo_study else None
     differing_questions = sum(
         1 for note in model_notes if "differences observed" in str(note).lower()
     )
@@ -2885,9 +2895,11 @@ def _build_segment_story(
     df: pd.DataFrame,
     segment_notes: list[str],
     segment_heatmap: dict[str, Any],
+    study_mode: Optional[str] = None,
 ) -> dict[str, Any]:
-    strongest_segment = _compute_strongest_segment(df)
-    weakest_segment = _compute_weakest_segment(df)
+    neo_study = _is_neo_study(study_mode)
+    strongest_segment = _compute_strongest_segment(df) if neo_study else None
+    weakest_segment = _compute_weakest_segment(df) if neo_study else None
     return {
         "strongest_segment": strongest_segment,
         "weakest_segment": weakest_segment,
@@ -2898,20 +2910,33 @@ def _build_segment_story(
 
 GENERIC_INSIGHT_UNAVAILABLE_MESSAGE = "This insight is not applicable to this survey."
 
+NEO_STUDY_MODE = "neo_smart"
 
-def _insight_unavailable_message(study_mode: Optional[str], neo_detail: str) -> str:
-    """Explain an unavailable insight in terms the reader can act on.
 
-    The Neo metrics key on that survey's question ids, so naming the missing question is useful *in Neo*
-    and meaningless anywhere else — a coffee-subscription study being told "Primary use question Q3 was
-    not found" implies the researcher mis-numbered something. Custom studies get generic wording.
+def _is_neo_study(study_mode: Optional[str]) -> bool:
+    """Whether this study is the one survey whose question ids carry known research meaning.
+
+    The metrics below read literal ids — Q1, Q2, Q3, Q0B, S3, Q5_*, Q9A/Q9B..Q13A/Q13B — and attach
+    Neo's meaning to whatever answers them. Those ids are not rare: `schema_normalizer` assigns
+    `Q{index}` to any question that declares no id, so an ordinary uploaded survey lands on them by
+    default. Reading an id is therefore not evidence that the question means what Neo's does, and the
+    study mode is the only thing that is.
     """
-    if str(study_mode or "") == "neo_smart":
-        return neo_detail
-    return GENERIC_INSIGHT_UNAVAILABLE_MESSAGE
+    return str(study_mode or "") == NEO_STUDY_MODE
+
+
+def _neo_metric_unavailable() -> dict[str, Any]:
+    """The stand-in for a Neo metric in a study whose schema it knows nothing about.
+
+    Deliberately empty rather than approximated: there is no honest substitute for "how does this
+    audience rank the Neo barrier matrix" in a survey that never asked it.
+    """
+    return {"available": False, "message": GENERIC_INSIGHT_UNAVAILABLE_MESSAGE, "rows": []}
 
 
 def _build_barrier_ranking(df: pd.DataFrame, study_mode: Optional[str] = None) -> dict[str, Any]:
+    if not _is_neo_study(study_mode):
+        return _neo_metric_unavailable()
     if df.empty or "question_id" not in df.columns:
         return {"available": False, "message": "No records available.", "rows": []}
 
@@ -2919,9 +2944,7 @@ def _build_barrier_ranking(df: pd.DataFrame, study_mode: Optional[str] = None) -
     if barrier_df.empty:
         return {
             "available": False,
-            "message": _insight_unavailable_message(
-                study_mode, "Barrier matrix items were not found in this run."
-            ),
+            "message": "Barrier matrix items were not found in this run.",
             "rows": [],
         }
 
@@ -2945,6 +2968,8 @@ def _build_barrier_ranking(df: pd.DataFrame, study_mode: Optional[str] = None) -
 
 
 def _build_message_performance(df: pd.DataFrame, study_mode: Optional[str] = None) -> dict[str, Any]:
+    if not _is_neo_study(study_mode):
+        return _neo_metric_unavailable()
     if df.empty:
         return {"available": False, "message": "No records available.", "rows": []}
 
@@ -2968,22 +2993,20 @@ def _build_message_performance(df: pd.DataFrame, study_mode: Optional[str] = Non
     if not rows:
         return {
             "available": False,
-            "message": _insight_unavailable_message(
-                study_mode, "Positioning concept pairs were not found in this run."
-            ),
+            "message": "Positioning concept pairs were not found in this run.",
             "rows": [],
         }
     return {"available": True, "rows": rows}
 
 
 def _build_use_case_share(df: pd.DataFrame, study_mode: Optional[str] = None) -> dict[str, Any]:
+    if not _is_neo_study(study_mode):
+        return _neo_metric_unavailable()
     distribution = _compute_question_answer_distribution(df, "Q3")
     if getattr(distribution, "empty", True):
         return {
             "available": False,
-            "message": _insight_unavailable_message(
-                study_mode, "Primary use question Q3 was not found."
-            ),
+            "message": "Primary use question Q3 was not found.",
             "rows": [],
         }
 
@@ -2999,6 +3022,8 @@ def _build_use_case_share(df: pd.DataFrame, study_mode: Optional[str] = None) ->
 
 
 def _build_interest_ladder(df: pd.DataFrame, study_mode: Optional[str] = None) -> dict[str, Any]:
+    if not _is_neo_study(study_mode):
+        return _neo_metric_unavailable()
     if df.empty:
         return {"available": False, "message": "No records available.", "rows": []}
 
@@ -3027,9 +3052,7 @@ def _build_interest_ladder(df: pd.DataFrame, study_mode: Optional[str] = None) -
     if not rows:
         return {
             "available": False,
-            "message": _insight_unavailable_message(
-                study_mode, "Core decision-ladder questions were not found."
-            ),
+            "message": "Core decision-ladder questions were not found.",
             "rows": [],
         }
     return {"available": True, "rows": rows}
@@ -3039,7 +3062,13 @@ def _build_segment_heatmap(
     df: pd.DataFrame,
     barrier_ranking: dict[str, Any],
     message_performance: dict[str, Any],
+    study_mode: Optional[str] = None,
 ) -> dict[str, Any]:
+    # Every row this can offer comes from a Neo id: Q1/Q2/Q3 directly, or a barrier or concept pair
+    # discovered by the two Neo charts above.
+    if not _is_neo_study(study_mode):
+        return {**_neo_metric_unavailable(), "segments": []}
+
     segments = _list_segments(df)
     if not segments:
         return {"available": False, "message": "No segment labels were found in this run.", "segments": [], "rows": []}

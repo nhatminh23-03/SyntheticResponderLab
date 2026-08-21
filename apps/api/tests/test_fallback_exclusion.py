@@ -93,8 +93,11 @@ def test_fabricated_records_remain_inspectable_and_are_not_deleted(test_settings
 
 
 def test_insights_metrics_use_live_answers_only(test_settings):
+    # Runs in Neo mode because `average_interest` is a Neo metric: it averages that survey's decision-
+    # ladder questions, of which Q1 is one. Asking for it in a Custom Study is what F-06 removed, so
+    # reading it there would test the collision rather than the exclusion.
     insights = build_insights_view(
-        settings=test_settings, study_mode="general", latest_run_payload=_payload()
+        settings=test_settings, study_mode="neo_smart", latest_run_payload=_payload()
     )
     assert insights["executive_summary"]["average_interest"] == 5.0, (
         "the fabricated 1 must not drag the mean down to 4.0"
