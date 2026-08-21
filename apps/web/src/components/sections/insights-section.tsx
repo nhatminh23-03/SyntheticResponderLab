@@ -176,6 +176,14 @@ export function InsightsSection() {
                       {llmSummary?.model ? <BadgeChip>{llmSummary.model}</BadgeChip> : null}
                     </div>
 
+                    {/* The backend returns this caveat on every insights response; it was previously
+                        computed, shipped and never displayed, leaving the default view uncaveated. */}
+                    {insights?.transparency_note ? (
+                      <p className="mt-4 rounded-[1.2rem] border border-app-gold/25 bg-[rgba(216,186,103,0.07)] px-4 py-3 text-xs leading-5 text-app-gold">
+                        {insights.transparency_note}
+                      </p>
+                    ) : null}
+
                     {llmSummary?.available ? (
                       <>
                         <div className="mt-5 rounded-[1.55rem] border border-app-cyan/20 bg-[linear-gradient(145deg,rgba(10,24,30,0.92),rgba(8,19,24,0.82))] p-6 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] md:p-7">

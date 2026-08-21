@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from typing import Final
+import uuid
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -64,6 +65,52 @@ def _quota_exceeded_message(metric_key: str) -> str:
     return "You’ve reached today’s run limit. Please try again tomorrow or contact support."
 
 
+def _increment_usage_counter(
+    session: Session,
+    *,
+    owner_user_id: str,
+    metric_key: str,
+    bucket: date,
+) -> int:
+    """Insert-or-increment the daily counter in a single atomic statement.
+
+    A read-then-insert would race: two requests that both observe a missing row for the
+    first use of a UTC day would both INSERT and the second would violate
+    ``uq_user_usage_counters_owner_metric_bucket``. ``ON CONFLICT DO UPDATE`` lets the
+    database resolve that collision, and makes the increment itself atomic rather than a
+    read-modify-write. Returns the stored count after the operation.
+    """
+    table = UserUsageCounter.__table__
+    if session.get_bind().dialect.name == "postgresql":
+        from sqlalchemy.dialects.postgresql import insert as _dialect_insert
+    else:
+        from sqlalchemy.dialects.sqlite import insert as _dialect_insert
+
+    now = datetime.now(timezone.utc)
+    statement = (
+        _dialect_insert(table)
+        .values(
+            id=uuid.uuid4(),
+            owner_user_id=owner_user_id,
+            metric_key=metric_key,
+            bucket_date_utc=bucket,
+            count=1,
+            created_at=now,
+            updated_at=now,
+        )
+        .on_conflict_do_update(
+            index_elements=[
+                table.c.owner_user_id,
+                table.c.metric_key,
+                table.c.bucket_date_utc,
+            ],
+            set_={"count": table.c.count + 1, "updated_at": now},
+        )
+        .returning(table.c.count)
+    )
+    return int(session.scalar(statement))
+
+
 def consume_daily_quota(
     session: Session,
     settings: AppSettings,
@@ -92,22 +139,19 @@ def consume_daily_quota(
             },
         )
 
-    if row is None:
-        row = UserUsageCounter(
-            owner_user_id=owner_user_id,
-            metric_key=metric_key,
-            bucket_date_utc=bucket,
-            count=1,
-        )
-    else:
-        row.count += 1
-        row.updated_at = datetime.now(timezone.utc)
-    session.add(row)
+    new_count = _increment_usage_counter(
+        session,
+        owner_user_id=owner_user_id,
+        metric_key=metric_key,
+        bucket=bucket,
+    )
+    if row is not None:
+        session.expire(row)
 
     return UsageQuotaSnapshot(
         metric_key=metric_key,
         bucket_date_utc=bucket,
-        count=row.count,
+        count=new_count,
         limit=limit,
     )
 

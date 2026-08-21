@@ -251,6 +251,14 @@ export type SimulationRunConditions = {
   selected_models?: string[];
 };
 
+export type AnswerSourcing = {
+  live_answers_used: number;
+  fallback_answers_excluded: number;
+  total_answers: number;
+  live_answer_rate: number | null;
+  note?: string;
+};
+
 export type SimulationRunDebugSummary = {
   primary_live_path?: boolean;
   total_answers?: number;
@@ -386,6 +394,7 @@ export type AnalysisPayload = {
   available: boolean;
   message?: string;
   transparency_note?: string;
+  answer_sourcing?: AnswerSourcing | null;
   run?: {
     run_id?: string;
     status?: string;
@@ -511,6 +520,7 @@ export type InsightsPayload = {
   available: boolean;
   message?: string;
   transparency_note?: string;
+  answer_sourcing?: AnswerSourcing | null;
   run?: {
     run_id?: string;
     status?: string;
@@ -776,6 +786,9 @@ export type InterviewRunPayload = {
   model_a: string | null;
   model_b: string | null;
   grounding_report: InterviewGroundingReport | null;
+  demo_fixture: boolean;
+  fixture_source: string | null;
+  judge_model: string | null;
   pairs: InterviewPair[] | null;
   error: { message?: string } | null;
   queued_at: string | null;

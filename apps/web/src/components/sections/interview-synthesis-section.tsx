@@ -17,6 +17,7 @@ import {
   saveInterviewSynthesisConfig,
   startInterviewRun,
 } from "@/lib/api";
+import { describeInterviewProvenance } from "@/lib/interview-provenance";
 import { cn } from "@/lib/utils";
 import { useSectionRegistry } from "@/providers/section-registry-provider";
 import { useStudy } from "@/providers/study-provider";
@@ -64,9 +65,11 @@ function GroundingBar({ value, max = 1 }: { value: number; max?: number }) {
 function GroundingReportCard({
   report,
   onContinue,
+  scoreCaveat,
 }: {
   report: InterviewGroundingReport;
   onContinue: () => void;
+  scoreCaveat?: string | null;
 }) {
   const tone = scoreTone(report.corpus_average);
   const [expanded, setExpanded] = useState(false);
@@ -89,6 +92,9 @@ function GroundingReportCard({
           <p className="mt-1 text-xs text-app-muted">
             Corpus-level agreement (threshold {Math.round(report.threshold * 100)}%)
           </p>
+          {scoreCaveat ? (
+            <p className="mt-2 max-w-xs text-xs leading-5 text-app-gold">{scoreCaveat}</p>
+          ) : null}
         </div>
 
         <span
@@ -294,6 +300,7 @@ export function InterviewSynthesisSection() {
     }
   }
 
+  const provenance = describeInterviewProvenance(latestRun);
   const hasPairs = latestRun?.pairs && latestRun.pairs.length > 0;
   const groundingReport = latestRun?.grounding_report ?? null;
 
@@ -306,13 +313,24 @@ export function InterviewSynthesisSection() {
               index={10}
               eyebrow="Interview"
               title="Generate synthetic depth interviews grounded in your personas."
-              description="Both AI models interview every persona independently. A judge LLM then scores agreement across four dimensions — STAMP-style — to flag low-reliability interviews before you rely on them."
+              description={
+                provenance.isFixture
+                  ? "This guided demo shows seeded interview material so the walkthrough is reliable. It was not produced by live interview models."
+                  : "Both AI models interview every persona independently. A judge LLM then scores agreement across four dimensions — STAMP-style — to flag low-reliability interviews before you rely on them."
+              }
             />
           </RevealOnScroll>
 
           <RevealOnScroll delay={0.04}>
-            <div className="rounded-[1.45rem] border border-app-gold/20 bg-[rgba(216,186,103,0.08)] px-5 py-4 text-sm leading-6 text-app-gold">
-              Dual-model verification: both LLMs interview every persona. A grounding score analogous to Krippendorff&apos;s α flags divergence before you proceed to research insights.
+            <div
+              className={
+                provenance.isFixture
+                  ? "rounded-[1.45rem] border border-app-gold/40 bg-[rgba(216,186,103,0.14)] px-5 py-4 text-sm leading-6 text-app-gold"
+                  : "rounded-[1.45rem] border border-app-gold/20 bg-[rgba(216,186,103,0.08)] px-5 py-4 text-sm leading-6 text-app-gold"
+              }
+            >
+              <span className="font-semibold">{provenance.headline}</span>
+              <span className="mt-1 block text-app-muted">{provenance.detail}</span>
             </div>
           </RevealOnScroll>
 
@@ -396,6 +414,7 @@ export function InterviewSynthesisSection() {
           {latestRun?.status === "completed" && groundingReport && (
             <RevealOnScroll delay={0.1}>
               <GroundingReportCard
+                scoreCaveat={provenance.groundingScoreCaveat}
                 report={groundingReport}
                 onContinue={() => scrollToSection("research-brief")}
               />
@@ -438,13 +457,22 @@ export function InterviewSynthesisSection() {
             <GlassPanel className="p-5">
               <p className="mb-3 text-xs uppercase tracking-[0.14em] text-app-muted">How it works</p>
               <ol className="space-y-2 text-sm text-app-text">
-                {[
-                  "Both LLMs interview every persona in parallel",
-                  "A judge LLM scores agreement on 4 dimensions per persona",
-                  "Corpus-level average ≥ 67% = batch passes threshold",
-                  "Flagged personas show which dimension drove disagreement",
-                  "Proceed to Research Brief to frame your analysis",
-                ].map((step, i) => (
+                {(provenance.isFixture
+                  ? [
+                      "Seeded demo transcripts are loaded — no interview model is called",
+                      "The second transcript is a variation of the first, not a separate model",
+                      "The grounding score is derived from persona fit tier, not a judge model",
+                      "Model names shown are placeholders for the demo",
+                      "Run a Custom Study for a genuine dual-model interview batch",
+                    ]
+                  : [
+                      "Both LLMs interview every persona in parallel",
+                      "A judge LLM scores agreement on 4 dimensions per persona",
+                      "Corpus-level average ≥ 67% = batch passes threshold",
+                      "Flagged personas show which dimension drove disagreement",
+                      "Proceed to Research Brief to frame your analysis",
+                    ]
+                ).map((step, i) => (
                   <li key={i} className="flex gap-2">
                     <span className="mt-0.5 shrink-0 text-xs text-app-cyan">{i + 1}.</span>
                     <span className="text-xs leading-5 text-app-muted">{step}</span>

@@ -21,7 +21,7 @@ services:
       - key: ARTIFACTS_ROOT
         value: /var/data/artifacts
       - key: LEGACY_APP_ROOT
-        value: /app/NeoSmart-Hackathon-App
+        value: /app/apps/api/legacy_runtime
       - key: DEPLOYMENT_SHARED_SECRET
         sync: false
       - key: CORS_ALLOW_ORIGINS

@@ -1,0 +1,32 @@
+{
+  "benchmark_name": "neo_smart_real_survey_alignment",
+  "survey_reference": "survey-760085-2026-03-25-summary.pdf",
+  "notes": "Offline calibration targets. Never inject these into runtime prompt context.",
+  "question_targets": [
+    {
+      "question_id": "Q1",
+      "question_text_contains": "interest",
+      "distribution": {
+        "1": 0.08,
+        "2": 0.14,
+        "3": 0.28,
+        "4": 0.31,
+        "5": 0.19
+      },
+      "weight": 1.0,
+      "notes": "Replace with real observed distribution from survey summary."
+    },
+    {
+      "question_id": "Q2",
+      "question_text_contains": "barrier",
+      "distribution": {
+        "Upfront cost": 0.42,
+        "Not enough space": 0.18,
+        "Installation complexity": 0.21,
+        "Not sure of value": 0.19
+      },
+      "weight": 1.0,
+      "notes": "Replace options and shares with exact real summary values."
+    }
+  ]
+}

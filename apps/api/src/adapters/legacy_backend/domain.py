@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from html import unescape
 import base64
@@ -20,7 +20,7 @@ from src.api.errors import serializable_validation_errors
 from src.adapters.legacy_backend.runtime import load_module, load_service_account_info, temporary_env
 from src.adapters.legacy_backend.survey_docx_fallback import parse_aytm_style_docx_to_validated_schema
 from src.config.settings import AppSettings
-from src.services.exceptions import LegacyModuleApiError, ProviderUnavailableApiError, ValidationApiError
+from src.services.exceptions import ApiError, LegacyModuleApiError, ProviderUnavailableApiError, ValidationApiError
 
 
 # Respondent requests are independent provider round-trips, so they are issued
@@ -390,6 +390,14 @@ def _build_prompt_payload_with_override(
     }
 
 
+# Provider statuses that will not resolve by trying again: the account cannot pay for the request, or
+# the requested model does not exist. Retrying or filling the gap with deterministic answers would
+# produce a complete-looking dataset that is entirely fabricated, so the run stops instead.
+# Verified against OpenRouter: 402 "requires more credits", 404 "No endpoints found for <model>",
+# 400 "<model> is not a valid model ID". Transient statuses (408, 429, 5xx) keep their fallback.
+_NON_RETRYABLE_PROVIDER_STATUSES = frozenset({400, 402, 404})
+
+
 def _extract_provider_error_detail(result: Dict[str, Any]) -> str:
     raw_text = str(result.get("raw_text") or "").strip()
     if raw_text:
@@ -410,6 +418,31 @@ def _extract_provider_error_detail(result: Dict[str, Any]) -> str:
     return str(result.get("error") or "Unknown provider error").strip()
 
 
+def _terminal_provider_error(result: Dict[str, Any], model_name: str) -> Optional[ApiError]:
+    """Return the error to raise if this provider result cannot be recovered by falling back.
+
+    Bad credentials and non-retryable statuses fail identically for every remaining respondent, so
+    filling their answers in would produce a complete-looking dataset that is entirely invented.
+    Returns ``None`` for transient failures (408, 429, 5xx), which keep the fallback path.
+
+    Kept separate from the record-assembly loop so the check can run as each response lands rather
+    than after the whole batch has been paid for.
+    """
+    if bool(result.get("ok")):
+        return None
+    status_code = result.get("status_code")
+    if status_code in {401, 403}:
+        return LegacyModuleApiError(
+            f"OpenRouter authentication failed: {_extract_provider_error_detail(result)}"
+        )
+    if status_code in _NON_RETRYABLE_PROVIDER_STATUSES:
+        return ProviderUnavailableApiError(
+            f"OpenRouter could not run model {model_name} (HTTP {status_code}): "
+            f"{_extract_provider_error_detail(result)}"
+        )
+    return None
+
+
 def _generate_live_response_records_with_debug(
     *,
     schemas: Any,
@@ -425,7 +458,7 @@ def _generate_live_response_records_with_debug(
     prompt_user_template_override: Optional[str],
     openrouter_timeout_sec: int = 45,
     max_concurrency: int = DEFAULT_SIMULATION_MAX_CONCURRENCY,
-) -> tuple[List[Any], Dict[str, Any]]:
+) -> tuple[List[Any], Dict[str, Any], List[bool]]:
     extract_answer_map = getattr(run_manager, "_extract_answer_map_from_openrouter_result")
     coerce_answer = getattr(run_manager, "_coerce_openrouter_answer_value")
     generate_mock_answer = getattr(run_manager, "_generate_mock_answer")
@@ -456,6 +489,7 @@ def _generate_live_response_records_with_debug(
     fallback_count = 0
     parsed_count = 0
     records: List[Any] = []
+    record_is_fallback: List[bool] = []
 
     # Each respondent is an independent provider round-trip, so the requests are
     # issued concurrently. Only the network calls are parallel: prompts are built
@@ -482,24 +516,47 @@ def _generate_live_response_records_with_debug(
             timeout=openrouter_timeout_sec,
         )
 
+    # A failure that will repeat for every respondent -- bad credentials, no credit, a model the
+    # provider does not serve -- is checked as each response lands rather than after the whole batch,
+    # so a misconfigured study costs a handful of requests instead of sample_size x models.
     worker_count = max(1, min(int(max_concurrency), len(respondent_model_pairs) or 1))
+    results: List[Optional[dict]] = [None] * len(respondent_model_pairs)
+
     if worker_count == 1 or len(respondent_model_pairs) <= 1:
-        results = [_dispatch(index) for index in range(len(respondent_model_pairs))]
+        for index in range(len(respondent_model_pairs)):
+            results[index] = _dispatch(index)
+            terminal = _terminal_provider_error(results[index], respondent_model_pairs[index][1])
+            if terminal is not None:
+                raise terminal
     else:
-        with ThreadPoolExecutor(max_workers=worker_count) as executor:
-            results = list(executor.map(_dispatch, range(len(respondent_model_pairs))))
+        executor = ThreadPoolExecutor(max_workers=worker_count)
+        try:
+            pending = {
+                executor.submit(_dispatch, index): index
+                for index in range(len(respondent_model_pairs))
+            }
+            for future in as_completed(pending):
+                index = pending[future]
+                results[index] = future.result()
+                terminal = _terminal_provider_error(results[index], respondent_model_pairs[index][1])
+                if terminal is not None:
+                    raise terminal
+        finally:
+            # Requests that have not started yet are dropped; the handful already in flight are left
+            # to finish on their own rather than blocking the error from reaching the caller. Their
+            # results are discarded.
+            executor.shutdown(wait=False, cancel_futures=True)
 
     for index, (respondent_id, model_name, respondent_index, rerun) in enumerate(respondent_model_pairs):
         persona = persona_profiles[(respondent_index - 1) % len(persona_profiles)]
         segment_label = persona.segment_label or "General Segment"
         result = results[index]
         if not bool(result.get("ok")):
+            # Anything terminal already stopped the run at dispatch, so every failure reaching this
+            # point is transient and is counted, reported, and filled from the fallback generator.
             request_errors += 1
             status_code = result.get("status_code")
             error_text = str(result.get("error") or "").lower()
-            if status_code in {401, 403}:
-                detail = _extract_provider_error_detail(result)
-                raise LegacyModuleApiError(f"OpenRouter authentication failed: {detail}")
             if status_code and int(status_code) >= 400:
                 provider_error_count += 1
             if "json" in error_text:
@@ -509,6 +566,7 @@ def _generate_live_response_records_with_debug(
         for question_index, question in enumerate(survey_schema.questions, start=1):
             answer_value = parsed_answers.get(question.id)
             validated_answer = coerce_answer(question, answer_value)
+            validated_answer_was_replaced = validated_answer is None
             if validated_answer is None:
                 fallback_count += 1
                 validated_answer = generate_mock_answer(
@@ -538,6 +596,10 @@ def _generate_live_response_records_with_debug(
                     run_id=config.run_id,
                 )
             )
+            # Parallel to `records`: whether this answer was synthesized rather than returned by the
+            # model. Tracked here rather than on MockResponseRecord because that schema lives in the
+            # legacy tree, which exists in two copies that can drift (see QA baseline §4).
+            record_is_fallback.append(validated_answer_was_replaced)
 
     generation_debug = {
         "generation_mode": "openrouter_live",
@@ -550,7 +612,7 @@ def _generate_live_response_records_with_debug(
         "questions_fallback_to_mock": int(fallback_count),
         "questions_parsed_from_live": int(parsed_count),
     }
-    return records, generation_debug
+    return records, generation_debug, record_is_fallback
 
 
 def parse_normalize_validate_survey(file_name: str, file_bytes: bytes, legacy_root: Path) -> dict:
@@ -971,7 +1033,7 @@ def execute_simulation_run(
                 "OPENROUTER_BASE_URL": settings.openrouter_base_url,
             }
         ):
-            records, generation_debug = _generate_live_response_records_with_debug(
+            records, generation_debug, record_is_fallback = _generate_live_response_records_with_debug(
                 schemas=schemas,
                 run_manager=run_manager,
                 llm_client=llm_client,
@@ -992,7 +1054,9 @@ def execute_simulation_run(
                 provider_model_name=provider_model_name,
                 records=records,
             )
-    except LegacyModuleApiError:
+    except ApiError:
+        # Already-classified failures (provider unavailable, validation, auth) carry their own status
+        # and message; re-wrapping them as a 500 would hide an actionable cause behind a crash.
         raise
     except Exception as exc:
         raise LegacyModuleApiError(f"Simulation execution failed: {exc}") from exc
@@ -1099,8 +1163,14 @@ def execute_simulation_run(
             "selected_models": list(result.models_used),
         },
         "personas": [persona.model_dump() for persona in personas],
-        "response_records": [record.model_dump() for record in records],
-        "response_record_preview": [record.model_dump() for record in records[:24]],
+        "response_records": [
+            {**record.model_dump(), "is_fallback": bool(flag)}
+            for record, flag in zip(records, record_is_fallback)
+        ],
+        "response_record_preview": [
+            {**record.model_dump(), "is_fallback": bool(flag)}
+            for record, flag in list(zip(records, record_is_fallback))[:24]
+        ],
         "survey_parse_warnings": list(survey_payload.get("parse_warnings", [])),
     }
 
@@ -1193,7 +1263,7 @@ def execute_stability_check(
                     "OPENROUTER_BASE_URL": settings.openrouter_base_url,
                 }
             ):
-                records, generation_debug = _generate_live_response_records_with_debug(
+                records, generation_debug, record_is_fallback = _generate_live_response_records_with_debug(
                     schemas=schemas,
                     run_manager=run_manager,
                     llm_client=llm_client,
@@ -1238,6 +1308,41 @@ def execute_stability_check(
     }
 
 
+def _split_live_and_fallback_records(
+    records: List[Dict[str, Any]]
+) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """Separate answers a model returned from deterministic filler.
+
+    Fabricated answers are schema-valid and carry the real model name, so counting them would average
+    filler into every mean, percentage and ranking. They stay in the saved dataset — this only decides
+    what the analytical surfaces read.
+
+    Runs saved before provenance existed have no ``is_fallback`` key; those are treated as live, since
+    excluding them would erase historic results rather than correct them.
+    """
+    live: List[Dict[str, Any]] = []
+    fallback: List[Dict[str, Any]] = []
+    for record in records:
+        (fallback if record.get("is_fallback") is True else live).append(record)
+    return live, fallback
+
+
+def _answer_sourcing_summary(
+    live_records: List[Dict[str, Any]], fallback_records: List[Dict[str, Any]]
+) -> Dict[str, Any]:
+    total = len(live_records) + len(fallback_records)
+    return {
+        "live_answers_used": len(live_records),
+        "fallback_answers_excluded": len(fallback_records),
+        "total_answers": total,
+        "live_answer_rate": round(len(live_records) / total, 4) if total else None,
+        "note": (
+            "Charts, means and rankings use live model answers only. Fabricated answers remain in the "
+            "saved records, flagged, and are excluded from analysis."
+        ),
+    }
+
+
 def build_analysis_view(
     *,
     settings: AppSettings,
@@ -1263,12 +1368,25 @@ def build_analysis_view(
             "transparency_note": transparency_note,
         }
 
-    records = list(latest_run_payload.get("response_records") or [])
+    all_records = list(latest_run_payload.get("response_records") or [])
     personas = list(latest_run_payload.get("personas") or [])
-    if not records:
+    if not all_records:
         return {
             "available": False,
             "message": "The latest run does not include response records yet.",
+            "transparency_note": transparency_note,
+        }
+
+    records, fallback_records = _split_live_and_fallback_records(all_records)
+    answer_sourcing = _answer_sourcing_summary(records, fallback_records)
+    if not records:
+        return {
+            "available": False,
+            "message": (
+                "Every answer in this run was deterministic filler rather than a model response, so "
+                "there is nothing to analyse. Check the run diagnostics before relying on it."
+            ),
+            "answer_sourcing": answer_sourcing,
             "transparency_note": transparency_note,
         }
 
@@ -1333,7 +1451,12 @@ def build_analysis_view(
         else pd.DataFrame(columns=["respondent_id", "model", "segment_label", "answer"])
     )
 
-    preview_df = filtered_df.iloc[records_offset : records_offset + records_limit].copy()
+    # The raw-record view intentionally pages over *all* saved rows, including fabricated ones, so a
+    # reader can inspect what was excluded rather than only being told a count.
+    all_filtered_df = _apply_record_filters(
+        df=pd.DataFrame(all_records), model=selected_model, segment_label=selected_segment
+    )
+    preview_df = all_filtered_df.iloc[records_offset : records_offset + records_limit].copy()
     benchmark_snapshot = _build_benchmark_snapshot(
         df=df,
         personas=personas,
@@ -1401,8 +1524,9 @@ def build_analysis_view(
             "selected_question_id": selected_open_text_question_id,
             "samples": _dataframe_to_records(open_text_samples_df),
         },
+        "answer_sourcing": answer_sourcing,
         "records_preview": {
-            "total": int(len(filtered_df)),
+            "total": int(len(all_filtered_df)),
             "offset": int(records_offset),
             "limit": int(records_limit),
             "rows": _dataframe_to_records(preview_df),
@@ -1432,7 +1556,9 @@ def build_insights_view(
             "transparency_note": transparency_note,
         }
 
-    records = list(latest_run_payload.get("response_records") or [])
+    all_records = list(latest_run_payload.get("response_records") or [])
+    records, fallback_records = _split_live_and_fallback_records(all_records)
+    answer_sourcing = _answer_sourcing_summary(records, fallback_records)
     personas = list(latest_run_payload.get("personas") or [])
     if not records:
         return {
@@ -1471,10 +1597,10 @@ def build_insights_view(
         realism_module=realism,
     )
 
-    barrier_ranking = _build_barrier_ranking(df)
-    message_performance = _build_message_performance(df)
-    use_case_share = _build_use_case_share(df)
-    interest_ladder = _build_interest_ladder(df)
+    barrier_ranking = _build_barrier_ranking(df, study_mode)
+    message_performance = _build_message_performance(df, study_mode)
+    use_case_share = _build_use_case_share(df, study_mode)
+    interest_ladder = _build_interest_ladder(df, study_mode)
     segment_heatmap = _build_segment_heatmap(df, barrier_ranking, message_performance)
     model_difference_chart = _build_model_difference_chart(df)
 
@@ -1526,6 +1652,7 @@ def build_insights_view(
 
     return {
         "available": True,
+        "answer_sourcing": answer_sourcing,
         "transparency_note": transparency_note,
         "run": {
             "run_id": latest_run_payload.get("run_id"),
@@ -1859,6 +1986,8 @@ def _build_question_options(
                 "response_count": int(response_counts.get(question_id, 0)),
                 "question_order": index + 1,
                 "option_values": _extract_question_option_values(question),
+                "scale_min": question.get("min_value"),
+                "scale_max": question.get("max_value"),
             }
         )
 
@@ -1953,6 +2082,8 @@ def _build_analysis_dashboard_questions(
                 distribution_df,
                 chart_kind=chart_kind,
                 declared_options=list(option.get("option_values") or []),
+                scale_min=option.get("scale_min"),
+                scale_max=option.get("scale_max"),
             )
         elif chart_kind == "histogram":
             question_payload["histogram_bins"] = _compute_histogram_bins(question_df)
@@ -1989,11 +2120,39 @@ def _resolve_dashboard_chart_kind(question_df: pd.DataFrame, question_type: str)
     return "categorical_bar"
 
 
+def _likert_scale_position_labels(
+    declared_options: list[str],
+    scale_min: Optional[int],
+    scale_max: Optional[int],
+) -> dict[str, str]:
+    """Map a numeric answer onto the scale point it represents.
+
+    Models answer Likert questions with numbers while the question declares named scale points, so
+    "4" has to be resolved to the 4th declared option before counts can be matched. Only applied when
+    the declared options really are named and their count matches the declared range, so an
+    out-of-range or unexpected value is left alone and stays visible.
+    """
+    if scale_min is None or scale_max is None:
+        return {}
+    if scale_max < scale_min:
+        return {}
+    if len(declared_options) != (scale_max - scale_min + 1):
+        return {}
+    if all(str(option).strip().isdigit() for option in declared_options):
+        return {}
+    return {
+        str(value): str(declared_options[value - scale_min])
+        for value in range(scale_min, scale_max + 1)
+    }
+
+
 def _shape_distribution_rows(
     distribution_df: pd.DataFrame,
     *,
     chart_kind: str,
     declared_options: Optional[list[str]] = None,
+    scale_min: Optional[int] = None,
+    scale_max: Optional[int] = None,
 ) -> list[dict[str, Any]]:
     if distribution_df.empty and not declared_options:
         return []
@@ -2002,10 +2161,16 @@ def _shape_distribution_rows(
     total = sum(int(row.get("count") or 0) for row in rows)
 
     if declared_options:
-        counts_by_label = {
-            str(row.get("answer_display") or "No answer"): int(row.get("count") or 0)
-            for row in rows
-        }
+        scale_labels = (
+            _likert_scale_position_labels(declared_options, scale_min, scale_max)
+            if chart_kind == "likert"
+            else {}
+        )
+        counts_by_label: dict[str, int] = {}
+        for row in rows:
+            raw_label = str(row.get("answer_display") or "No answer")
+            label = scale_labels.get(raw_label, raw_label)
+            counts_by_label[label] = counts_by_label.get(label, 0) + int(row.get("count") or 0)
         ordered_rows = []
         seen_labels: set[str] = set()
         for option in declared_options:
@@ -2024,12 +2189,21 @@ def _shape_distribution_rows(
 
         extras = [
             {
-                "label": str(row.get("answer_display") or "No answer"),
+                "label": scale_labels.get(
+                    str(row.get("answer_display") or "No answer"),
+                    str(row.get("answer_display") or "No answer"),
+                ),
                 "count": int(row.get("count") or 0),
                 "percentage": float(row.get("percentage") or 0),
             }
             for row in rows
-            if str(row.get("answer_display") or "No answer") not in seen_labels
+            # Compare the *mapped* label: a numeric answer resolved onto a declared scale point has
+            # already been counted above, so re-emitting it would duplicate the bar.
+            if scale_labels.get(
+                str(row.get("answer_display") or "No answer"),
+                str(row.get("answer_display") or "No answer"),
+            )
+            not in seen_labels
         ]
         if chart_kind == "likert":
             extras.sort(key=lambda row: _likert_sort_key(str(row.get("label") or "")))
@@ -2722,13 +2896,34 @@ def _build_segment_story(
     }
 
 
-def _build_barrier_ranking(df: pd.DataFrame) -> dict[str, Any]:
+GENERIC_INSIGHT_UNAVAILABLE_MESSAGE = "This insight is not applicable to this survey."
+
+
+def _insight_unavailable_message(study_mode: Optional[str], neo_detail: str) -> str:
+    """Explain an unavailable insight in terms the reader can act on.
+
+    The Neo metrics key on that survey's question ids, so naming the missing question is useful *in Neo*
+    and meaningless anywhere else — a coffee-subscription study being told "Primary use question Q3 was
+    not found" implies the researcher mis-numbered something. Custom studies get generic wording.
+    """
+    if str(study_mode or "") == "neo_smart":
+        return neo_detail
+    return GENERIC_INSIGHT_UNAVAILABLE_MESSAGE
+
+
+def _build_barrier_ranking(df: pd.DataFrame, study_mode: Optional[str] = None) -> dict[str, Any]:
     if df.empty or "question_id" not in df.columns:
         return {"available": False, "message": "No records available.", "rows": []}
 
     barrier_df = df[df["question_id"].astype(str).str.startswith("Q5_")].copy()
     if barrier_df.empty:
-        return {"available": False, "message": "Barrier matrix items were not found in this run.", "rows": []}
+        return {
+            "available": False,
+            "message": _insight_unavailable_message(
+                study_mode, "Barrier matrix items were not found in this run."
+            ),
+            "rows": [],
+        }
 
     rows: list[dict[str, Any]] = []
     for question_id, qdf in barrier_df.groupby("question_id"):
@@ -2749,7 +2944,7 @@ def _build_barrier_ranking(df: pd.DataFrame) -> dict[str, Any]:
     return {"available": True, "rows": rows}
 
 
-def _build_message_performance(df: pd.DataFrame) -> dict[str, Any]:
+def _build_message_performance(df: pd.DataFrame, study_mode: Optional[str] = None) -> dict[str, Any]:
     if df.empty:
         return {"available": False, "message": "No records available.", "rows": []}
 
@@ -2773,16 +2968,24 @@ def _build_message_performance(df: pd.DataFrame) -> dict[str, Any]:
     if not rows:
         return {
             "available": False,
-            "message": "Positioning concept pairs were not found in this run.",
+            "message": _insight_unavailable_message(
+                study_mode, "Positioning concept pairs were not found in this run."
+            ),
             "rows": [],
         }
     return {"available": True, "rows": rows}
 
 
-def _build_use_case_share(df: pd.DataFrame) -> dict[str, Any]:
+def _build_use_case_share(df: pd.DataFrame, study_mode: Optional[str] = None) -> dict[str, Any]:
     distribution = _compute_question_answer_distribution(df, "Q3")
     if getattr(distribution, "empty", True):
-        return {"available": False, "message": "Primary use question Q3 was not found.", "rows": []}
+        return {
+            "available": False,
+            "message": _insight_unavailable_message(
+                study_mode, "Primary use question Q3 was not found."
+            ),
+            "rows": [],
+        }
 
     rows = [
         {
@@ -2795,7 +2998,7 @@ def _build_use_case_share(df: pd.DataFrame) -> dict[str, Any]:
     return {"available": True, "rows": rows}
 
 
-def _build_interest_ladder(df: pd.DataFrame) -> dict[str, Any]:
+def _build_interest_ladder(df: pd.DataFrame, study_mode: Optional[str] = None) -> dict[str, Any]:
     if df.empty:
         return {"available": False, "message": "No records available.", "rows": []}
 
@@ -2822,7 +3025,13 @@ def _build_interest_ladder(df: pd.DataFrame) -> dict[str, Any]:
         )
 
     if not rows:
-        return {"available": False, "message": "Core decision-ladder questions were not found.", "rows": []}
+        return {
+            "available": False,
+            "message": _insight_unavailable_message(
+                study_mode, "Core decision-ladder questions were not found."
+            ),
+            "rows": [],
+        }
     return {"available": True, "rows": rows}
 
 
@@ -2995,18 +3204,26 @@ def _question_positive_share(qdf: pd.DataFrame) -> Optional[float]:
     return float(positives.mean() * 100)
 
 
-def _compute_strongest_segment(df: pd.DataFrame) -> str:
+def _compute_strongest_segment(df: pd.DataFrame) -> Optional[str]:
+    """Highest-scoring segment, or None when the run cannot support the comparison.
+
+    `_segment_score_table` only scores segments that have numeric answers for Q0B/Q1/Q2, so a survey
+    using different question ids scores nothing. Ranking needs at least two scored segments: with
+    none there is nothing to rank, and with one `max` and `min` return the same label, which
+    previously surfaced the same segment as both strongest and weakest. Returning None keeps the
+    metric out of the evidence package handed to the summarising model.
+    """
     segment_scores = _segment_score_table(df)
-    if not segment_scores:
-        segments = _list_segments(df)
-        return segments[0] if segments else "N/A"
+    if len(segment_scores) < 2:
+        return None
     return max(segment_scores.items(), key=lambda item: item[1])[0]
 
 
-def _compute_weakest_segment(df: pd.DataFrame) -> str:
+def _compute_weakest_segment(df: pd.DataFrame) -> Optional[str]:
+    """Lowest-scoring segment, or None when fewer than two segments could be scored."""
     segment_scores = _segment_score_table(df)
-    if not segment_scores:
-        return "N/A"
+    if len(segment_scores) < 2:
+        return None
     return min(segment_scores.items(), key=lambda item: item[1])[0]
 
 

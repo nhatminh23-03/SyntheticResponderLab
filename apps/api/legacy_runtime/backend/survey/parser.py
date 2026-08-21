@@ -11,6 +11,11 @@ from typing import Any, Dict, List, Optional
 QUESTION_PATTERNS = [
 	re.compile(r"^\s*(?P<id>[A-Za-z]?\d+[A-Za-z]?)\s*[:\.\-]\s*(?P<text>.+)$", re.IGNORECASE),
 	re.compile(r"^\s*Question\s*(?P<id>[A-Za-z]?\d+[A-Za-z]?)\s*[:\.\-]\s*(?P<text>.+)$", re.IGNORECASE),
+	# Semantic ids such as `BENEFIT.` or `PRICE:`. Deliberately case-SENSITIVE and all-caps: a
+	# researcher writing a question code shouts it, whereas prose keys like `Note:` or `Mode:` are
+	# title case. Matching those would turn narrative lines into questions, because
+	# `_match_question_start` runs on every line before the metadata check.
+	re.compile(r"^\s*(?P<id>[A-Z][A-Z0-9_]{1,31})\s*[:\.\-]\s*(?P<text>.+)$"),
 ]
 
 # Only accept these keys from `Key: value` metadata lines.
@@ -307,6 +312,9 @@ def _match_question_start(line: str) -> Optional[tuple[str, str]]:
 		match = pattern.match(candidate)
 		if match:
 			raw_id = match.group("id").strip()
+			# Reserved metadata keys describe a question; they never introduce one.
+			if raw_id.lower().replace(" ", "_") in _KNOWN_METADATA_KEYS:
+				continue
 			if raw_id and raw_id[0].isalpha():
 				normalized_id = raw_id.upper()
 			else:

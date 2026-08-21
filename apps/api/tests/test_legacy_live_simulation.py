@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from src.adapters.legacy_backend.domain import execute_simulation_run
 from src.adapters.legacy_backend.runtime import load_module
 from src.services.exceptions import LegacyModuleApiError, ProviderUnavailableApiError
@@ -305,3 +307,209 @@ def test_execute_simulation_run_fails_fast_on_openrouter_401(test_settings, monk
         assert "user not found" in exc.message.lower()
     else:
         raise AssertionError("Expected execute_simulation_run to fail fast on OpenRouter 401 errors.")
+
+
+def test_saved_records_mark_which_answers_were_fabricated(test_settings, monkeypatch):
+    """F-04: a fabricated answer must be identifiable at the row level.
+
+    The mock generator emits schema-valid answers stamped with the real provider model name, so a
+    fabricated row is indistinguishable from a live one — during QA it was impossible to tell which
+    records were invented even with full database access and the survey schema. Charts, exports and
+    the raw-record view all need a per-row flag to exclude or mark them.
+
+    Q1 is single_choice Yes/No and the model answers "Maybe", which fails exact option matching and is
+    replaced. Q2 is open_text and is accepted as returned.
+    """
+    settings = _settings_with_openrouter(test_settings)
+    payloads = _base_run_payloads(sample_size=1)
+    payloads["experiment_payload"]["selected_models"] = ["openai/gpt-4o-mini", "google/gemini-2.5-flash"]
+    _patch_grounded_personas(monkeypatch, settings, sample_size=1)
+
+    llm_client = load_module("backend.simulation.llm_client", settings.legacy_app_root)
+    monkeypatch.setattr(
+        llm_client.requests,
+        "post",
+        lambda url, headers, json, timeout: _FakeOpenRouterResponse(
+            '{"answers":[{"question_id":"Q1","answer":"Maybe"},'
+            '{"question_id":"Q2","answer":"I still like the concept overall."}]}'
+        ),
+    )
+
+    result = execute_simulation_run(
+        settings=settings,
+        audience_payload=payloads["audience_payload"],
+        survey_payload=payloads["survey_payload"],
+        experiment_payload=payloads["experiment_payload"],
+        product_payload=payloads["product_payload"],
+        market_payload=payloads["market_payload"],
+        geography_context=None,
+    )
+
+    records = result["response_records"]
+    assert records, "expected saved response records"
+
+    by_question = {}
+    for record in records:
+        by_question.setdefault(record["question_id"], []).append(record)
+
+    assert all(
+        record["is_fallback"] is True for record in by_question["Q1"]
+    ), "the discarded single-choice answer must be marked as fabricated"
+    assert all(
+        record["is_fallback"] is False for record in by_question["Q2"]
+    ), "an answer used as the model returned it must not be marked as fabricated"
+
+    fabricated = [record for record in records if record["is_fallback"]]
+    debug = result.get("run_debug_summary") or {}
+    assert len(fabricated) == debug.get("fallback_answers"), (
+        "the per-row flags must reconcile with the reported fallback count"
+    )
+class _ProviderErrorResponse:
+    """Mimics an OpenRouter error body for a given status code."""
+
+    def __init__(self, status_code: int, message: str) -> None:
+        self.status_code = status_code
+        self._payload = {"error": {"message": message, "code": status_code}}
+        self.text = json.dumps(self._payload)
+
+    def json(self):
+        return self._payload
+
+
+def _run_with_provider_error(test_settings, monkeypatch, *, status_code: int, message: str):
+    settings = _settings_with_openrouter(test_settings)
+    payloads = _base_run_payloads(sample_size=1)
+    payloads["experiment_payload"]["selected_models"] = ["openai/gpt-4o-mini", "google/gemini-2.5-flash"]
+    _patch_grounded_personas(monkeypatch, settings, sample_size=1)
+
+    llm_client = load_module("backend.simulation.llm_client", settings.legacy_app_root)
+    monkeypatch.setattr(
+        llm_client.requests,
+        "post",
+        lambda url, headers, json, timeout: _ProviderErrorResponse(status_code, message),
+    )
+
+    return execute_simulation_run(
+        settings=settings,
+        audience_payload=payloads["audience_payload"],
+        survey_payload=payloads["survey_payload"],
+        experiment_payload=payloads["experiment_payload"],
+        product_payload=payloads["product_payload"],
+        market_payload=payloads["market_payload"],
+        geography_context=None,
+    )
+
+
+def test_execute_simulation_run_fails_fast_when_provider_is_out_of_credits(test_settings, monkeypatch):
+    """F-04: an exhausted account must not yield a 'completed' run of fabricated answers.
+
+    HTTP 402 is hard and non-transient — every subsequent call fails the same way — so continuing
+    produces a dataset that is entirely deterministic filler while reporting success.
+    """
+    provider_message = (
+        "This request requires more credits, or fewer max_tokens. You requested up to 1200 tokens, "
+        "but can only afford 82."
+    )
+    try:
+        result = _run_with_provider_error(
+            test_settings, monkeypatch, status_code=402, message=provider_message
+        )
+    except ProviderUnavailableApiError as exc:
+        assert "more credits" in exc.message, (
+            "the provider's own remedy text must reach the user, not be discarded"
+        )
+    else:
+        raise AssertionError(
+            f"expected the run to fail fast; it returned status={result.get('status')!r} with "
+            f"{len(result.get('response_records') or [])} fabricated records"
+        )
+
+
+def test_execute_simulation_run_fails_fast_on_retired_model_id(test_settings, monkeypatch):
+    """F-04b: a model id the provider no longer serves must stop the run, not fabricate its share."""
+    provider_message = "No endpoints found for google/gemini-2.0-flash-001."
+    try:
+        result = _run_with_provider_error(
+            test_settings, monkeypatch, status_code=404, message=provider_message
+        )
+    except ProviderUnavailableApiError as exc:
+        assert "No endpoints found" in exc.message
+    else:
+        raise AssertionError(
+            f"expected the run to fail fast; it returned status={result.get('status')!r} with "
+            f"{len(result.get('response_records') or [])} fabricated records"
+        )
+
+
+def test_execute_simulation_run_still_falls_back_on_transient_provider_errors(test_settings, monkeypatch):
+    """Guard against over-correcting: 429 is retryable, so the run should still complete.
+
+    Rate limiting is transient and per-call; failing the whole study for one throttled request would
+    be worse than filling that gap and reporting it in the diagnostics.
+    """
+    result = _run_with_provider_error(
+        test_settings, monkeypatch, status_code=429, message="Rate limit exceeded."
+    )
+
+    assert result["status"] == "completed"
+    debug = result.get("run_debug_summary") or {}
+    assert debug.get("fallback_answers", 0) > 0
+    assert debug.get("live_answer_rate") == 0.0
+
+
+def test_non_retryable_error_stops_the_run_without_paying_for_every_respondent(test_settings, monkeypatch):
+    """F-04b under concurrent dispatch: a 402 must not cost one provider call per respondent.
+
+    Requests are issued in parallel, so a hard failure is only visible once a response lands. If the
+    whole batch is drained before any status is inspected, the run still fails -- but only after
+    spending exactly what failing fast was supposed to save. Checking each result as it arrives caps
+    the loss at roughly the worker pool.
+    """
+    import threading
+
+    settings = _settings_with_openrouter(test_settings).model_copy(
+        update={"simulation_max_concurrency": 4}
+    )
+    sample_size = 40
+    payloads = _base_run_payloads(sample_size=sample_size)
+    payloads["experiment_payload"]["selected_models"] = ["openai/gpt-4o-mini", "google/gemini-2.5-flash"]
+    _patch_grounded_personas(monkeypatch, settings, sample_size=sample_size)
+
+    calls = {"count": 0}
+    counter_lock = threading.Lock()
+
+    def _fake_post(url, headers, json, timeout):
+        with counter_lock:
+            calls["count"] += 1
+        return _ProviderErrorResponse(402, "This request requires more credits.")
+
+    llm_client = load_module("backend.simulation.llm_client", settings.legacy_app_root)
+    monkeypatch.setattr(llm_client.requests, "post", _fake_post)
+
+    try:
+        result = execute_simulation_run(
+            settings=settings,
+            audience_payload=payloads["audience_payload"],
+            survey_payload=payloads["survey_payload"],
+            experiment_payload=payloads["experiment_payload"],
+            product_payload=payloads["product_payload"],
+            market_payload=payloads["market_payload"],
+            geography_context=None,
+        )
+    except ProviderUnavailableApiError as exc:
+        assert "more credits" in exc.message
+    else:
+        raise AssertionError(
+            f"expected the run to fail fast; it returned status={result.get('status')!r}"
+        )
+
+    with counter_lock:
+        issued = calls["count"]
+
+    assert issued < sample_size, (
+        f"the run issued {issued} of {sample_size} provider calls before stopping -- "
+        "every result was collected before any status was inspected"
+    )
+    assert issued <= 12, (
+        f"expected the loss to be bounded by the worker pool (4), but {issued} calls were issued"
+    )

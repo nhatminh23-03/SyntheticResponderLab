@@ -115,7 +115,9 @@ class _RecordingClient:
 
 def test_records_stay_in_respondent_order(legacy):
     """Completion order must not leak into saved output."""
-    records, debug = _run(legacy, _RecordingClient(delay=0.0), sample_size=6, max_concurrency=6)
+    records, debug, _is_fallback = _run(
+        legacy, _RecordingClient(delay=0.0), sample_size=6, max_concurrency=6
+    )
 
     assert debug["questions_fallback_to_mock"] == 0
     assert debug["questions_parsed_from_live"] == 18
@@ -143,7 +145,7 @@ def test_requests_actually_overlap(legacy):
 def test_concurrency_of_one_still_works(legacy):
     """max_concurrency=1 must fall back to a plain sequential loop."""
     client = _RecordingClient(delay=0.0)
-    records, debug = _run(legacy, client, sample_size=4, max_concurrency=1)
+    records, debug, _is_fallback = _run(legacy, client, sample_size=4, max_concurrency=1)
 
     assert client.calls == 4
     assert client.peak_concurrency == 1
@@ -152,10 +154,10 @@ def test_concurrency_of_one_still_works(legacy):
 
 
 def test_parallel_and_sequential_produce_identical_records(legacy):
-    sequential, sequential_debug = _run(
+    sequential, sequential_debug, sequential_fallback = _run(
         legacy, _RecordingClient(delay=0.0), sample_size=5, max_concurrency=1
     )
-    parallel, parallel_debug = _run(
+    parallel, parallel_debug, parallel_fallback = _run(
         legacy, _RecordingClient(delay=0.0), sample_size=5, max_concurrency=5
     )
 
@@ -163,3 +165,6 @@ def test_parallel_and_sequential_produce_identical_records(legacy):
     assert [record.model_dump() for record in sequential] == [
         record.model_dump() for record in parallel
     ]
+    # Provenance is per-row and positional, so it has to survive completion order too --
+    # a flag list that drifted would mislabel which answers were fabricated.
+    assert sequential_fallback == parallel_fallback

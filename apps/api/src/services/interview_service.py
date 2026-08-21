@@ -593,6 +593,11 @@ def _serialize_interview_job(job: Job) -> Dict[str, Any]:
         "model_a": result.get("model_a") or job.payload_json.get("model_a"),
         "model_b": result.get("model_b") or job.payload_json.get("model_b"),
         "grounding_report": grounding if grounding else None,
+        # Fixture provenance: Neo mode short-circuits to a seeded demo batch with no provider
+        # call, so a client must be able to tell that apart from a live dual-model interview.
+        "demo_fixture": bool(result.get("demo_fixture")),
+        "fixture_source": result.get("fixture_source"),
+        "judge_model": result.get("judge_model"),
         # Include pairs only in result (large payload) — omit from status summary
         "pairs": result.get("pairs") if job.status == "completed" else None,
         "error": job.error_json,
