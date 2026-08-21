@@ -90,6 +90,10 @@ Run the migration:
 alembic upgrade head
 ```
 
+It targets whatever `DATABASE_URL` the application resolves — an exported variable if you set one,
+otherwise the value in `apps/api/.env`. If neither provides one it stops with an error rather than
+migrating a default database the app never opens.
+
 Start the API:
 
 ```bash

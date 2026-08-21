@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from logging.config import fileConfig
 
 from alembic import context
@@ -8,6 +7,7 @@ from sqlalchemy import engine_from_config, pool
 
 from src.persistence.base import Base
 from src.persistence import models  # noqa: F401
+from src.persistence.migration_target import resolve_migration_database_url
 
 
 config = context.config
@@ -15,9 +15,10 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-database_url = os.getenv("DATABASE_URL")
-if database_url:
-    config.set_main_option("sqlalchemy.url", database_url)
+# Resolved the same way the application resolves it, so migrations cannot be applied to a database the
+# app never opens. Reading os.getenv alone meant a URL set only in apps/api/.env -- the documented local
+# setup -- fell through to alembic.ini's default and migrated a second database, reporting success.
+config.set_main_option("sqlalchemy.url", resolve_migration_database_url())
 
 target_metadata = Base.metadata
 
