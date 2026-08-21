@@ -1,0 +1,47 @@
+{
+  "split": {
+    "records": 12,
+    "total_generated_responses": 4,
+    "distinct_ids": 4,
+    "debug": {
+      "primary_live_path": true,
+      "total_answers": 12,
+      "truly_live_answers": 0,
+      "fallback_answers": 12,
+      "provider_error_count": 4,
+      "malformed_json_count": 0,
+      "live_answer_rate": 0.0,
+      "ml_persona_completion_enabled": false
+    }
+  },
+  "mirror": {
+    "records": 24,
+    "total_generated_responses": 4,
+    "distinct_ids": 4,
+    "debug": {
+      "primary_live_path": true,
+      "total_answers": 24,
+      "truly_live_answers": 0,
+      "fallback_answers": 24,
+      "provider_error_count": 8,
+      "malformed_json_count": 0,
+      "live_answer_rate": 0.0,
+      "ml_persona_completion_enabled": false
+    }
+  },
+  "stability": {
+    "records": 36,
+    "total_generated_responses": 4,
+    "distinct_ids": 12,
+    "debug": {
+      "primary_live_path": true,
+      "total_answers": 36,
+      "truly_live_answers": 0,
+      "fallback_answers": 36,
+      "provider_error_count": 12,
+      "malformed_json_count": 0,
+      "live_answer_rate": 0.0,
+      "ml_persona_completion_enabled": false
+    }
+  }
+}
