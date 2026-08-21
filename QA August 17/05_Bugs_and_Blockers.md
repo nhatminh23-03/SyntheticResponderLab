@@ -33,17 +33,17 @@ Severity: **P0** blocks classroom use or invalidates research output · **P1** i
 | R-01 | Undocumented third-party runtime dependency (`api.zippopotam.us`) | P2 | OPEN (new in `2691642`) | Possibly (locked-down networks) | No |
 | R-02 | Image analysis has no provenance: Vision vs `gpt-4o-mini` indistinguishable | P2 | OPEN (new in `2691642`) | No | No |
 | R-03 | `lg:overflow-hidden` on scrollable sections may clip overlays at ≥lg | P2 | OPEN (new in `2691642`) | No | No |
-| R-04 | `npm run test:unit` never cleans `.test-dist`, so stale compiled tests still run | P2 | OPEN (found during F-04 work) | No (undermines test trust) | No |
+| R-04 | `npm run test:unit` never cleans `.test-dist`, so stale compiled tests still run | P2 | **FIXED+VERIFIED** (`035520a`) | ~~No~~ | Demonstrated with a planted stale test |
 
 **Counted against the combined tree `f048fdd`** (`integration/qa-aug-17-all-fixes`, eleven fixes rebased
 onto `yaza_Aug_work` @ `d340d14`). Commit SHAs below are the rebased ones; the pre-rebase branch is
 preserved at `backup/qa-aug-17-pre-rebase`.
 
-**Open: 0 P0 · 2 P1 · 4 P2** as of `1b46df2` (21 Aug). F-08 is partial, not closed; F-10 awaits a project-owner decision.
+**Open: 0 P0 · 2 P1 · 3 P2** as of `035520a` (21 Aug). F-08 is partial, not closed; F-10 awaits a project-owner decision.
 
 - **P0 — none.** F-06 was the last one; its third and final defect closed in `71bbf3b`.
 - **P1 open** — F-08 (partial) and F-10. (F-05 `72d2368`, F-17 `627660e`, F-03 `bcb4626`, F-16 `1b46df2`.)
-- **P2 open** — R-01, R-02, R-03, R-04.
+- **P2 open** — R-01, R-02, R-03. (R-04 closed in `035520a`.)
 
 Closed in this pass and verified on `f048fdd`: F-01 (`a3e6d8a`), F-04 (`2fcbea6`, `7b132c4`, `0fc672f`),
 F-04b (`98f08fe`), F-07 (`3dae8f6`), F-11 (`8ca47ea`), F-13 (`353b01a`), F-14 (`f048fdd`), F-15 (`b1a7841`).

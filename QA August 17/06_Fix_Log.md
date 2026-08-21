@@ -1509,3 +1509,58 @@ apps/web  npm run test:unit   67 passed
 apps/web  tsc --noEmit        clean
 apps/api  pytest -q          195 passed, 0 failed
 ```
+
+---
+
+## R-04 — stale compiled tests were still being counted
+
+**Commit** `035520a`. Test-infrastructure hygiene only; no product code.
+
+### Root cause
+
+`npm run test:unit` ran `tsc -p tsconfig.test.json && node --test .test-dist/tests/**/*.js`. `tsc` writes
+into `.test-dist` without removing what is already there, and the runner globs the directory rather than
+the compiled sources — so a `.js` left behind by a branch that has since been deleted, renamed, or
+checked out over still executes and still counts.
+
+This is why an earlier session in this pass reported **49** frontend tests when the branch had **36**.
+
+### Demonstrated before fixing
+
+A file was planted at `.test-dist/tests/ghost.test.js` with no `.ts` source anywhere in the repository:
+
+```
+ok 15 - GHOST - a test that exists only in .test-dist
+# tests 68
+# pass 68
+```
+
+It ran, passed, and was counted.
+
+### The fix
+
+```diff
+-"test:unit": "tsc -p tsconfig.test.json && node --test .test-dist/tests/**/*.js"
++"test:unit": "rm -rf .test-dist && tsc -p tsconfig.test.json && node --test .test-dist/tests/**/*.js"
+```
+
+### Verified from the same stale state
+
+The planted file was left in place and the command run again:
+
+```
+# tests 67
+# pass 67
+ghost file after run: removed
+```
+
+67 is the true count. Every frontend figure recorded in this pass from here on comes from a clean build
+rather than from a hand-run `rm -rf`.
+
+### Verification
+
+```
+apps/web  npm run test:unit   67 passed, 0 failed, 0 skipped
+apps/web  tsc --noEmit        clean
+apps/api  pytest -q          195 passed, 0 failed
+```
