@@ -140,7 +140,7 @@ because F-02 was the only red test and it is now closed. Frontend **56 passed**,
 ---
 
 ## F-01 — A fresh checkout cannot run the application
-**Severity P0 · OPEN · blocks classroom use · no regression test**
+**Severity P0 · FIXED+VERIFIED (`a3e6d8a`, PR #11, merged `8ba31ee`)** — a `git archive HEAD` checkout runs the suite with no manual setup
 
 **Reproduction.** `git worktree add <path> 7645dfa` (or `1cc5ace`), then `ls NeoSmart-Hackathon-App/`.
 
@@ -203,7 +203,7 @@ AssertionError: assert 'OPENROUTER_API_KEY is required' in 'URL returned HTTP 40
 ---
 
 ## F-04 — A 100%-fabricated run reports `status: "completed"`
-**Severity P0 · OPEN · blocks classroom use**
+**Severity P0 · FIXED+VERIFIED (`2fcbea6`, `7b132c4`, `0fc672f`, PR #11, merged `8ba31ee`)** — rows carry provenance, are excluded from analysis, and an all-filler run is refused by both Analysis and Insights
 
 **Reproduction.** Run any mode while the OpenRouter account cannot fund the request.
 
@@ -239,7 +239,7 @@ So the *failure* was **provider billing**. The **defect is the handling**:
 ---
 
 ## F-04b — A retired model ID silently fabricates its entire share
-**Severity P0 · OPEN · blocks classroom use · no regression test**
+**Severity P0 · FIXED+VERIFIED (`98f08fe`, PR #11, merged `8ba31ee`)** — 400/402/404 stop the run with the provider's own message, and the abort caps wasted calls at the worker pool
 
 **Reproduction.** Mirror, N=3, Q=3, with credits available.
 
@@ -426,7 +426,7 @@ surveys their own version of them.
 ---
 
 ## F-07 — Neo interview fixture is undetectable by any client
-**Severity P0 · OPEN · blocks Dr. Wang's 21–27 Aug step · no regression test**
+**Severity P0 · FIXED+VERIFIED (`3dae8f6`, merged `8ba31ee`; quota exemption `49ee7c9`)** — the client is told it is a fixture, and it no longer charges provider quota
 
 **Evidence.**
 - `interview_service.py:177` short-circuits `study_mode == "neo_smart"` to `ensure_demo_interview_run` **before** the OpenRouter key check. No interview call, no judge call.
@@ -574,7 +574,7 @@ No `LICENSE` or `COPYING` file is tracked anywhere in the repository. Compounded
 ---
 
 ## F-11 — Concurrent first-request-of-day returns HTTP 500 (usage-counter race)
-**Severity P0 · OPEN · found during browser E2E · blocks classroom use · no regression test**
+**Severity P0 · FIXED+VERIFIED (`8ca47ea`, PR #11, merged `8ba31ee`)** — insert-or-increment is a single atomic statement
 
 **Discovered by** clicking "Start Setup" twice on the landing page. The browser console showed a 500 and the
 page rendered blank with the nav stranded at the bottom.
@@ -696,7 +696,7 @@ survey, including the interest and barrier measures the study exists to read.
 ---
 
 ## F-14 — Survey parser rejects non-numeric question IDs, forcing every custom study into the Neo collision
-**Severity P0 · OPEN · confirmed · blocks the teaching-module goal · no regression test**
+**Severity P0 · FIXED+VERIFIED (`f048fdd`, PR #11, merged `8ba31ee`)** — semantic ids are accepted; `tests/test_survey_parser_ids.py`
 
 **Reproduction.** Upload a Neo-style markdown survey whose IDs are words — `BENEFIT`, `INTEREST`, `PRICE`,
 `FEATURES`, `CONCERN` — with content identical to a `Q1…Q5` version that parses fine.

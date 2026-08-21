@@ -80,6 +80,12 @@ sqlite3.IntegrityError: UNIQUE constraint failed:
 
 ## Stages 2–11 — NOT YET EXECUTED
 
+> **Still not executed, as of the release candidate `f05785f`.** The application is behind an
+> invite-only access gate and this QA pass does not enter credentials, so no authenticated browser
+> walkthrough has been performed by QA at any point. The equivalent data was verified through the API
+> with values recomputed from raw records — see `07_Final_Verification.md` — but that is not the same
+> as someone seeing the screens. This is the largest open gap in the release-candidate verdict.
+
 The following stages of the Neo journey were **not** completed in this session and must not be read as passing:
 
 | Stage | Status |
