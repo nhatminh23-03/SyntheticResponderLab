@@ -14,6 +14,7 @@
     "src/lib/setup-flow-utils.ts",
     "src/lib/answer-sourcing.ts",
     "src/lib/run-evidence.ts",
-    "src/lib/interview-provenance.ts"
+    "src/lib/interview-provenance.ts",
+    "src/lib/run-counts.ts"
   ]
 }

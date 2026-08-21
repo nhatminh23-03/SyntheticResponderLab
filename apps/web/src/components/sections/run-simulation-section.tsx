@@ -12,6 +12,7 @@ import {
   startSimulationRun,
 } from "@/lib/api";
 import { describeRunEvidence } from "@/lib/run-evidence";
+import { describeRunCounts } from "@/lib/run-counts";
 import { cn } from "@/lib/utils";
 import { useStudy } from "@/providers/study-provider";
 import { useSectionRegistry } from "@/providers/section-registry-provider";
@@ -149,8 +150,8 @@ export function RunSimulationSection() {
   const latestRunWarnings = latestRun?.result?.warnings ?? [];
   const latestParseWarnings = latestRun?.result?.survey_parse_warnings ?? [];
   const allPersonas = latestRun?.result?.personas ?? [];
-  const completedResponseCount = useMemo(
-    () => getCompletedResponseCount(latestRun?.result),
+  const runCounts = useMemo(
+    () => describeRunCounts(latestRun?.result),
     [latestRun?.result]
   );
   const allResponseRecords =
@@ -371,8 +372,9 @@ export function RunSimulationSection() {
                   <>
                     <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                       <MetaCard
-                        label="Responses"
-                        value={String(completedResponseCount)}
+                        label={runCounts.responsesLabel}
+                        value={runCounts.responsesValue}
+                        caption={runCounts.detail}
                       />
                       <MetaCard
                         label="Experiment mode"
@@ -653,38 +655,6 @@ function formatMode(mode?: string | null) {
   return mode || "Unknown";
 }
 
-function getCompletedResponseCount(result?: SimulationRunResultPayload | null) {
-  if (!result) {
-    return 0;
-  }
-
-  const respondentIds = new Set(
-    (result.response_records ?? [])
-      .map((record) => toOptionalString(record.respondent_id))
-      .filter((value): value is string => Boolean(value))
-  );
-  if (respondentIds.size > 0) {
-    return respondentIds.size;
-  }
-
-  const generatedAnswers = Number(result.total_generated_responses ?? 0);
-  const questionCount = Number(result.question_count ?? 0);
-  if (generatedAnswers > 0 && questionCount > 0) {
-    return Math.max(1, Math.round(generatedAnswers / questionCount));
-  }
-
-  if ((result.personas?.length ?? 0) > 0) {
-    return result.personas?.length ?? 0;
-  }
-
-  const previewRespondentIds = new Set(
-    (result.response_record_preview ?? [])
-      .map((record) => toOptionalString(record.respondent_id))
-      .filter((value): value is string => Boolean(value))
-  );
-  return previewRespondentIds.size;
-}
-
 function formatAnswer(answer: unknown) {
   if (Array.isArray(answer)) {
     return answer.map((value) => String(value)).join(" • ");
@@ -773,13 +743,24 @@ function SourcingStat({ label, value }: { label: string; value: string }) {
 }
 
 
-function MetaCard({ label, value }: { label: string; value: string }) {
+function MetaCard({
+  label,
+  value,
+  caption,
+}: {
+  label: string;
+  value: string;
+  caption?: string;
+}) {
   return (
     <div className="rounded-[1.15rem] border border-white/6 bg-white/[0.03] p-4">
       <div className="text-[0.68rem] uppercase tracking-[0.22em] text-app-muted">
         {label}
       </div>
       <div className="mt-2 text-sm leading-6 text-app-text">{value}</div>
+      {caption ? (
+        <div className="mt-1 text-[0.7rem] leading-5 text-app-muted">{caption}</div>
+      ) : null}
     </div>
   );
 }

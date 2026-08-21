@@ -275,6 +275,13 @@ export type SimulationRunResultPayload = {
   status: string;
   total_requested_responses: number;
   total_generated_responses: number;
+  /** Named separately because a mirror run's personas, completed surveys and answer rows all differ. */
+  run_counts?: {
+    personas: number;
+    executions: number;
+    questions: number;
+    answer_records: number;
+  } | null;
   models_used: string[];
   experiment_mode: string;
   survey_title?: string | null;

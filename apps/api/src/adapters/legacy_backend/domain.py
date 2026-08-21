@@ -604,7 +604,8 @@ def _generate_live_response_records_with_debug(
     generation_debug = {
         "generation_mode": "openrouter_live",
         "model": config.selected_models[0] if len(config.selected_models) == 1 else None,
-        "respondents": int(len(respondent_model_pairs)),
+        "executions": int(len(respondent_model_pairs)),
+        "answer_records": int(len(records)),
         "questions_total": int(len(records)),
         "request_errors": int(request_errors),
         "provider_error_count": int(provider_error_count),
@@ -1097,11 +1098,29 @@ def execute_simulation_run(
         prior_notes=prior_notes,
     )
 
+    # Three different quantities were all being reported as "responses". They are named separately here
+    # so no reader has to infer which one a number refers to.
+    #
+    # The legacy entry point sets total_generated = config.sample_size, which ignores models, reruns and
+    # whether any provider call succeeded -- a 20-persona x 2-model mirror run reported 20 while running
+    # 40 surveys. The execution count is the one that answers "how many completed surveys came back",
+    # so it is what the two totals now carry.
+    execution_count = int(generation_debug.get("executions") or 0) or len(
+        {(record.respondent_id, record.model) for record in records}
+    )
+    run_counts = {
+        "personas": len(personas),
+        "executions": execution_count,
+        "questions": int(result.question_count or 0),
+        "answer_records": len(records),
+    }
+
     return {
         "run_id": result.run_id,
         "status": result.status,
-        "total_requested_responses": result.total_requested_responses,
-        "total_generated_responses": result.total_generated_responses,
+        "run_counts": run_counts,
+        "total_requested_responses": execution_count,
+        "total_generated_responses": execution_count,
         "models_used": list(result.models_used),
         "experiment_mode": result.experiment_mode,
         "survey_title": result.survey_title,
