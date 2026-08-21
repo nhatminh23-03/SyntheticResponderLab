@@ -301,8 +301,12 @@ def _flush_matrix_rows(
 	)
 
 
-def _match_question_start(line: str) -> Optional[tuple[str, str]]:
-	"""Match a question start line and return normalized (id, text)."""
+def _match_question_start(line: str) -> Optional[tuple[Optional[str], str]]:
+	"""Match a question start line and return (declared id or None, text).
+
+	The id is ``None`` when the line was numbered rather than named, so that the caller can tell an id
+	the document chose from a position the parser read off a list.
+	"""
 	# Normalize common markdown wrappers used in provided survey docs.
 	candidate = line.strip()
 	candidate = re.sub(r"^\*\*(.+)\*\*$", r"\1", candidate).strip()
@@ -316,10 +320,13 @@ def _match_question_start(line: str) -> Optional[tuple[str, str]]:
 			if raw_id.lower().replace(" ", "_") in _KNOWN_METADATA_KEYS:
 				continue
 			if raw_id and raw_id[0].isalpha():
-				normalized_id = raw_id.upper()
-			else:
-				normalized_id = f"Q{raw_id}"
-			return normalized_id, match.group("text").strip()
+				# The document named this question. Its id is the researcher's, and is kept.
+				return raw_id.upper(), match.group("text").strip()
+			# A bare list number is a position, not a name. Turning "1." into "Q1" invented an id the
+			# document never claimed, and a Google Forms export -- which numbers every field, including
+			# the email capture -- then collided with the survey's own "Q1." and was rejected outright.
+			# Left unset, so the normalizer assigns one that nothing else is using.
+			return None, match.group("text").strip()
 	return None
 
 

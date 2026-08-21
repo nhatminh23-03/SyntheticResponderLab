@@ -616,6 +616,30 @@ def _generate_live_response_records_with_debug(
     return records, generation_debug, record_is_fallback
 
 
+def _docx_fallback_schema(parser: Any, validator: Any, file_bytes: bytes) -> dict:
+    """Re-read a .docx with the layout-aware parser that understands its option formatting."""
+    try:
+        extracted_text = parser._extract_text_from_docx(file_bytes)
+        return parse_aytm_style_docx_to_validated_schema(text=extracted_text, validator_module=validator)
+    except ValueError as fallback_exc:
+        raise ValidationApiError(str(fallback_exc)) from fallback_exc
+    except Exception as fallback_exc:
+        raise LegacyModuleApiError(f"DOCX fallback parsing failed: {fallback_exc}") from fallback_exc
+
+
+def _has_no_scorable_questions(validated: Any) -> bool:
+    """Whether every question came out as open text.
+
+    A survey of nothing but open text produces no distributions, no means and no charts, and cannot rise
+    above "Low confidence" in the trust assessment. For a .docx it almost always means the options were
+    there and were not recognised rather than that the researcher wrote no closed questions.
+    """
+    questions = list(getattr(validated, "questions", []) or [])
+    return bool(questions) and all(
+        str(getattr(question, "question_type", "")) == "open_text" for question in questions
+    )
+
+
 def parse_normalize_validate_survey(file_name: str, file_bytes: bytes, legacy_root: Path) -> dict:
     parser = load_module("backend.survey.parser", legacy_root)
     normalizer = load_module("backend.survey.schema_normalizer", legacy_root)
@@ -625,19 +649,16 @@ def parse_normalize_validate_survey(file_name: str, file_bytes: bytes, legacy_ro
         raw = parser.parse_uploaded_survey(file_name=file_name, file_bytes=file_bytes)
         normalized = normalizer.normalize_survey_payload(raw)
         validated = validator.validate_survey_schema(normalized)
+        # The .docx fallback used to be reached only when the primary parser happened to raise on
+        # duplicate ids -- an accident that correlated with it having done badly, not a check that it
+        # had. It is now chosen on the result: the primary parser reads .docx as flat paragraphs and
+        # loses the option formatting, so an all-open-text outcome means the wrong reader was used.
+        if extension == "docx" and _has_no_scorable_questions(validated):
+            return _docx_fallback_schema(parser, validator, file_bytes)
         return validated.model_dump()
     except ValueError as exc:
-        if extension == "docx" and "Duplicate question ids found" in str(exc):
-            try:
-                extracted_text = parser._extract_text_from_docx(file_bytes)
-                return parse_aytm_style_docx_to_validated_schema(
-                    text=extracted_text,
-                    validator_module=validator,
-                )
-            except ValueError as fallback_exc:
-                raise ValidationApiError(str(fallback_exc)) from fallback_exc
-            except Exception as fallback_exc:
-                raise LegacyModuleApiError(f"DOCX fallback parsing failed: {fallback_exc}") from fallback_exc
+        if extension == "docx":
+            return _docx_fallback_schema(parser, validator, file_bytes)
         raise ValidationApiError(str(exc)) from exc
     except Exception as exc:
         raise LegacyModuleApiError(f"Survey parsing failed: {exc}") from exc
