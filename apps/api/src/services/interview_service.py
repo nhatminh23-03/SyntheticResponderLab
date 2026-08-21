@@ -164,13 +164,6 @@ def start_interview_run(
         )
 
     assert_no_in_flight_provider_job(session, owner_user_id=study.owner_user_id)
-    if study.owner_user_id:
-        consume_daily_quota(
-            session,
-            settings,
-            owner_user_id=study.owner_user_id,
-            metric_key=METRIC_INTERVIEW_RUN,
-        )
 
     custom_questions = payload.get("questions") or config.get("questions") or None
 
@@ -189,6 +182,18 @@ def start_interview_run(
     api_key = settings.openrouter_api_key or ""
     if not api_key:
         raise ConflictApiError("OPENROUTER_API_KEY is not configured.")
+
+    # Charged here rather than at the top of the function. Everything above is free: the Neo branch
+    # returns a pre-built fixture without contacting any provider, and charging for it let a class
+    # exhaust the day's interview allowance on canned transcripts. A run that cannot start for want of
+    # a key does not pay either. Live Custom Study interviews, which begin below, still do.
+    if study.owner_user_id:
+        consume_daily_quota(
+            session,
+            settings,
+            owner_user_id=study.owner_user_id,
+            metric_key=METRIC_INTERVIEW_RUN,
+        )
 
     # Resolve request parameters
     model_a = payload.get("model_a") or config.get("model_a") or DEFAULT_MODEL_A
