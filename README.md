@@ -175,6 +175,32 @@ Add a preset by appending a `DemoPreset` to `DEMO_PRESETS` in
 `apps/api/src/services/study_service.py`; a preset that ships its own survey
 markdown places it in `apps/api/legacy_runtime/Provided Info/`.
 
+### Uploading a survey
+
+`.md`, `.docx` and `.pdf` are accepted.
+
+**Markdown** is the most reliable and is what the bundled presets use. It reads `**Q1. Title** text`
+headings, `- [ ] Option` checkboxes, and markdown tables for Likert scales and matrix questions.
+
+**DOCX** is read by a layout-aware fallback when the primary parser returns a flat, all-open-text result,
+which is what it does for AYTM-style documents.
+
+**PDF** is best-effort. A Google Forms export is reconstructed by pairing each page's answer blocks with
+that page's question headings, which recovers single-choice, multi-choice and linear-scale questions.
+Two things do not survive extraction, and the parser reports both rather than guessing:
+
+- **Matrix questions.** The per-row items are word-wrapped and duplicated by the PDF text layer beyond
+  safe reassembly, so a matrix is kept as a single scale and a warning says the rows were lost. Upload the
+  `.md` or `.docx` original to get one question per row.
+- **Typographic ligatures.** "office" can arrive as "oce". Which characters were lost is not recoverable.
+
+A PDF that yields no question with options or a scale is **refused** with *"This document does not appear
+to contain a recognizable survey."* That is deliberate: a report, brief or brochure would otherwise be
+parsed into questions invented from its prose. The cost is that a genuine all-open-text PDF survey is also
+refused — upload it as `.md` or `.docx`.
+
+Check the parse warnings after any upload. They name what the parser could not read.
+
 ### AI survey generation
 
 In General Custom Study mode the survey step offers an AI generator as an

@@ -74,6 +74,21 @@ def _bootstrap_neo_study_for_interviews(client, monkeypatch) -> str:
     return study_id
 
 
+def _bootstrap_custom_study_for_interviews(client, monkeypatch) -> str:
+    """A non-Neo study with a persona preview, so the interview path is the live one."""
+    study_id = _bootstrap_neo_study_for_interviews(client, monkeypatch)
+    response = client.patch(f"/api/v1/studies/{study_id}/study-mode", json={"study_mode": "general"})
+    assert response.status_code == 200, response.text
+
+    # The live path runs the batch, the grounding score and the theme extraction against a provider.
+    # None of that is under test here; the quota accounting that precedes it is.
+    monkeypatch.setattr(
+        "src.services.interview_service._run_interview_batch",
+        lambda *args, **kwargs: [],
+    )
+    return study_id
+
+
 def _usage_rows(client):
     session = client.app.state.session_factory()
     try:
@@ -299,7 +314,14 @@ def test_stability_check_counts_against_daily_provider_limit(client, monkeypatch
 
 
 def test_interview_run_counts_against_daily_provider_limit(client, monkeypatch):
-    study_id = _bootstrap_neo_study_for_interviews(client, monkeypatch)
+    """A *live* interview run is metered. The Neo fixture is not, because it calls no provider.
+
+    This used to bootstrap a Neo study, which made it assert that the seeded demo consumed a unit --
+    locking in the behaviour that let a class spend its whole interview allowance on canned
+    transcripts. The property it exists for is unchanged; only the path it exercises is.
+    """
+    study_id = _bootstrap_custom_study_for_interviews(client, monkeypatch)
+    client.app.state.settings.openrouter_api_key = "test-openrouter-key"
     client.app.state.settings.daily_provider_run_limit = 1
 
     first = client.post(f"/api/v1/studies/{study_id}/interview/runs", json={})

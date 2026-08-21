@@ -30,6 +30,9 @@ _MULTI_SELECT_PATTERNS = [
 ]
 
 
+from backend.survey.pdf_form_parser import reconstruct_google_forms_export
+
+
 def parse_uploaded_survey(file_name: str, file_bytes: bytes) -> Dict[str, Any]:
 	"""Parse an uploaded survey file into a raw normalized payload.
 
@@ -81,7 +84,17 @@ def parse_text_to_raw_payload(text: str, source_format: str) -> Dict[str, Any]:
 	- Markdown checkbox options: `- [ ] Option text`
 	- Markdown table scales: header row with labels + row with `| 1 | 2 | ... |`
 	- Matrix tables: `| Row item | o | o | o | ... |`
+
+	A PDF is tried against the Google Forms export layout first. That export separates every question
+	from its own options, so the rules below read it as prose and flatten the whole survey to open text.
+	The reconstruction returns None for anything that is not such an export, and the rules below then
+	run unchanged.
 	"""
+	if str(source_format or "").lower() == "pdf":
+		rebuilt = reconstruct_google_forms_export(text)
+		if rebuilt is not None:
+			return rebuilt
+
 	lines = [line.rstrip() for line in text.splitlines()]
 	non_empty_lines = [line.strip() for line in lines if line.strip()]
 
