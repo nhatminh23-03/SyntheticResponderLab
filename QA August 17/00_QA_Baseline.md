@@ -41,6 +41,67 @@
 
 ---
 
+## 1b. Target branch moved — 20 Aug
+
+The QA fixes were built on `2691642`. `yaza_Aug_work` has since advanced **eight commits** to
+`d340d14d12ce15ae3c789cbd18f92ad6ee3f9db7`. Two of them land on the same functions this pass changed,
+so the fixes cannot be evaluated against `2691642` any more.
+
+| SHA | Commit | Files touched |
+|---|---|---|
+| `b3bd4b5` | Ground persona generation in real ACS data and fix live-answer fallbacks | `Dockerfile`, `legacy_runtime/backend/simulation/run_manager.py`, **4 × `legacy_runtime/data/processed/priors/*.parquet`**, `scripts/build_grounding_priors.py`, `src/adapters/legacy_backend/domain.py`, `src/api/errors.py`, `tests/conftest.py`, `tests/test_answer_coercion.py`, `tests/test_grounding_priors.py`, `tests/test_studies_endpoints.py` |
+| `1c99e92` | Run respondent requests in parallel and default sample size to 20 | `README.md`, `.env.example`, `domain.py`, `src/config/settings.py`, `src/services/study_service.py`, `tests/test_live_run_concurrency.py`, `tests/test_studies_endpoints.py`, `experiment-section.tsx`, `render.yaml` |
+| `ff9e36f` | Fix light-mode Analysis contrast and add a coffee demo preset | `.gitignore`, `README.md`, **`legacy_runtime/Provided Info/Cortado Roasters — Coffee Subscription Survey.md`**, `domain.py`, `src/api/studies.py`, `study_service.py`, `tests/test_demo_presets.py`, `globals.css`, `analysis-section.tsx`, `study-mode-section.tsx`, `api.ts` |
+| `c58ca44` | Remove the coffee preset card from Study Setup | `README.md`, `study-mode-section.tsx` |
+| `724cc68` | Replace the ownership toggles with a single three-way selector | `audience-section.tsx`, `setup-flow-utils.ts`, `tests/setup-flow.test.ts` |
+| `c3c10f6` | Add AI survey generation, clipboard image paste, and fix opaque image errors | `README.md`, `domain.py`, `src/api/errors.py`, `studies.py`, `src/schemas/study.py`, `study_service.py`, **`src/services/usage_limits.py`**, `tests/test_answer_coercion.py`, `tests/test_studies_endpoints.py`, `tests/test_survey_generation.py`, `product-section.tsx`, `survey-generator-panel.tsx`, `survey-section.tsx`, `api.ts` |
+| `d1ed170` | Add handoff and merge runbook for the `yaza_Aug_work` branch | `Documentation/handoff-2026-08-20.md` |
+| `d340d14` | Ignore local `.claude/` agent config | `.gitignore` |
+
+**Overlapping pair:** `b3bd4b5` and `1c99e92`. Both rewrite `_generate_live_response_records_with_debug`
+and the fallback paths that F-04, F-04b and the fallback-provenance fix also change.
+
+**Medium risk:** `c3c10f6` touches `usage_limits.py` (F-11's file, different region) and `api.ts`
+(F-04/F-07 also change it); `ff9e36f` touches `analysis-section.tsx` and `domain.py`.
+
+`ff9e36f` also adds a **Cortado Roasters coffee-subscription survey preset** to the vendored runtime —
+a non-Neo survey shipped in-repo, which is exactly the fixture the F-06 generalization checks need.
+
+### Composition table
+
+Established by reading all eight commits against the eleven fixes, before any code was moved.
+
+| Area | Teammate behaviour (`d340d14`) | Our fix behaviour (`19dd733`) | Desired combined behaviour | Conflict risk |
+|---|---|---|---|---|
+| **F-01 canonical legacy runtime** | Dockerfile still reconstructs `/app/NeoSmart-Hackathon-App/{backend,Provided Info,data}`; asserts a prior parquet exists in it | Reconstruction removed; `LEGACY_APP_ROOT=./legacy_runtime`; `render.yaml` retargeted | One tree, no reconstruction; **keep the parquet existence guard**, retargeted at `legacy_runtime/data/processed/priors/` | **High** — textual + semantic |
+| **Persona grounding** | Four ACS `.parquet` under `legacy_runtime/data/processed/priors/`; builder at `apps/api/scripts/build_grounding_priors.py` | F-01 vendored a `scripts/` tree into `legacy_runtime` | Priors load **because** F-01 points local dev at `legacy_runtime`; the two `scripts/` locations must be reconciled to one | **High** |
+| **F-04 coercion fallback** | `_match_survey_option`: exact → normalized → unambiguous containment | Rows carry `is_fallback`; fallbacks excluded from analysis | Complementary — fewer fabrications occur, and whatever still falls back stays labelled and excluded | Medium — expected counts shift |
+| **F-04b provider/model failure** | Dispatches **all** calls through a ThreadPoolExecutor before inspecting any result | Raises `ProviderUnavailableApiError` on 400/402/404 in the fold loop | Consume futures as they complete; on a non-retryable status shut down with `cancel_futures=True` and raise. Caps wasted calls at `max_concurrency` instead of the whole run | **High** — semantic |
+| **Fallback provenance** | — | `record_is_fallback` parallel list; 3-tuple return | Preserve, re-threaded through the rewritten loop | **High** — same function rewritten by both |
+| **Fallback exclusion from analysis** | — | `_split_live_and_fallback_records`, `answer_sourcing` | Unchanged | Low |
+| **Model validation** | `serializable_validation_errors`; catalog `google/gemini-2.0-flash-001` → `anthropic/claude-sonnet-4.5` | F-04b references the retired id in error text only | Take theirs — **this closes F-09** | Low |
+| **Concurrency** | `SIMULATION_MAX_CONCURRENCY` default 8; results folded in respondent order | Serial loop | Theirs, plus the fail-fast abort above | **High** |
+| **Docker packaging** | Copies `legacy_runtime/data` into the reconstructed tree | Asserts `legacy_runtime/backend` | Single tree + parquet guard | **High** |
+| **Test fixtures** | `_env_file=None`, `DEPLOYMENT_SHARED_SECRET=None`, `LEGACY_APP_ROOT=API_ROOT/"legacy_runtime"`; skips the docx test if the fixture is absent | Same root via `WORKSPACE_ROOT`; vendored the docx so it is never absent | Their kwargs and `API_ROOT`-relative path; the skip becomes unreachable but harmless | Medium |
+
+### Two contradictions that must not be settled by preferring a branch
+
+1. **`realism_scorecard`.** `b3bd4b5` changed the assertion to `available is False`, on the stated grounds
+   that the benchmark file *"does not ship in the vendored legacy runtime yet."* **F-01 ships it.** The
+   premise is false after the merge, so the combined tree must assert `True` and the comment must go.
+2. **Fail-fast versus parallel dispatch.** Whichever side git leaves behind, the other's intent is silently
+   discarded: either a bad model id costs the full N×M provider calls, or the parallelism is reverted.
+
+### Possibly closed upstream — to be confirmed with fresh evidence, not inspection
+
+- **F-02** — the non-hermetic test was rewritten to monkeypatch the scraper, and `conftest` now sets
+  `_env_file=None`, which addresses both the regression and the network dependency.
+- **F-09** — the retired model is gone from the catalog.
+- **§6 persona grounding** — the prior tables now exist. Existing is not loading; see §6 and the
+  post-merge verification.
+
+---
+
 ## 2. Runtime pinned for QA
 
 Production base image is `python:3.11-slim`, so QA pinned **Python 3.11.15** and built a clean venv via `pip install -e ".[dev]"` — the same resolution path the Docker build uses.
@@ -123,6 +184,11 @@ Verified: `git worktree add` of either commit produced an **empty** directory at
 ---
 
 ## 6. Persona grounding — verified, not inferred
+
+> **Superseded in part by `b3bd4b5` (20 Aug).** The four ACS prior tables now exist in the repository,
+> which removes the cause described below. Whether they *load* — and whether the Run path still takes the
+> silent `heuristic_only` branch — is a separate question and is re-verified against the combined tree
+> rather than assumed from the files' presence. See §1b.
 
 Runtime probe at the target SHA:
 
