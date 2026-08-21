@@ -1157,3 +1157,89 @@ reports 128/0/1.0, `strongest_segment` correctly `None`.
 It also reproduced F-06's residual defect from the repository's own demo data — `Q1` "Category interest"
 labelled "Price-point interest", `Q2` "Current spend" labelled "Purchase likelihood" at 0.0, `Q3` "Where
 you buy today" labelled "Primary intended use". See the F-06 entry in `05_Bugs_and_Blockers.md`.
+
+---
+
+## F-06 (final slice) — Neo research meaning acquired from question ids
+
+**Branch** `fix/f-06-gate-neo-metrics`, cut from `8ba31ee` (PR #11 merged into `yaza_Aug_work`).
+**Commit** `71bbf3b`.
+
+### Root cause
+
+Six insight metrics decided whether they applied by looking for literal ids — `Q1`, `Q2`, `Q3`, `Q0B`,
+`S3`, `Q5_*`, `Q9A/Q9B`–`Q13A/Q13B` — and attached Neo's meaning to whatever answered them.
+`schema_normalizer.py:49` assigns `f"Q{index}"` to any question that declares no id, so an ordinary
+uploaded survey lands on those ids **by default**, not by coincidence.
+
+`b60242b` had passed `study_mode` into four of the builders, but only to choose the *wording* of an
+unavailable state. Availability itself still keyed on the ids, so a collision produced `available: true`
+with Neo's labels.
+
+Traced through: `build_insights_view` → chart builders → `_build_executive_summary` /
+`_build_top_findings` / `_build_segment_story` → `_build_insights_evidence_package` → LLM summary. The
+mislabels reached the evidence package, and the summarising model is instructed not to contradict its
+evidence. `build_analysis_view` was clean — it calls none of these builders.
+
+Three of the six never received `study_mode` at all: `_build_segment_heatmap`, `_build_executive_summary`
+(`average_interest`, `strongest_segment`) and `_build_segment_story` (`weakest_segment`).
+
+### Regression tests added
+
+`tests/test_neo_metric_gating.py`, five tests on a Cortado-shaped fixture. Watched fail first:
+
+```
+AssertionError: a coffee-subscription study was described using the Neo meaning 'Price-point interest'
+AssertionError: renaming the questions changed what the study was said to show
+KeyError: 'message'                     (the chart was available, so it carried no message)
+```
+
+Two of the five passed before the fix and had to — they are the guard tests: Neo keeps its metrics, and
+generic metrics keep working for a Custom Study. A fix that broke either would have been caught.
+
+Two of my own assertions were **too strict and were corrected, not the product**: a Custom Study
+legitimately echoes its *own* question ids back to the researcher (`"Q3: segment differences observed…"`),
+so the vocabulary check now targets Neo *phrases*, and the rename check normalizes the researcher's ids
+before comparing. Both were test-design errors on my part.
+
+### The fix
+
+`_is_neo_study(study_mode)` plus an early return in each Neo-schema builder. Nothing is substituted for a
+Custom Study: `_neo_metric_unavailable()` returns an empty, explicitly unavailable block.
+
+### Before / after, same Cortado preset, 4 respondents, 2 models, 128 live answers
+
+| | Before `8ba31ee` | After `71bbf3b` |
+|---|---|---|
+| `message_performance` · `use_case_share` · `interest_ladder` · `segment_heatmap` | available, Neo-labelled | unavailable, generic wording |
+| `average_interest` | **3.75** — a 1-5 rating averaged with a dollar spend band | `None` |
+| findings | Top intended use · Decision ladder · Model comparison | **Model comparison** |
+| `model_difference` | available | available — unchanged |
+
+Neo, same session: six charts available, ladder rows `S3` Feasibility · `Q0B` Category interest ·
+`Q1` Price-point interest · `Q2` Purchase likelihood, `average_interest` 3.5, four Neo findings. Unchanged.
+
+### Also closed
+
+The realism scorecard's non-Neo message read *"Realism scorecard is shown only for Neo Smart mode."* —
+naming a study the reader is not running. Same generic wording now.
+
+### One existing test changed
+
+`test_insights_metrics_use_live_answers_only` asserted `average_interest` for a Custom Study. That value
+only ever resolved *through the collision this removes*, so the test moved to Neo mode. The property it
+checks — fabricated answers excluded from means — is unaffected and still asserted.
+
+### Verification
+
+```
+apps/api  pytest -q          175 passed, 0 failed
+apps/web  npm run test:unit   56 passed   (no frontend change; run because the insights shape changed)
+apps/web  tsc --noEmit        clean
+```
+
+### Remaining risk
+
+The gate stops false claims; it does not give custom surveys their own version of these metrics. A
+researcher running a coffee study still gets model comparison and nothing else. Declarative semantic roles
+remain the real answer and were deliberately not built here.

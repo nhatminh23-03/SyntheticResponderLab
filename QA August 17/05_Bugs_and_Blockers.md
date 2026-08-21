@@ -18,7 +18,7 @@ Severity: **P0** blocks classroom use or invalidates research output · **P1** i
 | F-04 | Fully fabricated run reports success | **P0** | **FIXED+VERIFIED** (`340d482`, `fd0615e`, `901cf3b`, `34d7635`) — hard errors stop the run, diagnostics render, rows carry provenance, and fabricated answers are excluded from analysis by default | **Yes** | Partial |
 | F-04b | Retired model ID silently fabricates its half | **P0** | **FIXED+VERIFIED** (`340d482`) | ~~Yes~~ | **Yes** |
 | F-05 | Three conflicting "responses" counts | P1 | OPEN | **Yes** (grading integrity) | Wrong value is codified |
-| F-06 | Insights fabricates Strongest Segment; Neo `Q*` coupling | **P0** | **PARTIALLY FIXED** (`15dffc9`, `b60242b`) — fabrication closed and Neo wording removed from custom studies; the underlying `Q*` coupling remains (option (c), deferred) | **Yes** | **Yes** |
+| F-06 | Insights fabricates Strongest Segment; Neo `Q*` coupling | **P0** | **FIXED+VERIFIED** (`15dffc9`, `b60242b`, `71bbf3b`) — fabrication closed, Neo wording removed, and Neo metrics now gated to Neo studies | ~~Yes~~ | **Yes** |
 | F-07 | Neo interview fixture undetectable by any client | **P0** | **FIXED+VERIFIED** (`fix/f-07-interview-fixture-transparency`, `e332726`) | ~~Yes~~ | **Yes** |
 | F-08 | PDF parser inverted; markdown format sensitivity | P1 | OPEN | **Yes** (PDF) | No |
 | F-09 | Fallback model catalog contains a retired model | P1 | **FIXED UPSTREAM+VERIFIED** (`b3bd4b5`) | ~~No~~ | Covered by F-04b scenario C |
@@ -39,11 +39,9 @@ Severity: **P0** blocks classroom use or invalidates research output · **P1** i
 onto `yaza_Aug_work` @ `d340d14`). Commit SHAs below are the rebased ones; the pre-rebase branch is
 preserved at `backup/qa-aug-17-pre-rebase`.
 
-**Open: 1 P0 · 6 P1 · 4 P2.**
+**Open: 0 P0 · 6 P1 · 4 P2** as of `71bbf3b` (21 Aug).
 
-- **P0 — F-06 only, and only its second defect.** The fabricated strongest segment (`b1a7841`) and the
-  Neo vocabulary in custom studies (`ddcc6b4`) are closed. Silent mislabeling on question-id collision is
-  not, and is now reproducible from the repository's own coffee preset.
+- **P0 — none.** F-06 was the last one; its third and final defect closed in `71bbf3b`.
 - **P1 open** — F-03, F-05, F-08, F-10, F-16, F-17.
 - **P2 open** — R-01, R-02, R-03, R-04.
 
@@ -207,7 +205,7 @@ See `04_Experiment_Mode_Verification.md` §3 for the full table and causes.
 ---
 
 ## F-06 — Insights does not generalize, and fabricates Strongest Segment
-**Severity P0 · PARTIALLY FIXED (`15dffc9`, `b60242b`) · defect 2 still open · blocks the teaching-module goal**
+**Severity P0 · FIXED+VERIFIED (`15dffc9`, `b60242b`, `71bbf3b`) · all three defects closed**
 
 **Reproduction.** Two identical coffee-subscription studies (N=6, 4 questions, same data semantics), differing **only** in question-ID naming.
 
@@ -257,7 +255,7 @@ if not segment_scores:
 |---|---|---|
 | 1 — Strongest Segment fabricated from alphabetical order | **CLOSED** — returns `None` when fewer than two segments can be scored | `15dffc9` |
 | 3 — Neo schema vocabulary shown to custom studies | **CLOSED** — generic wording | `b60242b` |
-| 2 — **silent mislabeling when ids collide** | **OPEN** | — |
+| 2 — **silent mislabeling when ids collide** | **CLOSED** — Neo metrics gated to the Neo study mode | `71bbf3b` |
 
 Neither fix touched *availability*. `b60242b` changes only the `message` string on an already-unavailable
 chart; the builders still key on the literal ids `Q1`, `Q2`, `Q3`, `Q0B`, `S3`, `Q5_*`, `Q9A/Q9B`–`Q13A/Q13B`.
@@ -311,10 +309,38 @@ this is gone while the mislabeling remains.
 This is no longer a contrived reproduction: it is the team's own demo preset, and a professor running
 the coffee study sees "Purchase likelihood 0.0" for a question about what people currently spend.
 
-**What closing defect 2 requires** — option (c), deferred by your decision on 20 Aug: give each metric an
-explicit semantic role (`price_sensitivity`, `purchase_intent`, `primary_use`) resolved from survey metadata
-rather than from an id literal, so a metric renders when the survey *declares* that role and is unavailable
-otherwise. Until then the honest interim guard is to stop claiming Neo meanings for non-Neo studies at all.
+**Closed 21 Aug in `71bbf3b`, verified live.** Reading an id is not evidence that a question means what
+Neo's does; the study mode is. The six Neo metrics now run only for the Neo study — barrier ranking,
+message performance, use-case share, interest ladder, segment heatmap, average interest, and
+strongest/weakest segment. Nothing is substituted for a Custom Study, because there is no honest
+stand-in for "how does this audience rank the Neo barrier matrix" in a survey that never asked it.
+
+Same Cortado preset, same run shape (4 respondents, 2 models, 128 live answers, 0 fabricated):
+
+| | Before (`8ba31ee`) | After (`71bbf3b`) |
+|---|---|---|
+| `barrier_ranking` | unavailable | unavailable |
+| `message_performance` | **available** | unavailable — *"This insight is not applicable to this survey."* |
+| `use_case_share` | **available** — Local coffee shop or roaster 75% as "Primary intended use" | unavailable |
+| `interest_ladder` | **available** — Q1 "Price-point interest", Q2 "Purchase likelihood" 0.0 | unavailable |
+| `segment_heatmap` | **available** — rows Q1, Q2 | unavailable |
+| `model_difference` | available | **available** — unchanged |
+| `average_interest` | **3.75** (a rating averaged with a dollar spend band) | `None` |
+| `strongest_segment` | `None` | `None` |
+| findings | Top intended use · Decision ladder · Model comparison | **Model comparison** only |
+
+Neo re-verified in the same session and unchanged: all six charts available, ladder rows still
+`S3` Feasibility · `Q0B` Category interest · `Q1` Price-point interest · `Q2` Purchase likelihood,
+`average_interest` 3.5, and the four Neo findings intact.
+
+One further leak was found and closed while testing: the realism scorecard told a Custom Study
+*"Realism scorecard is shown only for Neo Smart mode."* — Neo product vocabulary in a study the reader is
+not running. It now uses the same generic wording.
+
+**Still deferred, and still the real answer.** Declarative semantic roles (`price_sensitivity`,
+`purchase_intent`, `primary_use`) resolved from survey metadata would let a Custom Study *earn* these
+metrics by declaring what its questions mean. The gate stops the false claims; it does not give custom
+surveys their own version of them.
 
 ---
 
