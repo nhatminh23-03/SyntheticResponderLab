@@ -1248,7 +1248,7 @@ remain the real answer and were deliberately not built here.
 
 ## F-05 — three quantities, one label
 
-**Commit** `72d2368` on `fix/f-06-gate-neo-metrics` (continued).
+**Commit** `681dc4a` on `fix/f-06-gate-neo-metrics` (continued).
 
 ### Root cause
 

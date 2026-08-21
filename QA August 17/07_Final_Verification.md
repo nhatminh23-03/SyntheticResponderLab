@@ -1,111 +1,113 @@
 # 07 — Final Verification (release candidate)
 
-**Status: NOT STARTED.** Nothing below is passed. This is the gate for declaring the build classroom-ready.
+**Status: IN PROGRESS — NOT classroom-ready.** Sections A–F are partly evidenced against the merged
+SHA below. Section G is untouched and Section H needs Dr. Wang. Do not describe this build as ready for
+students.
 
-Rule: a box is ticked only with attached evidence (command output, API response, screenshot, or test run) recorded against a specific SHA.
+Rule: a box is ticked only with attached evidence recorded against a specific SHA. An unticked box means
+no evidence was gathered, not that the item failed.
 
-**Candidate SHA:** `f048fdd` on branch **`integration/qa-aug-17-all-fixes`** (rebased onto `yaza_Aug_work` @ `d340d14`; the pre-rebase stack is preserved at `backup/qa-aug-17-pre-rebase` @ `19dd733`)
-**Verified by:** QA pass, 20 Aug 2026 (composition verified; the checklist below is still ungated)
-**Date:** 2026-08-20
+**Candidate SHA:** `1bc1c1c61e840c0a57c130749f93e0edaea57efd` — `yaza_Aug_work` after
+[PR #12](https://github.com/nhatminh23-03/SyntheticResponderLab/pull/12) merged
+(`8ba31ee` was the same branch after [PR #11](https://github.com/nhatminh23-03/SyntheticResponderLab/pull/11)).
+**Verified by:** post-merge QA pass, 21 Aug 2026
+**Interpreter:** Python 3.11.15 (the pin recorded in `00_QA_Baseline.md` §2)
 
 ---
 
-## Where to run everything
-
-`integration/qa-aug-17-all-fixes` (`19dd733`) is the only branch that contains all eleven fixes. It is
-built from `2691642` and contains, in dependency order:
-
-| # | Commit | Fix |
-|---|---|---|
-| 1 | `83da8c9` | F-01 canonical legacy runtime (must be first — it moves `LEGACY_APP_ROOT` and rewrites `conftest.py`) |
-| 2 | `fd419c9` | F-04 per-row fabrication provenance |
-| 3 | `34d7635` | F-04 exclude fabricated answers from analysis |
-| 4 | `b60242b` | F-06(b) generic unavailable-insight wording |
-| 5 | `eb591c1` | F-11 atomic daily quota (`599eccf`) |
-| 6 | `d5cf114` | F-04b fail fast on non-retryable provider errors (`340d482`) |
-| 7 | `f19ca91` | F-04 surface run diagnostics in the UI (`fd0615e`) |
-| 8 | `3320c55` | F-07 interview fixture provenance (`e332726`) |
-| 9 | `611b551` | F-06(a) stop inventing a strongest segment (`15dffc9`) |
-| 10 | `5c7853a` | F-13 Likert counts on declared scale points (`ca67ecb`) |
-| 11 | `19dd733` | F-14 semantic survey question ids (`33ecf21`) |
-
-Commits 5–11 were cherry-picked, so their SHAs differ from the originals; the original is in brackets.
-`901cf3b` is **deliberately absent** — it is the same change as `fd419c9`, which was rebased onto F-01.
-
-Three cherry-picks conflicted. All three were the same benign shape — both sides appended independent
-tests at the same point in a file — and were resolved by keeping both:
-`apps/api/tests/test_legacy_live_simulation.py`, `apps/api/tests/test_studies_endpoints.py`,
-`apps/web/tsconfig.test.json` (all three new `src/lib` entries kept).
-
-**Composition evidence, 20 Aug:**
+## Post-merge verification run — 21 Aug, against `1bc1c1c`
 
 ```
-apps/api  pytest -q          170 passed, 0 failed   (on f048fdd; F-02 is closed upstream)
-apps/web  npm run test:unit   56 passed             (.test-dist cleaned first — see R-04)
-apps/web  tsc --noEmit        clean
+apps/api  pytest -q          195 passed, 0 failed
+apps/web  npm run test:unit   67 passed, 0 failed, 0 skipped
+apps/web  npx tsc --noEmit    clean
+GET /api/v1/health            degraded — google_vision warn, hud_lookups warn; 8 other checks ok,
+                              including database_schema and grounding_priors
 ```
 
-The pre-rebase figures were 116 passed / 1 failed and 52 frontend tests. The single failure was F-02,
-which `b3bd4b5` closed.
-
-All **36** regression tests introduced by the eleven fixes are collected and passing on this branch —
-verified by extracting every `+def test_*` from the eleven commits and diffing against `pytest --collect-only`.
-
-**Before running it, update your local `apps/api/.env`.** It is untracked, so it survives the branch
-switch, and it still points `LEGACY_APP_ROOT` at the nested `NeoSmart-Hackathon-App` checkout. Left as-is
-it re-creates exactly the two-copy drift F-01 removed, and F-14 will appear not to work because `33ecf21`
-patched `legacy_runtime/backend/survey/parser.py`, not the nested copy. Set:
+**Neo, mirror, 2 personas × 2 models × 32 questions, live provider**
 
 ```
-LEGACY_APP_ROOT=./legacy_runtime
+Preview  generation_mode=grounded_priors    Run  persona_generation_mode=grounded_priors
+run_counts {"personas": 2, "executions": 4, "questions": 32, "answer_records": 128}
+128 rows, 0 fabricated, live_answer_rate 1.0
+distinct respondent_id 2   distinct (respondent, model) 4
+Analysis  available, records_preview.total 128, realism_scorecard.available true
+Insights  six charts available; average_interest 3.5
+          findings: Top intended use · Barrier severity · Positioning performance · Decision ladder
 ```
+
+**Cortado Custom Study, split, 2 personas × 2 models, live provider**
+
+```
+Preview  generation_mode=grounded_priors    Run  persona_generation_mode=grounded_priors
+run_counts {"personas": 2, "executions": 2, "questions": 32, "answer_records": 64}
+64 rows, 0 fabricated, live_answer_rate 1.0
+Insights  barrier_ranking · message_performance · segment_heatmap · use_case_share · interest_ladder
+          all unavailable — "This insight is not applicable to this survey."
+          model_difference available;  average_interest None;  strongest_segment None
+          findings: Model comparison
+```
+
+**Fallback paths, local stub provider** (labelled stubbed, not live — neither can be induced on demand
+on a funded account)
+
+```
+partial fallback   64 rows, 62 flagged fabricated, 2 live, rate 0.0312
+                   sourcing: 2 used / 62 excluded / 64 total; records_preview.total 64 — nothing deleted
+all fabricated     Analysis  available=false  "…nothing to analyse"    sourcing 0 / 64 / rate 0.0
+                   Insights  available=false  "…nothing to summarise"  sourcing 0 / 64 / rate 0.0
+HTTP 402           run fails 503 provider_unavailable, provider's own remedy text, after 2 of 2 calls
+```
+
+No regressions were found. No code was changed during this verification.
 
 ---
 
 ## A. Reproducibility
 - [x] A fresh `git clone` produces a runnable application (F-01) — verified by a `git archive HEAD` checkout
-- [ ] Documented local setup works verbatim, including migrations (F-03)
-- [ ] A `LICENSE` file exists and the CARLE deposit is unblocked (F-10)
+- [x] Migrations target the database the app opens (F-03) — `.env` pointed at a temp DB, nothing exported, `alembic upgrade head` gave that DB all 9 tables. The *rest* of the documented setup has not been walked verbatim by a fresh reader.
+- [ ] A `LICENSE` file exists and the CARLE deposit is unblocked (F-10) — **AWAITING PROJECT-OWNER DECISION.** Deliberately not chosen by QA.
 - [x] One interpreter and pinned dependency versions are documented — Python 3.11.15, see §2
-- [x] `/api/v1/health` reports `degraded`, explained: `google_vision` and `hud_lookups` warn for missing optional credentials; everything else `ok`
+- [x] `/api/v1/health` reports `degraded`, explained — `google_vision` and `hud_lookups` warn for missing optional credentials; the other 8 checks `ok` on `1bc1c1c`
 
 ## B. Automated tests
-- [x] `cd apps/api && pytest -q` — 170 passed, 0 failed on `f048fdd`
-- [x] `cd apps/web && npm run test:unit` — 56 passed on `f048fdd` (clean `.test-dist`)
+- [x] `cd apps/api && pytest -q` — **195 passed, 0 failed** on `1bc1c1c`
+- [x] `cd apps/web && npm run test:unit` — **67 passed, 0 failed, 0 skipped** on `1bc1c1c`; the script now cleans `.test-dist` itself (R-04, `035520a`)
 - [x] Backend suite runs offline with no outbound network calls (F-02) — closed by `b3bd4b5`
-- [ ] Regression test: live-vs-fallback accounting
-- [ ] Regression test: Split / Mirror / Stability execution and record counts (F-05)
-- [ ] Regression test: Insights on a non-Neo survey (F-06)
-- [ ] Regression test: PDF survey parsing (F-08)
-- [ ] Test asserting `total_generated_responses` semantics is corrected (F-05)
+- [x] Regression test: live-vs-fallback accounting — `tests/test_fallback_exclusion.py`, `tests/test_legacy_live_simulation.py`
+- [ ] Regression test: Split / Mirror / Stability execution and record counts (F-05) — split and mirror covered by `tests/test_run_counts.py`; **stability mode is not**, and its repeat loop still has no test
+- [x] Regression test: Insights on a non-Neo survey (F-06) — `tests/test_neo_metric_gating.py`, 5 cases on a Cortado-shaped fixture
+- [ ] Regression test: PDF survey parsing (F-08) — id collisions covered by `tests/test_survey_id_collisions.py` (incl. the real Google Forms export, skipped where absent); **option/type recovery is not covered because it does not work yet**
+- [x] Test asserting `total_generated_responses` semantics is corrected (F-05) — `681dc4a`; it asserted 2 for a run that produced 4
 
 ## C. Data correctness
-- [ ] A run with a failing provider does **not** report plain success (F-04)
-- [ ] Fallback rows are labelled with provenance and excludable from charts (F-04)
-- [ ] A retired or invalid model ID is rejected before the run starts (F-04b, F-09)
-- [ ] The three response counts agree, or each is labelled for what it is (F-05)
-- [ ] Strongest Segment returns "unavailable" rather than an alphabetical guess (F-06)
-- [ ] No Insights metric produces NaN, a silent zero, or an invented value
+- [x] A run with a failing provider does **not** report plain success (F-04) — 402 → HTTP 503 `provider_unavailable`; an all-filler run refuses at Analysis and Insights
+- [x] Fallback rows are labelled with provenance and excludable from charts (F-04) — partial run: 62 of 64 flagged, excluded from analysis, all 64 still in `records_preview`
+- [ ] A retired or invalid model ID is rejected **before the run starts** (F-04b, F-09) — it is rejected on the *first provider response*, not pre-flight. The run stops without completing (2 of 2 calls at N=2; 13 of 20 at N=20), but no validation happens before dispatch
+- [x] The three response counts are each labelled for what they are (F-05) — mirror run reports 2 personas / 4 executions / 128 answer records, reconciling with the stored rows
+- [x] Strongest Segment returns unavailable rather than an alphabetical guess (F-06) — `None` for Cortado; scored only where the Neo ladder questions exist
+- [ ] No Insights metric produces NaN, a silent zero, or an invented value — the known invented value is gone, but the remaining metrics have **not** been audited one by one for this
 
 ## D. Failure visibility
-- [ ] `live_answer_rate`, `fallback_answers`, `provider_error_count` are visible in the UI (F-04, item 13)
-- [ ] `persona_generation_mode` is visible, and Run and Preview agree
-- [ ] `transparency_note` is rendered where findings are shown
-- [ ] Warnings name what happened, which model, and where to look (item 13)
-- [ ] Provider errors surface the provider's own remedy text (F-04)
+- [x] `live_answer_rate`, `fallback_answers`, `provider_error_count` are surfaced (F-04, item 13) — `0fc672f`; covered by `tests/run-evidence.test.ts`. Not re-checked in a browser this session.
+- [x] Run and Preview agree on `persona_generation_mode` — both `grounded_priors` on `1bc1c1c` for Neo and Cortado. This was the original §1.5 divergence.
+- [ ] `transparency_note` is rendered where findings are shown — **still computed, shipped, and rendered nowhere.** Not addressed.
+- [ ] Warnings name what happened, which model, and where to look (item 13) — improved, not audited against the full warning set
+- [x] Provider errors surface the provider's own remedy text (F-04) — *"This request requires more credits, or fewer max_tokens…"* reached the client verbatim
 
 ## E. Generalization beyond Neo
-- [ ] A non-Neo Custom Study completes end to end
-- [ ] No Neo terminology (Tahoe, backyard, permit, homeowner) leaks into a non-Neo study
-- [ ] No Neo question-ID strings appear in user-facing messages (F-06)
-- [ ] Renaming question IDs does **not** change the semantic interpretation (F-06)
-- [ ] Unavailable metrics say "not applicable to this survey"
+- [x] A non-Neo Custom Study completes end to end — Cortado preset on `1bc1c1c`, 64 live answers, 0 fabricated
+- [x] No Neo terminology leaks into a non-Neo study — asserted over the whole serialized payload in `tests/test_neo_metric_gating.py`
+- [x] No Neo schema explanations appear in user-facing messages (F-06) — a study's *own* ids are still echoed in notes about its own data, which is correct
+- [x] Renaming question IDs does **not** change the semantic interpretation (F-06) — `C1/C2/C3` and `Q1/Q2/Q3` produce identical claims
+- [x] Unavailable metrics say "This insight is not applicable to this survey." — all five Neo charts, verified live
 
 ## F. Research transparency
-- [ ] The Neo interview fixture is labelled as seeded in the UI (F-07)
-- [ ] Fixture runs do not consume provider quota (F-07)
-- [ ] Personas are not described as census-grounded while priors are absent
-- [ ] Confidence and agreement labels state they are heuristics, not inference
+- [ ] The Neo interview fixture is labelled as seeded **in the UI** (F-07) — the backend discloses `demo_fixture` / `fixture_source` / `judge_model` and the client helper is tested (`3dae8f6`), but the rendered result was not re-checked in a browser this session
+- [ ] Fixture runs do not consume provider quota (F-07) — **not addressed.** The Neo fixture still charges quota.
+- [x] Personas are not described as census-grounded while priors are absent — the ACS priors now load and both paths report `grounded_priors`, so the claim is true. `cex_affordability_available` remains `False`.
+- [ ] Confidence and agreement labels state they are heuristics, not inference — **not addressed**, and tied to the unrendered `transparency_note`
 - [ ] The "Krippendorff's α" comparison is corrected or removed
 - [ ] No claim of benchmarking against a real 600-person panel
 
@@ -116,7 +118,31 @@ LEGACY_APP_ROOT=./legacy_runtime
 - [ ] Instructor guide covers the documented setup pitfalls
 
 ## H. Sign-off
-- [ ] Neo E2E re-run clean at the candidate SHA
-- [ ] Custom Study E2E re-run clean at the candidate SHA
-- [ ] All P0 findings closed or explicitly accepted in writing
-- [ ] Reviewed with Dr. Wang
+- [x] Neo E2E re-run clean at the candidate SHA — `1bc1c1c`, see the run above
+- [x] Custom Study E2E re-run clean at the candidate SHA — `1bc1c1c`, see the run above
+- [x] All P0 findings closed — F-01, F-04, F-04b, F-06, F-07, F-11, F-14. **0 P0 open.**
+- [ ] Reviewed with Dr. Wang — outstanding, along with the licence choice, the panel-of-600 expectation, and the Neo interview step
+
+---
+
+## What "not classroom-ready" means, concretely
+
+26 of 43 boxes carry evidence. The 17 that do not are not a formality:
+
+1. **A PDF upload produces an unusable study.** A Google Forms export now uploads instead of returning
+   HTTP 400, but parses as open text only — no distributions, no means, no choice or Likert charts, and
+   nothing above "Low confidence". Exporting a Google Form is the most likely classroom path (F-08).
+2. **A document that is not a survey can still be accepted as one.** `Neo Smart Living Background.pdf`
+   parses as a five-question survey (F-08).
+3. **There is no LICENSE**, which blocks the CARLE deposit and is the project owner's decision (F-10).
+4. **The transparency note is still rendered nowhere**, so the deterministic confidence and agreement
+   labels are shown without the caveat the backend ships with them.
+5. **The Neo interview fixture still consumes provider quota**, and its UI labelling has not been
+   re-checked in a browser since it was added.
+6. **Stability mode has no count coverage**, and the post-run Stability Check's repeat loop still has no
+   test at all.
+7. **Section G is entirely untouched** — saved-dataset mode, per-run cost estimate, instructor guide.
+8. **Nothing has been reviewed with Dr. Wang**, including the panel-of-600 expectation and the Neo
+   interview step.
+
+Items 1, 2 and 6 are engineering. Items 3 and 8 need decisions rather than code.

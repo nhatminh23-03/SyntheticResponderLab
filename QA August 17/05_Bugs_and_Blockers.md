@@ -17,7 +17,7 @@ Severity: **P0** blocks classroom use or invalidates research output · **P1** i
 | F-03 | Alembic migrates the wrong database locally | P1 | **FIXED+VERIFIED** (`bcb4626`) | ~~No~~ | **Yes** |
 | F-04 | Fully fabricated run reports success | **P0** | **FIXED+VERIFIED** (`340d482`, `fd0615e`, `901cf3b`, `34d7635`) — hard errors stop the run, diagnostics render, rows carry provenance, and fabricated answers are excluded from analysis by default | **Yes** | Partial |
 | F-04b | Retired model ID silently fabricates its half | **P0** | **FIXED+VERIFIED** (`340d482`) | ~~Yes~~ | **Yes** |
-| F-05 | Three conflicting "responses" counts | P1 | **FIXED+VERIFIED** (`72d2368`) — personas, executions and answer records named separately | ~~Yes~~ | **Yes** |
+| F-05 | Three conflicting "responses" counts | P1 | **FIXED+VERIFIED** (`681dc4a`) — personas, executions and answer records named separately | ~~Yes~~ | **Yes** |
 | F-06 | Insights fabricates Strongest Segment; Neo `Q*` coupling | **P0** | **FIXED+VERIFIED** (`15dffc9`, `b60242b`, `71bbf3b`) — fabrication closed, Neo wording removed, and Neo metrics now gated to Neo studies | ~~Yes~~ | **Yes** |
 | F-07 | Neo interview fixture undetectable by any client | **P0** | **FIXED+VERIFIED** (`fix/f-07-interview-fixture-transparency`, `e332726`) | ~~Yes~~ | **Yes** |
 | F-08 | PDF parser inverted; markdown format sensitivity | P1 | **PARTIALLY FIXED** (`e9c51f4`) — the upload blocker is closed; option recovery and non-survey acceptance remain | ~~Yes~~ | **Yes** |
@@ -35,6 +35,37 @@ Severity: **P0** blocks classroom use or invalidates research output · **P1** i
 | R-03 | `lg:overflow-hidden` on scrollable sections may clip overlays at ≥lg | P2 | OPEN (new in `2691642`) | No | No |
 | R-04 | `npm run test:unit` never cleans `.test-dist`, so stale compiled tests still run | P2 | **FIXED+VERIFIED** (`035520a`) | ~~No~~ | Demonstrated with a planted stale test |
 
+## Traceability
+
+Every closed finding, with the commit that fixed it, the pull request that carried it, the merge it
+landed in, and where the evidence for the claim lives. Commit SHAs are the ones in the merged history —
+a SHA that is not reachable from the merge is not evidence.
+
+| Finding | Fixing commit(s) | PR | Merged into `yaza_Aug_work` | Evidence |
+|---|---|---|---|---|
+| F-01 fresh checkout cannot run | `a3e6d8a` | [#11](https://github.com/nhatminh23-03/SyntheticResponderLab/pull/11) | `8ba31ee` | `git archive HEAD` checkout ran the suite; §1b, `06_Fix_Log.md` |
+| F-02 test regression + non-hermetic suite | `b3bd4b5` *(upstream)* | — | `8ba31ee` | 195 passed, 0 failed on `1bc1c1c` |
+| F-04 fabricated run reports success | `2fcbea6`, `7b132c4`, `0fc672f` | #11 | `8ba31ee` | partial-fallback run: 62 of 64 flagged and excluded, 64 retained |
+| F-04b retired model fabricates its half | `98f08fe` | #11 | `8ba31ee` | 402 stub → HTTP 503 after 2 of 2 calls |
+| F-06 Neo semantics from question ids | `b1a7841`, `ddcc6b4`, `71bbf3b` | #11, [#12](https://github.com/nhatminh23-03/SyntheticResponderLab/pull/12) | `8ba31ee`, `1bc1c1c` | Cortado smoke: five Neo charts unavailable, `average_interest` `None` |
+| F-07 interview fixture undetectable | `3dae8f6` | #11 | `8ba31ee` | `tests/test_studies_endpoints.py` fixture-provenance cases |
+| F-09 retired model in fallback catalog | `b3bd4b5` *(upstream)* | — | `8ba31ee` | live 404 on the retired id, scenario C |
+| F-11 quota race 500s | `8ca47ea` | #11 | `8ba31ee` | concurrent first-request-of-day test |
+| F-12 mode-card contrast | `2691642` *(upstream)* | — | `8ba31ee` | re-measured 9.76:1 + `aria-pressed` |
+| F-13 Likert scale buckets | `353b01a` | #11 | `8ba31ee` | `tests/test_likert_distribution.py` |
+| F-14 parser rejects semantic ids | `f048fdd` | #11 | `8ba31ee` | `tests/test_survey_parser_ids.py` |
+| F-15 strongest == weakest segment | `b1a7841` | #11 | `8ba31ee` | `tests/test_insights_segments.py` |
+| F-03 alembic migrates wrong database | `bcb4626` | #12 | `1bc1c1c` | `.env` pointed at a temp DB → that DB got all 9 tables |
+| F-05 three conflicting counts | `681dc4a` | #12 | `1bc1c1c` | mirror run: 2 personas / 4 executions / 128 answers |
+| F-16 Reset copy untrue after reload | `1b46df2` | #12 | `1bc1c1c` | `tests/product-reset.test.ts` |
+| F-17 all-fabricated run, wrong reason | `627660e` | #12 | `1bc1c1c` | Analysis and Insights agree, both carry sourcing |
+| F-08 **PARTIAL** — upload blocker only | `e9c51f4` | #12 | `1bc1c1c` | Google Forms PDF: 400 → parses; two sub-defects open |
+| R-04 stale compiled tests counted | `035520a` | #12 | `1bc1c1c` | planted ghost test counted 68, then 67 and removed |
+
+**Still open:** F-08 (partial), F-10 (**awaiting project-owner decision**), R-01, R-02, R-03.
+
+---
+
 **Counted against the combined tree `f048fdd`** (`integration/qa-aug-17-all-fixes`, eleven fixes rebased
 onto `yaza_Aug_work` @ `d340d14`). Commit SHAs below are the rebased ones; the pre-rebase branch is
 preserved at `backup/qa-aug-17-pre-rebase`.
@@ -42,7 +73,7 @@ preserved at `backup/qa-aug-17-pre-rebase`.
 **Open: 0 P0 · 2 P1 · 3 P2** as of `035520a` (21 Aug). F-08 is partial, not closed; F-10 awaits a project-owner decision.
 
 - **P0 — none.** F-06 was the last one; its third and final defect closed in `71bbf3b`.
-- **P1 open** — F-08 (partial) and F-10. (F-05 `72d2368`, F-17 `627660e`, F-03 `bcb4626`, F-16 `1b46df2`.)
+- **P1 open** — F-08 (partial) and F-10. (F-05 `681dc4a`, F-17 `627660e`, F-03 `bcb4626`, F-16 `1b46df2`.)
 - **P2 open** — R-01, R-02, R-03. (R-04 closed in `035520a`.)
 
 Closed in this pass and verified on `f048fdd`: F-01 (`a3e6d8a`), F-04 (`2fcbea6`, `7b132c4`, `0fc672f`),
@@ -190,7 +221,7 @@ warnings: 2
 ---
 
 ## F-05 — Three conflicting "responses" counts
-**Severity P1 · FIXED+VERIFIED (`72d2368`) · verified live on a mirror run**
+**Severity P1 · FIXED+VERIFIED (`681dc4a`) · verified live on a mirror run**
 
 See `04_Experiment_Mode_Verification.md` §3 for the full table and causes.
 
