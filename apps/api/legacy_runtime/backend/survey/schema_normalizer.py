@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from backend.schemas import SurveyQuestion, SurveySchema
 
@@ -30,9 +30,26 @@ def normalize_survey_payload(raw_payload: Dict[str, Any]) -> SurveySchema:
 	raw_questions = raw_payload.get("questions", [])
 	parse_warnings = list(raw_payload.get("parse_warnings", []))
 
+	# Ids the document names for itself are collected up front, because a question that names none is
+	# numbered by position and would otherwise be able to take one of them. A Google Forms export opens
+	# with an unlabelled "Email*" field, which became Q1 while the survey's own Q1 was still Q1, and the
+	# validator rejected the whole upload over a file that was perfectly valid.
+	declared_ids = {
+		str(raw_question.get("id")).strip()
+		for raw_question in raw_questions
+		if str(raw_question.get("id") or "").strip()
+	}
+
 	normalized_questions: List[SurveyQuestion] = []
+	assigned_ids: set = set()
 	for index, raw_question in enumerate(raw_questions, start=1):
-		normalized = _normalize_question(raw_question=raw_question, index=index, parse_warnings=parse_warnings)
+		normalized = _normalize_question(
+			raw_question=raw_question,
+			index=index,
+			parse_warnings=parse_warnings,
+			taken_ids=declared_ids | assigned_ids,
+		)
+		assigned_ids.add(normalized["id"])
 		normalized_questions.append(SurveyQuestion(**normalized))
 
 	return SurveySchema(
@@ -44,10 +61,39 @@ def normalize_survey_payload(raw_payload: Dict[str, Any]) -> SurveySchema:
 	)
 
 
-def _normalize_question(raw_question: Dict[str, Any], index: int, parse_warnings: List[str]) -> Dict[str, Any]:
+def _assign_unused_id(index: int, taken_ids: set, question_text: str, parse_warnings: List[str]) -> str:
+	"""Name a question the document did not name, without taking an id it uses elsewhere."""
+	candidate = f"Q{index}"
+	if candidate not in taken_ids:
+		return candidate
+
+	# Falling back to a different Q-number would read as a position the question does not occupy, so
+	# the generated id says plainly that the document did not provide one.
+	fallback = f"UNNAMED_{index}"
+	suffix = 1
+	while fallback in taken_ids:
+		suffix += 1
+		fallback = f"UNNAMED_{index}_{suffix}"
+	label = question_text[:60] or "an unlabelled question"
+	parse_warnings.append(
+		f"{candidate} is already used by another question, so \"{label}\" was named {fallback}."
+	)
+	return fallback
+
+
+def _normalize_question(
+	raw_question: Dict[str, Any],
+	index: int,
+	parse_warnings: List[str],
+	taken_ids: Optional[set] = None,
+) -> Dict[str, Any]:
 	"""Normalize one raw question dictionary into schema-shaped fields."""
-	question_id = str(raw_question.get("id") or f"Q{index}").strip()
 	question_text = str(raw_question.get("text") or "").strip()
+	declared_id = str(raw_question.get("id") or "").strip()
+	if declared_id:
+		question_id = declared_id
+	else:
+		question_id = _assign_unused_id(index, taken_ids or set(), question_text, parse_warnings)
 
 	raw_type = str(raw_question.get("question_type") or "open_text").strip().lower()
 	question_type = QUESTION_TYPE_ALIASES.get(raw_type)

@@ -604,7 +604,8 @@ def _generate_live_response_records_with_debug(
     generation_debug = {
         "generation_mode": "openrouter_live",
         "model": config.selected_models[0] if len(config.selected_models) == 1 else None,
-        "respondents": int(len(respondent_model_pairs)),
+        "executions": int(len(respondent_model_pairs)),
+        "answer_records": int(len(records)),
         "questions_total": int(len(records)),
         "request_errors": int(request_errors),
         "provider_error_count": int(provider_error_count),
@@ -613,6 +614,30 @@ def _generate_live_response_records_with_debug(
         "questions_parsed_from_live": int(parsed_count),
     }
     return records, generation_debug, record_is_fallback
+
+
+def _docx_fallback_schema(parser: Any, validator: Any, file_bytes: bytes) -> dict:
+    """Re-read a .docx with the layout-aware parser that understands its option formatting."""
+    try:
+        extracted_text = parser._extract_text_from_docx(file_bytes)
+        return parse_aytm_style_docx_to_validated_schema(text=extracted_text, validator_module=validator)
+    except ValueError as fallback_exc:
+        raise ValidationApiError(str(fallback_exc)) from fallback_exc
+    except Exception as fallback_exc:
+        raise LegacyModuleApiError(f"DOCX fallback parsing failed: {fallback_exc}") from fallback_exc
+
+
+def _has_no_scorable_questions(validated: Any) -> bool:
+    """Whether every question came out as open text.
+
+    A survey of nothing but open text produces no distributions, no means and no charts, and cannot rise
+    above "Low confidence" in the trust assessment. For a .docx it almost always means the options were
+    there and were not recognised rather than that the researcher wrote no closed questions.
+    """
+    questions = list(getattr(validated, "questions", []) or [])
+    return bool(questions) and all(
+        str(getattr(question, "question_type", "")) == "open_text" for question in questions
+    )
 
 
 def parse_normalize_validate_survey(file_name: str, file_bytes: bytes, legacy_root: Path) -> dict:
@@ -624,19 +649,16 @@ def parse_normalize_validate_survey(file_name: str, file_bytes: bytes, legacy_ro
         raw = parser.parse_uploaded_survey(file_name=file_name, file_bytes=file_bytes)
         normalized = normalizer.normalize_survey_payload(raw)
         validated = validator.validate_survey_schema(normalized)
+        # The .docx fallback used to be reached only when the primary parser happened to raise on
+        # duplicate ids -- an accident that correlated with it having done badly, not a check that it
+        # had. It is now chosen on the result: the primary parser reads .docx as flat paragraphs and
+        # loses the option formatting, so an all-open-text outcome means the wrong reader was used.
+        if extension == "docx" and _has_no_scorable_questions(validated):
+            return _docx_fallback_schema(parser, validator, file_bytes)
         return validated.model_dump()
     except ValueError as exc:
-        if extension == "docx" and "Duplicate question ids found" in str(exc):
-            try:
-                extracted_text = parser._extract_text_from_docx(file_bytes)
-                return parse_aytm_style_docx_to_validated_schema(
-                    text=extracted_text,
-                    validator_module=validator,
-                )
-            except ValueError as fallback_exc:
-                raise ValidationApiError(str(fallback_exc)) from fallback_exc
-            except Exception as fallback_exc:
-                raise LegacyModuleApiError(f"DOCX fallback parsing failed: {fallback_exc}") from fallback_exc
+        if extension == "docx":
+            return _docx_fallback_schema(parser, validator, file_bytes)
         raise ValidationApiError(str(exc)) from exc
     except Exception as exc:
         raise LegacyModuleApiError(f"Survey parsing failed: {exc}") from exc
@@ -1097,11 +1119,29 @@ def execute_simulation_run(
         prior_notes=prior_notes,
     )
 
+    # Three different quantities were all being reported as "responses". They are named separately here
+    # so no reader has to infer which one a number refers to.
+    #
+    # The legacy entry point sets total_generated = config.sample_size, which ignores models, reruns and
+    # whether any provider call succeeded -- a 20-persona x 2-model mirror run reported 20 while running
+    # 40 surveys. The execution count is the one that answers "how many completed surveys came back",
+    # so it is what the two totals now carry.
+    execution_count = int(generation_debug.get("executions") or 0) or len(
+        {(record.respondent_id, record.model) for record in records}
+    )
+    run_counts = {
+        "personas": len(personas),
+        "executions": execution_count,
+        "questions": int(result.question_count or 0),
+        "answer_records": len(records),
+    }
+
     return {
         "run_id": result.run_id,
         "status": result.status,
-        "total_requested_responses": result.total_requested_responses,
-        "total_generated_responses": result.total_generated_responses,
+        "run_counts": run_counts,
+        "total_requested_responses": execution_count,
+        "total_generated_responses": execution_count,
         "models_used": list(result.models_used),
         "experiment_mode": result.experiment_mode,
         "survey_title": result.survey_title,
@@ -1560,10 +1600,23 @@ def build_insights_view(
     records, fallback_records = _split_live_and_fallback_records(all_records)
     answer_sourcing = _answer_sourcing_summary(records, fallback_records)
     personas = list(latest_run_payload.get("personas") or [])
-    if not records:
+    if not all_records:
         return {
             "available": False,
             "message": "The latest run does not include response records yet.",
+            "transparency_note": transparency_note,
+        }
+    if not records:
+        # The run stored a full set of records; every one of them is deterministic filler. Saying it
+        # holds nothing would name the wrong cause and send the reader off to wait for data that has
+        # already arrived. The sourcing summary travels with the refusal so the claim can be checked.
+        return {
+            "available": False,
+            "message": (
+                "Every answer in this run was deterministic filler rather than a model response, so "
+                "there is nothing to summarise. Check the run diagnostics before relying on it."
+            ),
+            "answer_sourcing": answer_sourcing,
             "transparency_note": transparency_note,
         }
 
@@ -1601,7 +1654,7 @@ def build_insights_view(
     message_performance = _build_message_performance(df, study_mode)
     use_case_share = _build_use_case_share(df, study_mode)
     interest_ladder = _build_interest_ladder(df, study_mode)
-    segment_heatmap = _build_segment_heatmap(df, barrier_ranking, message_performance)
+    segment_heatmap = _build_segment_heatmap(df, barrier_ranking, message_performance, study_mode)
     model_difference_chart = _build_model_difference_chart(df)
 
     executive_summary = _build_executive_summary(
@@ -1610,6 +1663,7 @@ def build_insights_view(
         run_payload=latest_run_payload,
         use_case_share=use_case_share,
         model_notes=model_notes,
+        study_mode=study_mode,
     )
     trust_snapshot = _build_trust_snapshot(
         trust_map=trust_map,
@@ -1628,6 +1682,7 @@ def build_insights_view(
         df=df,
         segment_notes=segment_notes,
         segment_heatmap=segment_heatmap,
+        study_mode=study_mode,
     )
     context_notes = {
         "model_notes": model_notes,
@@ -2592,10 +2647,13 @@ def _build_realism_scorecard(
     records: list[dict],
     realism_module: Any,
 ) -> dict:
-    if study_mode != "neo_smart":
+    if not _is_neo_study(study_mode):
+        # The scorecard compares answers against benchmark targets recorded for the Neo survey, so it
+        # has nothing to say here. Naming the Neo mode would explain the absence in terms of a study
+        # the researcher is not running.
         return {
             "available": False,
-            "message": "Realism scorecard is shown only for Neo Smart mode.",
+            "message": GENERIC_INSIGHT_UNAVAILABLE_MESSAGE,
             "summary": None,
             "question_rows": [],
         }
@@ -2666,6 +2724,7 @@ def _build_executive_summary(
     run_payload: dict[str, Any],
     use_case_share: dict[str, Any],
     model_notes: list[str],
+    study_mode: Optional[str] = None,
 ) -> dict[str, Any]:
     top_use_case = "N/A"
     top_use_case_share = None
@@ -2674,8 +2733,12 @@ def _build_executive_summary(
         top_use_case = str(top_row.get("label") or "N/A")
         top_use_case_share = top_row.get("share")
 
-    average_interest = _first_question_numeric_mean(df, ["Q1", "Q0B", "Q2"])
-    strongest_segment = _compute_strongest_segment(df)
+    # Both of these average the Neo decision-ladder questions. Run against another survey they
+    # average whatever happens to carry those ids -- in the coffee preset, a dollar spend band --
+    # and report the result as an interest score.
+    neo_study = _is_neo_study(study_mode)
+    average_interest = _first_question_numeric_mean(df, ["Q1", "Q0B", "Q2"]) if neo_study else None
+    strongest_segment = _compute_strongest_segment(df) if neo_study else None
     differing_questions = sum(
         1 for note in model_notes if "differences observed" in str(note).lower()
     )
@@ -2885,9 +2948,11 @@ def _build_segment_story(
     df: pd.DataFrame,
     segment_notes: list[str],
     segment_heatmap: dict[str, Any],
+    study_mode: Optional[str] = None,
 ) -> dict[str, Any]:
-    strongest_segment = _compute_strongest_segment(df)
-    weakest_segment = _compute_weakest_segment(df)
+    neo_study = _is_neo_study(study_mode)
+    strongest_segment = _compute_strongest_segment(df) if neo_study else None
+    weakest_segment = _compute_weakest_segment(df) if neo_study else None
     return {
         "strongest_segment": strongest_segment,
         "weakest_segment": weakest_segment,
@@ -2898,20 +2963,33 @@ def _build_segment_story(
 
 GENERIC_INSIGHT_UNAVAILABLE_MESSAGE = "This insight is not applicable to this survey."
 
+NEO_STUDY_MODE = "neo_smart"
 
-def _insight_unavailable_message(study_mode: Optional[str], neo_detail: str) -> str:
-    """Explain an unavailable insight in terms the reader can act on.
 
-    The Neo metrics key on that survey's question ids, so naming the missing question is useful *in Neo*
-    and meaningless anywhere else — a coffee-subscription study being told "Primary use question Q3 was
-    not found" implies the researcher mis-numbered something. Custom studies get generic wording.
+def _is_neo_study(study_mode: Optional[str]) -> bool:
+    """Whether this study is the one survey whose question ids carry known research meaning.
+
+    The metrics below read literal ids — Q1, Q2, Q3, Q0B, S3, Q5_*, Q9A/Q9B..Q13A/Q13B — and attach
+    Neo's meaning to whatever answers them. Those ids are not rare: `schema_normalizer` assigns
+    `Q{index}` to any question that declares no id, so an ordinary uploaded survey lands on them by
+    default. Reading an id is therefore not evidence that the question means what Neo's does, and the
+    study mode is the only thing that is.
     """
-    if str(study_mode or "") == "neo_smart":
-        return neo_detail
-    return GENERIC_INSIGHT_UNAVAILABLE_MESSAGE
+    return str(study_mode or "") == NEO_STUDY_MODE
+
+
+def _neo_metric_unavailable() -> dict[str, Any]:
+    """The stand-in for a Neo metric in a study whose schema it knows nothing about.
+
+    Deliberately empty rather than approximated: there is no honest substitute for "how does this
+    audience rank the Neo barrier matrix" in a survey that never asked it.
+    """
+    return {"available": False, "message": GENERIC_INSIGHT_UNAVAILABLE_MESSAGE, "rows": []}
 
 
 def _build_barrier_ranking(df: pd.DataFrame, study_mode: Optional[str] = None) -> dict[str, Any]:
+    if not _is_neo_study(study_mode):
+        return _neo_metric_unavailable()
     if df.empty or "question_id" not in df.columns:
         return {"available": False, "message": "No records available.", "rows": []}
 
@@ -2919,9 +2997,7 @@ def _build_barrier_ranking(df: pd.DataFrame, study_mode: Optional[str] = None) -
     if barrier_df.empty:
         return {
             "available": False,
-            "message": _insight_unavailable_message(
-                study_mode, "Barrier matrix items were not found in this run."
-            ),
+            "message": "Barrier matrix items were not found in this run.",
             "rows": [],
         }
 
@@ -2945,6 +3021,8 @@ def _build_barrier_ranking(df: pd.DataFrame, study_mode: Optional[str] = None) -
 
 
 def _build_message_performance(df: pd.DataFrame, study_mode: Optional[str] = None) -> dict[str, Any]:
+    if not _is_neo_study(study_mode):
+        return _neo_metric_unavailable()
     if df.empty:
         return {"available": False, "message": "No records available.", "rows": []}
 
@@ -2968,22 +3046,20 @@ def _build_message_performance(df: pd.DataFrame, study_mode: Optional[str] = Non
     if not rows:
         return {
             "available": False,
-            "message": _insight_unavailable_message(
-                study_mode, "Positioning concept pairs were not found in this run."
-            ),
+            "message": "Positioning concept pairs were not found in this run.",
             "rows": [],
         }
     return {"available": True, "rows": rows}
 
 
 def _build_use_case_share(df: pd.DataFrame, study_mode: Optional[str] = None) -> dict[str, Any]:
+    if not _is_neo_study(study_mode):
+        return _neo_metric_unavailable()
     distribution = _compute_question_answer_distribution(df, "Q3")
     if getattr(distribution, "empty", True):
         return {
             "available": False,
-            "message": _insight_unavailable_message(
-                study_mode, "Primary use question Q3 was not found."
-            ),
+            "message": "Primary use question Q3 was not found.",
             "rows": [],
         }
 
@@ -2999,6 +3075,8 @@ def _build_use_case_share(df: pd.DataFrame, study_mode: Optional[str] = None) ->
 
 
 def _build_interest_ladder(df: pd.DataFrame, study_mode: Optional[str] = None) -> dict[str, Any]:
+    if not _is_neo_study(study_mode):
+        return _neo_metric_unavailable()
     if df.empty:
         return {"available": False, "message": "No records available.", "rows": []}
 
@@ -3027,9 +3105,7 @@ def _build_interest_ladder(df: pd.DataFrame, study_mode: Optional[str] = None) -
     if not rows:
         return {
             "available": False,
-            "message": _insight_unavailable_message(
-                study_mode, "Core decision-ladder questions were not found."
-            ),
+            "message": "Core decision-ladder questions were not found.",
             "rows": [],
         }
     return {"available": True, "rows": rows}
@@ -3039,7 +3115,13 @@ def _build_segment_heatmap(
     df: pd.DataFrame,
     barrier_ranking: dict[str, Any],
     message_performance: dict[str, Any],
+    study_mode: Optional[str] = None,
 ) -> dict[str, Any]:
+    # Every row this can offer comes from a Neo id: Q1/Q2/Q3 directly, or a barrier or concept pair
+    # discovered by the two Neo charts above.
+    if not _is_neo_study(study_mode):
+        return {**_neo_metric_unavailable(), "segments": []}
+
     segments = _list_segments(df)
     if not segments:
         return {"available": False, "message": "No segment labels were found in this run.", "segments": [], "rows": []}

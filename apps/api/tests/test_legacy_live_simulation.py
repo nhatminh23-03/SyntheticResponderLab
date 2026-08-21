@@ -145,7 +145,15 @@ def test_execute_simulation_run_uses_live_selected_models(test_settings, monkeyp
 
     assert result["generation_mode"] == "openrouter_live"
     assert result["provider_model_name"] is None
-    assert result["total_generated_responses"] == 2
+    # Two personas answering the survey once per model is four completed responses, not two. This
+    # asserted 2 while also asserting 8 saved rows, which locked the mis-count in as expected (F-05).
+    assert result["total_generated_responses"] == 4
+    assert result["run_counts"] == {
+        "personas": 2,
+        "executions": 4,
+        "questions": 2,
+        "answer_records": 8,
+    }
     assert set(result["models_used"]) == {"openai/gpt-4o-mini", "google/gemini-2.0-flash-001"}
     assert len(result["response_records"]) == 8
     assert {record["model"] for record in result["response_records"]} == {
