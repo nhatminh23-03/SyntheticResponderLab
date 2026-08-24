@@ -1977,7 +1977,12 @@ def _serialize_enrichment(enrichment: Optional[StudyProductEnrichment]) -> Optio
 def _serialize_persona_preview(preview: Optional[PersonaPreviewRun]) -> Optional[PersonaPreviewResult]:
     if preview is None:
         return None
-    personas = [persona.persona_json for persona in sorted(preview.personas, key=lambda item: item.row_index)]
+    personas = [
+        # candidate_id/row_index give clients a stable handle on the persisted row; the
+        # PERS_NNN persona_id inside persona_json restarts at 001 for every run.
+        {**persona.persona_json, "candidate_id": str(persona.id), "row_index": persona.row_index}
+        for persona in sorted(preview.personas, key=lambda item: item.row_index)
+    ]
     return PersonaPreviewResult(
         preview_id=preview.public_id,
         status=preview.status,

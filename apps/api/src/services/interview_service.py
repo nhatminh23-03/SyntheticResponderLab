@@ -19,9 +19,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from src.config.settings import AppSettings
-from src.persistence.models import Job, PersonaPreviewRun, Study, StudySectionState
+from src.persistence.models import Job, Study, StudySectionState
 from src.services.demo_interview_fixtures import ensure_demo_interview_run
 from src.services.exceptions import ConflictApiError, ValidationApiError
+from src.services.persona_set_service import resolve_interview_personas
 from src.services.ids import make_public_id
 from src.services.usage_limits import (
     METRIC_INTERVIEW_RUN,
@@ -156,9 +157,10 @@ def start_interview_run(
     product = sections.get("product") and sections["product"].value_json
     audience = sections.get("audience") and sections["audience"].value_json
 
-    # Get latest persona preview
-    latest_preview = _get_latest_preview(session, study)
-    if not latest_preview or not latest_preview.personas:
+    # Persona source: a finalized fixed persona set wins (exactly the reviewer's selection),
+    # otherwise the latest persona preview run in full.
+    persona_set, source_preview, personas = resolve_interview_personas(session, study)
+    if source_preview is None or not personas:
         raise ConflictApiError(
             "No persona preview found. Run Personas Preview first before generating interviews."
         )
@@ -171,7 +173,7 @@ def start_interview_run(
         demo_job = ensure_demo_interview_run(
             session,
             study,
-            latest_preview=latest_preview,
+            latest_preview=source_preview,
             product=product,
             questions=custom_questions,
         )
@@ -200,8 +202,6 @@ def start_interview_run(
     model_b = payload.get("model_b") or config.get("model_b") or DEFAULT_MODEL_B
     judge_model = payload.get("judge_model") or config.get("judge_model") or JUDGE_MODEL
 
-    personas = [p.persona_json for p in sorted(latest_preview.personas, key=lambda x: x.row_index)]
-
     # Create job record
     job = Job(
         public_id=make_public_id("job"),
@@ -214,6 +214,9 @@ def start_interview_run(
             "model_b": model_b,
             "judge_model": judge_model,
             "custom_questions": bool(custom_questions),
+            # Persona provenance: which batch (and, when finalized, which fixed set) was used.
+            "persona_set_id": persona_set.public_id if persona_set else None,
+            "preview_run_id": source_preview.public_id,
         },
         result_json=None,
         error_json=None,
@@ -252,6 +255,8 @@ def start_interview_run(
             "model_a": model_a,
             "model_b": model_b,
             "judge_model": judge_model,
+            "persona_set_id": persona_set.public_id if persona_set else None,
+            "preview_run_id": source_preview.public_id,
         }
         job.status = "completed"
         job.result_json = result
@@ -578,16 +583,6 @@ def _latest_interview_job(session: Session, study_id) -> Optional[Job]:
     )
 
 
-def _get_latest_preview(session: Session, study: Study) -> Optional[PersonaPreviewRun]:
-    if study.latest_persona_preview_run_id is None:
-        return None
-    return session.scalar(
-        select(PersonaPreviewRun).where(
-            PersonaPreviewRun.id == study.latest_persona_preview_run_id
-        )
-    )
-
-
 def _serialize_interview_job(job: Job) -> Dict[str, Any]:
     result = job.result_json or {}
     grounding = result.get("grounding_report") or {}
@@ -603,6 +598,9 @@ def _serialize_interview_job(job: Job) -> Dict[str, Any]:
         "demo_fixture": bool(result.get("demo_fixture")),
         "fixture_source": result.get("fixture_source"),
         "judge_model": result.get("judge_model"),
+        # Persona provenance: which fixed set (if any) and candidate batch supplied the personas.
+        "persona_set_id": result.get("persona_set_id") or job.payload_json.get("persona_set_id"),
+        "preview_run_id": result.get("preview_run_id") or job.payload_json.get("preview_run_id"),
         # Include pairs only in result (large payload) — omit from status summary
         "pairs": result.get("pairs") if job.status == "completed" else None,
         "error": job.error_json,

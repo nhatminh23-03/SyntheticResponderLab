@@ -220,6 +220,33 @@ export type PersonaPreviewPayload = {
   completed_at?: string | null;
 };
 
+export type PersonaSetSelectionPayload = {
+  candidate_id: string;
+  persona_id?: string | null;
+  reviewer_note?: string | null;
+};
+
+export type PersonaSetPayload = {
+  set_id: string;
+  status: "draft" | "finalized" | string;
+  preview_run_id: string;
+  generation_mode?: string | null;
+  grounded_priors_available?: boolean | null;
+  seed?: number | null;
+  candidate_count: number;
+  generated_at?: string;
+  selections: PersonaSetSelectionPayload[];
+  candidates: Array<Record<string, unknown>>;
+  created_at?: string;
+  updated_at?: string;
+  finalized_at?: string | null;
+};
+
+export type PersonaSetUpsertPayload = {
+  preview_run_id: string;
+  selections: Array<{ candidate_id: string; reviewer_note?: string | null }>;
+};
+
 export type PromptPreviewPayload = {
   persona_index: number;
   persona_id?: string | null;
@@ -1006,6 +1033,12 @@ export type PersonaPreviewResponse = {
   };
 };
 
+export type PersonaSetResponse = {
+  data?: {
+    persona_set?: PersonaSetPayload | null;
+  };
+};
+
 export type PromptPreviewResponse = {
   data?: {
     prompt_preview?: PromptPreviewPayload | null;
@@ -1572,6 +1605,75 @@ export async function generatePersonaPreview(
     personaPreview: result.data?.persona_preview ?? null,
     workflow: result.data?.workflow ?? null,
   };
+}
+
+export async function getPersonaSet(studyId: string): Promise<PersonaSetPayload | null> {
+  const apiBaseUrl = getApiBaseUrl();
+
+  const response = await fetch(`${apiBaseUrl}/api/v1/studies/${studyId}/persona-set`, {
+    headers: { Accept: "application/json" },
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      await readApiErrorMessage(
+        response,
+        `Persona set fetch failed with status ${response.status}`
+      )
+    );
+  }
+
+  const result = (await response.json()) as PersonaSetResponse;
+  return result.data?.persona_set ?? null;
+}
+
+export async function savePersonaSetDraft(
+  studyId: string,
+  payload: PersonaSetUpsertPayload
+): Promise<PersonaSetPayload | null> {
+  const apiBaseUrl = getApiBaseUrl();
+
+  const response = await fetch(`${apiBaseUrl}/api/v1/studies/${studyId}/persona-set`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      await readApiErrorMessage(
+        response,
+        `Persona selection save failed with status ${response.status}`
+      )
+    );
+  }
+
+  const result = (await response.json()) as PersonaSetResponse;
+  return result.data?.persona_set ?? null;
+}
+
+export async function finalizePersonaSet(studyId: string): Promise<PersonaSetPayload | null> {
+  const apiBaseUrl = getApiBaseUrl();
+
+  const response = await fetch(`${apiBaseUrl}/api/v1/studies/${studyId}/persona-set/finalize`, {
+    method: "POST",
+    headers: { Accept: "application/json" },
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      await readApiErrorMessage(
+        response,
+        `Persona set finalize failed with status ${response.status}`
+      )
+    );
+  }
+
+  const result = (await response.json()) as PersonaSetResponse;
+  return result.data?.persona_set ?? null;
 }
 
 export async function getPromptPreview(studyId: string, personaIndex = 0) {

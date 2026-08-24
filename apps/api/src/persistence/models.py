@@ -152,6 +152,48 @@ class PersonaPreviewPersona(Base):
     preview_run: Mapped[PersonaPreviewRun] = relationship(back_populates="personas")
 
 
+class FixedPersonaSet(Base):
+    """A reviewer-frozen selection of preview personas, pinned to one candidate batch.
+
+    The preview_run FK deliberately does not cascade: the run is the set's provenance
+    (grounding mode, prior notes, timestamps) and must outlive pointer changes on Study.
+    """
+
+    __tablename__ = "fixed_persona_sets"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    public_id: Mapped[str] = mapped_column(Text, unique=True, nullable=False)
+    study_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("studies.id", ondelete="CASCADE"), unique=True, nullable=False)
+    preview_run_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("persona_preview_runs.id"), nullable=False)
+    status: Mapped[str] = mapped_column(Text, default="draft", nullable=False)
+    generation_mode: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    finalized_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    preview_run: Mapped[PersonaPreviewRun] = relationship()
+    members: Mapped[List["FixedPersonaSetMember"]] = relationship(
+        back_populates="persona_set",
+        cascade="all, delete-orphan",
+        order_by="FixedPersonaSetMember.position",
+    )
+
+
+class FixedPersonaSetMember(Base):
+    __tablename__ = "fixed_persona_set_members"
+    __table_args__ = (UniqueConstraint("set_id", "preview_persona_id", name="uq_fixed_persona_set_members_set_persona"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    set_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("fixed_persona_sets.id", ondelete="CASCADE"), nullable=False)
+    preview_persona_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("persona_preview_personas.id"), nullable=False)
+    position: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    reviewer_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+    persona_set: Mapped[FixedPersonaSet] = relationship(back_populates="members")
+    preview_persona: Mapped[PersonaPreviewPersona] = relationship()
+
+
 class Job(Base):
     __tablename__ = "jobs"
 

@@ -8,6 +8,7 @@ import { InterviewInsightsSection } from "@/components/sections/interview-insigh
 import { InterviewSynthesisSection } from "@/components/sections/interview-synthesis-section";
 import { MainHeroSection } from "@/components/sections/main-hero-section";
 import { MarketSection } from "@/components/sections/market-section";
+import { PersonaReviewSection } from "@/components/sections/persona-review-section";
 import { ProductSection } from "@/components/sections/product-section";
 import { ResearchBriefSection } from "@/components/sections/research-brief-section";
 import { RunSimulationSection } from "@/components/sections/run-simulation-section";
@@ -30,6 +31,7 @@ function AuthenticatedApp() {
         <MarketSection />
         <SurveySection />
         <ExperimentSection />
+        <PersonaReviewSection />
         <RunSimulationSection />
         <AnalysisSection />
         <InsightsSection />

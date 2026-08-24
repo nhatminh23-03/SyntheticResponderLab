@@ -75,12 +75,12 @@ def _database_schema_check(session_factory: sessionmaker) -> HealthCheckResult:
     """Fail fast when a deployed database is missing a required migration."""
     try:
         engine = session_factory.kw["bind"]
-        if inspect(engine).has_table("user_usage_counters"):
+        if inspect(engine).has_table("fixed_persona_sets"):
             return HealthCheckResult(status="ok")
         return HealthCheckResult(
             status="fail",
             message=(
-                "Database migration is required: user_usage_counters is missing. "
+                "Database migration is required: fixed_persona_sets is missing. "
                 "Run `alembic upgrade head` before starting the API."
             ),
         )

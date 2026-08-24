@@ -29,7 +29,7 @@ def test_health_endpoint_returns_503_on_failed_status(monkeypatch, client):
     assert body["data"]["checks"]["database"]["status"] == "fail"
 
 
-def test_health_reports_missing_usage_counter_migration(test_settings, tmp_path):
+def test_health_reports_missing_schema_migration(test_settings, tmp_path):
     settings = test_settings.model_copy(
         update={"database_url": f"sqlite:///{tmp_path / 'unmigrated.db'}"}
     )
@@ -39,7 +39,10 @@ def test_health_reports_missing_usage_counter_migration(test_settings, tmp_path)
 
     assert payload.status == "failed"
     assert payload.checks["database_schema"].status == "fail"
-    assert "alembic upgrade head" in (payload.checks["database_schema"].message or "")
+    message = payload.checks["database_schema"].message or ""
+    assert "alembic upgrade head" in message
+    # The sentinel table must be the newest migration's table, or the check lies about currency.
+    assert "fixed_persona_sets" in message
 
 
 def test_startup_failures_require_deployment_secret_in_production(test_settings):

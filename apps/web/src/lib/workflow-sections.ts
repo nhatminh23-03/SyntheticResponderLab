@@ -6,6 +6,7 @@ export const workflowSections = [
   { id: "market", label: "Market" },
   { id: "survey", label: "Survey" },
   { id: "experiment", label: "Experiment" },
+  { id: "persona-review", label: "Personas" },
   { id: "run-simulation", label: "Run" },
   { id: "analysis", label: "Result" },
   { id: "insights", label: "Insights" },

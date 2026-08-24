@@ -155,6 +155,32 @@ class PersonaPreviewRequest(BaseModel):
     seed: Optional[int] = None
 
 
+class PersonaSetSelection(BaseModel):
+    candidate_id: str
+    reviewer_note: Optional[str] = None
+
+
+class PersonaSetUpsertRequest(BaseModel):
+    preview_run_id: str
+    selections: List[PersonaSetSelection] = Field(default_factory=list)
+
+
+class FixedPersonaSetResult(BaseModel):
+    set_id: str
+    status: str
+    preview_run_id: str
+    generation_mode: Optional[str] = None
+    grounded_priors_available: Optional[bool] = None
+    seed: Optional[int] = None
+    candidate_count: int
+    generated_at: datetime
+    selections: List[Dict[str, Any]] = Field(default_factory=list)
+    candidates: List[Dict[str, Any]] = Field(default_factory=list)
+    created_at: datetime
+    updated_at: datetime
+    finalized_at: Optional[datetime] = None
+
+
 class StabilityCheckRequest(BaseModel):
     repeat_runs: int = 3
 

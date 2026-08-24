@@ -282,7 +282,7 @@ export function RunSimulationSection() {
         <div className="min-w-0 space-y-6">
           <RevealOnScroll>
             <SectionHeader
-              index={7}
+              index={8}
               eyebrow="Run Simulation"
               title="Generate Synthetic Survey Responses"
               description="Review the saved setup, then generate synthetic responses before moving into analysis."

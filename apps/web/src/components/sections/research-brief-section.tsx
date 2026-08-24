@@ -239,7 +239,7 @@ export function ResearchBriefSection() {
         <div className="min-w-0 space-y-6">
           <RevealOnScroll>
             <SectionHeader
-              index={11}
+              index={12}
               eyebrow="Research Brief"
               title="Frame your research intent before exploring interview insights."
               description="This brief tells the insights layer what question you're trying to answer, what you expect to find, and which decisions the interviews should inform."

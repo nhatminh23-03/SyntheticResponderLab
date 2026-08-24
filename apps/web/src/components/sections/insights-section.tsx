@@ -124,7 +124,7 @@ export function InsightsSection() {
         <div className="min-w-0 space-y-6">
           <RevealOnScroll>
             <SectionHeader
-              index={9}
+              index={10}
               eyebrow="Insights"
               title="LLM-Summarized Insights"
               description="These insights are summarized by the LLM from the synthetic survey responses and include a reliability confidence read, while the detailed view below shows the supporting signals, segments, and confidence context."

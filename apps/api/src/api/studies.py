@@ -17,6 +17,7 @@ from src.services.exceptions import (
 from src.schemas.study import (
     InterviewChatRequest,
     PersonaPreviewRequest,
+    PersonaSetUpsertRequest,
     ProductUrlAutofillRequest,
     SimulationRunRequest,
     StabilityCheckRequest,
@@ -54,6 +55,11 @@ from src.services.study_service import (
     serialize_study,
     start_simulation_run,
     start_stability_check,
+)
+from src.services.persona_set_service import (
+    finalize_persona_set,
+    get_persona_set,
+    upsert_persona_set_draft,
 )
 from src.services.interview_service import (
     continue_interview_chat,
@@ -514,6 +520,46 @@ def persona_preview_endpoint(
         seed=payload.seed,
     )
     return response_envelope(request, result)
+
+
+@router.get("/api/v1/studies/{study_id}/persona-set")
+def persona_set_get_endpoint(
+    study_id: str,
+    request: Request,
+    db: Session = Depends(get_db_session),
+    current_user: AuthUser = Depends(get_current_user),
+):
+    study = get_owned_study_or_404(db, study_id, current_user)
+    return response_envelope(request, get_persona_set(db, study))
+
+
+@router.patch("/api/v1/studies/{study_id}/persona-set")
+def persona_set_upsert_endpoint(
+    study_id: str,
+    payload: PersonaSetUpsertRequest,
+    request: Request,
+    db: Session = Depends(get_db_session),
+    current_user: AuthUser = Depends(get_current_user),
+):
+    study = get_owned_study_or_404(db, study_id, current_user)
+    result = upsert_persona_set_draft(
+        db,
+        study,
+        preview_run_id=payload.preview_run_id,
+        selections=payload.selections,
+    )
+    return response_envelope(request, result)
+
+
+@router.post("/api/v1/studies/{study_id}/persona-set/finalize")
+def persona_set_finalize_endpoint(
+    study_id: str,
+    request: Request,
+    db: Session = Depends(get_db_session),
+    current_user: AuthUser = Depends(get_current_user),
+):
+    study = get_owned_study_or_404(db, study_id, current_user)
+    return response_envelope(request, finalize_persona_set(db, study))
 
 
 @router.get("/api/v1/studies/{study_id}/prompt-preview")

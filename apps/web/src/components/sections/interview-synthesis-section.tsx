@@ -310,7 +310,7 @@ export function InterviewSynthesisSection() {
         <div className="min-w-0 space-y-6">
           <RevealOnScroll>
             <SectionHeader
-              index={10}
+              index={11}
               eyebrow="Interview"
               title="Generate synthetic depth interviews grounded in your personas."
               description={

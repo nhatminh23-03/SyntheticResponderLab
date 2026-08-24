@@ -115,7 +115,7 @@ export function AnalysisSection() {
         <div className="min-w-0 space-y-6">
           <RevealOnScroll>
             <SectionHeader
-              index={8}
+              index={9}
               eyebrow="Analysis"
               title="Read every survey question as a response dashboard."
               description="Review the latest run question by question, switch the model view when needed, then optionally check repeatability at the bottom."

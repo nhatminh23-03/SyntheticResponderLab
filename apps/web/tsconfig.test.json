@@ -16,6 +16,7 @@
     "src/lib/run-evidence.ts",
     "src/lib/interview-provenance.ts",
     "src/lib/run-counts.ts",
-    "src/lib/product-reset.ts"
+    "src/lib/product-reset.ts",
+    "src/lib/persona-selection.ts"
   ]
 }
