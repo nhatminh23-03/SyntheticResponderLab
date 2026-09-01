@@ -83,3 +83,6 @@ NeoSmart-Hackathon-App/.streamlit/
 .coverage
 coverage/
 htmlcov/
+
+# Research pipeline: raw Census archives (hundreds of MB, re-downloadable).
+research/neo_persona_set/raw/
