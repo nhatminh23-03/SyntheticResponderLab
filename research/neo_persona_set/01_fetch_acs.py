@@ -33,7 +33,25 @@ OUT_DIR = HERE / "out"
 # Columns we need. Fetching only these keeps the parquet small and the read fast.
 # ADJINC is mandatory: in a 5-Year file the income years differ, and HINCP must be multiplied by
 # ADJINC (6 implied decimals) to land in constant dollars before any income comparison.
-PERSON_COLUMNS = ["SERIALNO", "ST", "PUMA", "PWGTP", "AGEP", "JWTRNS", "RELSHIPP"]
+# Race and Hispanic origin (RAC1P, HISP) are DELIBERATELY NOT FETCHED. Persona narratives are
+# written by a language model, and the surest way to keep ethnicity from driving the story is for
+# the pipeline never to hold it. See phase1/write_stories.py for the rest of the bias controls.
+PERSON_COLUMNS = [
+    "SERIALNO",
+    "ST",
+    "PUMA",
+    "PWGTP",
+    "RELSHIPP",
+    "AGEP",
+    "SEX",
+    "SCHL",      # educational attainment
+    "MAR",       # marital status
+    "ESR",       # employment status
+    "OCCP",      # occupation — real, so the model never has to infer a job from income
+    "WKHP",      # usual hours worked per week
+    "JWTRNS",    # means of transport to work
+    "JWMNP",     # travel time to work
+]
 HOUSING_COLUMNS = [
     "SERIALNO",
     "ST",
@@ -42,10 +60,17 @@ HOUSING_COLUMNS = [
     "TEN",
     "BLD",
     "NP",
+    "NOC",       # own children in household
+    "HHT",       # household/family type
     "HINCP",
     "ADJINC",
     "OCPIP",
     "GRPIP",
+    "VEH",       # vehicles available
+    "BDSP",      # bedrooms
+    "RMSP",      # rooms
+    "YRBLT",     # year structure built
+    "MV",        # when they moved in
 ]
 
 
