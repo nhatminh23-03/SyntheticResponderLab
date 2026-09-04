@@ -2,6 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  estimateInterviewRunCost,
+  formatInterviewRunCostEstimate,
   formatInterviewModelOption,
   isInterviewModelSelectable,
   resetExpensiveModelSelection,
@@ -15,6 +17,7 @@ const cheap: InterviewModelCatalogEntry = {
   tier: "cheap",
   prompt_price_per_million: 0.1,
   completion_price_per_million: 0.4,
+  estimated_cost_per_persona_usd: 0.0018,
 };
 
 const expensive: InterviewModelCatalogEntry = {
@@ -23,6 +26,7 @@ const expensive: InterviewModelCatalogEntry = {
   tier: "expensive",
   prompt_price_per_million: 3,
   completion_price_per_million: 15,
+  estimated_cost_per_persona_usd: 0.06,
 };
 
 
@@ -51,4 +55,11 @@ test("ending expensive opt-in resets only an expensive selection", () => {
     resetExpensiveModelSelection(models, cheap.id, cheap.id),
     cheap.id
   );
+});
+
+
+test("pre-flight estimate scales from the three-person default to the thirty-person ceiling", () => {
+  assert.equal(estimateInterviewRunCost(3, cheap, expensive), 0.1854);
+  assert.equal(estimateInterviewRunCost(30, cheap, expensive), 1.854);
+  assert.equal(formatInterviewRunCostEstimate(0.1854), "$0.185");
 });

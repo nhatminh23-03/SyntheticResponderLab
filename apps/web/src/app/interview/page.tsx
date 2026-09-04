@@ -9,10 +9,14 @@ import { GlassPanel } from "@/components/ui/glass-panel";
 import {
   getInterviewModelCatalog,
   getInterviewPersonas,
+  type InterviewCostEstimateAssumptions,
   type InterviewModelCatalogEntry,
   type InterviewPersona,
+  type InterviewPersonaCountRange,
 } from "@/lib/api";
 import {
+  estimateInterviewRunCost,
+  formatInterviewRunCostEstimate,
   formatInterviewModelOption,
   isInterviewModelSelectable,
   resetExpensiveModelSelection,
@@ -38,6 +42,14 @@ export default function InterviewPage() {
   const [interviewerModel, setInterviewerModel] = useState("");
   const [intervieweeModel, setIntervieweeModel] = useState("");
   const [expensiveOptIn, setExpensiveOptIn] = useState(false);
+  const [personaCount, setPersonaCount] = useState(3);
+  const [personaCountRange, setPersonaCountRange] = useState<InterviewPersonaCountRange>({
+    minimum: 3,
+    default: 3,
+    maximum: 30,
+  });
+  const [costEstimateAssumptions, setCostEstimateAssumptions] =
+    useState<InterviewCostEstimateAssumptions | null>(null);
   const [question, setQuestion] = useState(SUGGESTED[0]);
   const [turns, setTurns] = useState<Turn[]>([]);
   const [systemPrompt, setSystemPrompt] = useState("");
@@ -57,6 +69,9 @@ export default function InterviewPage() {
         setDefaultModelId(modelData.defaultModelId);
         setInterviewerModel(modelData.defaultModelId);
         setIntervieweeModel(modelData.defaultModelId);
+        setPersonaCountRange(modelData.personaCount);
+        setPersonaCount(modelData.personaCount.default);
+        setCostEstimateAssumptions(modelData.costEstimate);
       })
       .catch((err: Error) => setError(err.message));
   }, []);
@@ -66,6 +81,12 @@ export default function InterviewPage() {
   }, [turns, loading]);
 
   const persona = personas.find((entry) => entry.persona_id === selectedId);
+  const interviewerModelEntry = models.find((entry) => entry.id === interviewerModel);
+  const intervieweeModelEntry = models.find((entry) => entry.id === intervieweeModel);
+  const preflightCostEstimate =
+    interviewerModelEntry && intervieweeModelEntry
+      ? estimateInterviewRunCost(personaCount, interviewerModelEntry, intervieweeModelEntry)
+      : null;
   const modelsLocked = turns.length > 0 || loading;
 
   function selectPersona(id: string) {
@@ -241,6 +262,56 @@ export default function InterviewPage() {
                 Enable expensive models for this run. This opt-in resets when you start over with
                 another persona.
               </label>
+
+              <div className="mt-5 border-t border-app-border pt-5">
+                <div className="flex items-center justify-between gap-4">
+                  <label
+                    htmlFor="ai-interview-persona-count"
+                    className="text-xs font-semibold uppercase tracking-[0.14em] text-app-muted"
+                  >
+                    AI-to-AI batch size
+                  </label>
+                  <span className="text-sm font-semibold tabular-nums text-app-text">
+                    {personaCount} personas
+                  </span>
+                </div>
+                <input
+                  id="ai-interview-persona-count"
+                  aria-label="Personas in AI-to-AI run"
+                  type="range"
+                  min={personaCountRange.minimum}
+                  max={personaCountRange.maximum}
+                  step={1}
+                  value={personaCount}
+                  onChange={(event) => setPersonaCount(Number(event.target.value))}
+                  disabled={modelsLocked || models.length === 0}
+                  className="mt-3 w-full accent-[var(--color-gold)] disabled:cursor-not-allowed disabled:opacity-60"
+                />
+                <div className="mt-1 flex justify-between text-[0.68rem] tabular-nums text-app-muted">
+                  <span>{personaCountRange.minimum} minimum</span>
+                  <span>{personaCountRange.maximum} maximum</span>
+                </div>
+
+                <div className="mt-4 rounded-xl border border-app-border px-4 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-app-muted">
+                    Pre-flight estimate
+                  </p>
+                  <p className="mt-1 text-lg font-semibold tabular-nums text-app-text">
+                    {preflightCostEstimate == null
+                      ? "Calculating…"
+                      : `~${formatInterviewRunCostEstimate(preflightCostEstimate)}`}
+                  </p>
+                  <p className="mt-1 text-xs leading-5 text-app-muted">
+                    For {personaCount} personas with both selected models
+                    {costEstimateAssumptions
+                      ? `, allowing ${costEstimateAssumptions.prompt_tokens_per_model_persona.toLocaleString()} input and ${costEstimateAssumptions.completion_tokens_per_model_persona.toLocaleString()} output tokens per model/persona.`
+                      : "."}
+                  </p>
+                  <p className="mt-1 text-[0.68rem] leading-5 text-app-muted">
+                    Planning estimate from catalog prices; provider-measured cost may differ.
+                  </p>
+                </div>
+              </div>
             </GlassPanel>
 
             {persona ? (

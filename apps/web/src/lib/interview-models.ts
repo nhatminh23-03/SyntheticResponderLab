@@ -23,3 +23,19 @@ export function resetExpensiveModelSelection(
   const selected = models.find((model) => model.id === selectedModelId);
   return selected?.tier === "expensive" ? defaultModelId : selectedModelId;
 }
+
+export function estimateInterviewRunCost(
+  personaCount: number,
+  interviewerModel: InterviewModelCatalogEntry,
+  intervieweeModel: InterviewModelCatalogEntry
+) {
+  return (
+    personaCount *
+    (interviewerModel.estimated_cost_per_persona_usd +
+      intervieweeModel.estimated_cost_per_persona_usd)
+  );
+}
+
+export function formatInterviewRunCostEstimate(costUsd: number) {
+  return `$${costUsd.toFixed(3)}`;
+}

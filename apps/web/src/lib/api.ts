@@ -82,6 +82,18 @@ export type InterviewModelCatalogEntry = {
   tier: InterviewModelTier;
   prompt_price_per_million: number;
   completion_price_per_million: number;
+  estimated_cost_per_persona_usd: number;
+};
+
+export type InterviewPersonaCountRange = {
+  minimum: number;
+  default: number;
+  maximum: number;
+};
+
+export type InterviewCostEstimateAssumptions = {
+  prompt_tokens_per_model_persona: number;
+  completion_tokens_per_model_persona: number;
 };
 
 type InterviewModelCatalogResponse = {
@@ -90,6 +102,8 @@ type InterviewModelCatalogResponse = {
     pricing_as_of?: string;
     pricing_source?: string;
     default_model_id?: string;
+    persona_count?: InterviewPersonaCountRange;
+    cost_estimate?: InterviewCostEstimateAssumptions;
     models?: InterviewModelCatalogEntry[];
   };
 };
@@ -140,6 +154,8 @@ export async function getInterviewModelCatalog() {
   const data = result.data;
   const models = data?.models;
   const defaultModelId = data?.default_model_id;
+  const personaCount = data?.persona_count;
+  const costEstimate = data?.cost_estimate;
   const validTiers: InterviewModelTier[] = ["cheap", "mid", "expensive"];
   const hasValidModels =
     Array.isArray(models) &&
@@ -154,11 +170,24 @@ export async function getInterviewModelCatalog() {
         Number.isFinite(model.prompt_price_per_million) &&
         model.prompt_price_per_million >= 0 &&
         Number.isFinite(model.completion_price_per_million) &&
-        model.completion_price_per_million >= 0
+        model.completion_price_per_million >= 0 &&
+        Number.isFinite(model.estimated_cost_per_persona_usd) &&
+        model.estimated_cost_per_persona_usd >= 0
     );
+  const hasValidPersonaCount =
+    personaCount?.minimum === 3 &&
+    personaCount.default === 3 &&
+    personaCount.maximum === 30;
+  const hasValidCostEstimate =
+    Number.isInteger(costEstimate?.prompt_tokens_per_model_persona) &&
+    (costEstimate?.prompt_tokens_per_model_persona ?? 0) > 0 &&
+    Number.isInteger(costEstimate?.completion_tokens_per_model_persona) &&
+    (costEstimate?.completion_tokens_per_model_persona ?? 0) > 0;
 
   if (
     !hasValidModels ||
+    !hasValidPersonaCount ||
+    !hasValidCostEstimate ||
     typeof defaultModelId !== "string" ||
     !models.some((model) => model.id === defaultModelId)
   ) {
@@ -170,6 +199,8 @@ export async function getInterviewModelCatalog() {
     pricingAsOf: data?.pricing_as_of ?? "",
     pricingSource: data?.pricing_source ?? "",
     defaultModelId,
+    personaCount: personaCount!,
+    costEstimate: costEstimate!,
     models,
   };
 }
