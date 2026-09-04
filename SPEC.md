@@ -36,7 +36,7 @@ cd ~/dev/SyntheticResponderLab && npm --prefix apps/web run build \
 
 - [x] **P0.1** Demo interview sends conversation history so follow-ups are answered as follow-ups.
       Done, commit `757c38b`.
-- [ ] **P0.2** Fix the `fit_tier` judge bug. `interview_prompt_builder.py:283` falls back to
+- [x] **P0.2** Fix the `fit_tier` judge bug. `interview_prompt_builder.py:283` falls back to
       `fit_tier="unknown"` when the column is blank, then scores `fit_tier_alignment` against that
       placeholder — one of four grounding dimensions is currently scoring noise. Either drop the
       dimension or score it only when a real tier exists. **Do not** feed `fit_tier` into the
