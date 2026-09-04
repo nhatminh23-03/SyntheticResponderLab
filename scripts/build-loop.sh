@@ -10,8 +10,9 @@
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 1
 REPO=$(pwd)
-LOG=.build-loop/run-$(date +%Y%m%d-%H%M%S).log
-mkdir -p .build-loop
+LOGDIR="$HOME/.neo-build-loop"
+mkdir -p "$LOGDIR"
+LOG="$LOGDIR/run-$(date +%Y%m%d-%H%M%S).log"
 BRANCH=anderson/interview-persona-loader
 
 # --- budget guard ------------------------------------------------------------
@@ -128,7 +129,7 @@ EOF
 
   ./scripts/verify.sh >/tmp/vg2.log 2>&1 || { log "!! refuter fix broke the suite for $id — stopping"; tail -30 /tmp/vg2.log | tee -a "$LOG"; exit 4; }
 
-  git add -A
+  git add -A -- . ":(exclude).build-loop"
   git commit -q -m "$id: $(printf '%s' "$goal" | cut -c1-68)
 
 Built by the SPEC.md build loop (scripts/build-loop.sh): Codex implemented,
