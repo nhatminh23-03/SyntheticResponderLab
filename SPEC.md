@@ -137,7 +137,7 @@ Wang's design, confirmed on the call. **Three comparisons, not one.**
 - [ ] **P5.1** Deploy and share the link — Wang asked for it explicitly so the whole team can click
       through and comment [31:54].
 - [ ] **P5.2** Team walkthrough session before Yufan's class [04:31].
-- [ ] **P5.3** Seed accounts / no-login path for students. They cannot hit a Clerk wall in a 50-minute
+- [x] **P5.3** Seed accounts / no-login path for students. They cannot hit a Clerk wall in a 50-minute
       class.
 - [ ] **P5.4** Instructor one-pager: what the section teaches, what to click, what the students
       should notice.

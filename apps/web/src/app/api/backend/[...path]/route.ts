@@ -5,6 +5,13 @@ import {
   getServerApiBaseUrl,
   isClerkConfigured,
 } from "@/lib/server-env";
+import {
+  CLASSROOM_AUTH_MODE,
+  CLASSROOM_SESSION_COOKIE_NAME,
+  getClassroomUserId,
+  isClassroomInterviewApiRequest,
+  isClassroomNoLoginEnabled,
+} from "@/lib/classroom-access";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,9 +32,25 @@ function unauthorized() {
   );
 }
 
-async function resolveAuthHeaders():
+async function resolveAuthHeaders(request: NextRequest):
   Promise<{ headers: Record<string, string> } | null> {
   if (!isClerkConfigured()) {
+    const classroomUserId = getClassroomUserId(
+      request.cookies.get(CLASSROOM_SESSION_COOKIE_NAME)?.value
+    );
+    if (
+      isClassroomNoLoginEnabled() &&
+      classroomUserId &&
+      isClassroomInterviewApiRequest(request.nextUrl.pathname, request.method)
+    ) {
+      return {
+        headers: {
+          [AUTH_HEADER_USER_ID]: classroomUserId,
+          [AUTH_HEADER_AUTH_MODE]: CLASSROOM_AUTH_MODE,
+        },
+      };
+    }
+
     // Legacy path — shared-password gate. Proxy the request without identity headers.
     // Backend will run without per-user enforcement in this mode.
     return { headers: { [AUTH_HEADER_AUTH_MODE]: "legacy-shared-password" } };
@@ -36,6 +59,21 @@ async function resolveAuthHeaders():
   const { auth, clerkClient } = await import("@clerk/nextjs/server");
   const { userId } = await auth();
   if (!userId) {
+    const classroomUserId = getClassroomUserId(
+      request.cookies.get(CLASSROOM_SESSION_COOKIE_NAME)?.value
+    );
+    if (
+      isClassroomNoLoginEnabled() &&
+      classroomUserId &&
+      isClassroomInterviewApiRequest(request.nextUrl.pathname, request.method)
+    ) {
+      return {
+        headers: {
+          [AUTH_HEADER_USER_ID]: classroomUserId,
+          [AUTH_HEADER_AUTH_MODE]: CLASSROOM_AUTH_MODE,
+        },
+      };
+    }
     return null;
   }
 
@@ -61,7 +99,7 @@ async function resolveAuthHeaders():
 }
 
 async function forward(request: NextRequest, params: Promise<{ path: string[] }>) {
-  const resolved = await resolveAuthHeaders();
+  const resolved = await resolveAuthHeaders(request);
   if (resolved === null) {
     return unauthorized();
   }
