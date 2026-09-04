@@ -20,13 +20,14 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from src.config.settings import AppSettings
-from src.persistence.models import InterviewTurn, Job, PersonaPreviewRun, Study, StudySectionState
+from src.persistence.models import InterviewTurn, Job, Persona, PersonaPreviewRun, Study, StudySectionState
 from src.services.demo_interview_fixtures import ensure_demo_interview_run
 from src.services.exceptions import ConflictApiError, QuotaExceededApiError, ValidationApiError
 from src.services.ids import make_public_id
 from src.services.interview_cache import (
     InterviewAnswer as OpenRouterChatResult,
     ReplayOnlyCacheMissError,
+    lock_interview_cache_paths_for_transaction,
     resolve_interview_answer,
 )
 from src.services.interviewer_agent import (
@@ -43,7 +44,7 @@ from src.services.llm_budget import (
     load_interview_budget_snapshot,
     lock_class_budget_for_transaction,
 )
-from src.services.model_catalog import DEFAULT_INTERVIEW_MODEL_ID
+from src.services.model_catalog import DEFAULT_INTERVIEW_MODEL_ID, list_interview_model_catalog
 from src.services.usage_limits import (
     METRIC_INTERVIEW_RUN,
     assert_no_in_flight_provider_job,
@@ -62,6 +63,12 @@ _OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 _MAX_RETRIES = 3
 
 INTERVIEW_SECTION_KEYS = ("interview_synthesis", "research_brief")
+
+_NEO_PRODUCT_CONTEXT = """PRODUCT BEING DISCUSSED:
+Name: Tahoe Mini by Neo Smart Living
+Price: about $23,000
+Description: A compact 117-square-foot factory-built studio that is delivered and installed in a backyard. It is not an ADU and has no kitchen or bathroom.
+Intended for: homeowners with usable outdoor space"""
 
 
 def utcnow() -> datetime:
@@ -457,6 +464,215 @@ Return ONLY a JSON object:
         "available": True,
         "from_run_id": run_public_id,
         **insights,
+    }
+
+
+def _build_fixed_persona_system_prompt(profile: dict[str, Any]) -> str:
+    lifestyle_tags = profile.get("lifestyle_tags")
+    if not isinstance(lifestyle_tags, list):
+        lifestyle_tags = []
+    description = " ".join(
+        part
+        for part in (
+            f"You are a {profile.get('age_bucket', 'unknown')} year-old "
+            f"{profile.get('ownership', 'resident')} living in a "
+            f"{profile.get('home_type', 'home')}.",
+            f"Your household income is in the {profile.get('income_bucket', 'unknown')} range.",
+            str(profile.get("census_profile") or "").strip(),
+            (
+                f"Your lifestyle includes: {', '.join(str(tag) for tag in lifestyle_tags)}."
+                if lifestyle_tags
+                else ""
+            ),
+        )
+        if part
+    )
+    return f"""You are role-playing as a real person participating in a qualitative depth interview.
+
+YOUR PERSONA:
+{description}
+
+{_NEO_PRODUCT_CONTEXT}
+
+INSTRUCTIONS:
+- Stay fully in character. Answer as this person would, in first person.
+- Be specific and personal. Share genuine opinions, hesitations, and enthusiasm where warranted.
+- No marketing-speak. Reflect the real trade-offs someone in your situation would weigh.
+- Keep it conversational, three to six sentences, plain prose."""
+
+
+def compare_interview_models(
+    session: Session,
+    settings: AppSettings,
+    study: Study,
+    payload: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Compare curated models under one cache- and budget-controlled transaction."""
+    persona_id = str(payload.get("persona_id") or "").strip()
+    question = str(payload.get("question") or "").strip()
+    requested_model_ids = [str(value).strip() for value in payload.get("model_ids") or []]
+    if not persona_id:
+        raise ValidationApiError("persona_id is required.")
+    if not question:
+        raise ValidationApiError("question is required.")
+    if len(requested_model_ids) < 2 or len(set(requested_model_ids)) != len(requested_model_ids):
+        raise ValidationApiError("Select at least two unique models for comparison.")
+
+    catalog = list_interview_model_catalog()
+    catalog_by_id = {str(model["id"]): model for model in catalog["models"]}
+    try:
+        selected_models = [catalog_by_id[model_id] for model_id in requested_model_ids]
+    except KeyError as exc:
+        raise ValidationApiError("Select models from the curated interview catalog.") from exc
+    if not payload.get("allow_expensive_models") and any(
+        model["tier"] == "expensive" for model in selected_models
+    ):
+        raise ValidationApiError("Expensive interview models require opt-in for this comparison.")
+
+    persona = session.get(Persona, persona_id)
+    if persona is None:
+        raise ValidationApiError(f"Persona '{persona_id}' was not found.")
+
+    session_id = str(payload.get("session_id") or "").strip() or make_public_id("ses")
+    system_prompt = _build_fixed_persona_system_prompt(dict(persona.profile_json))
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": question},
+    ]
+    estimated_comparison_cost = sum(
+        (Decimal(str(model["estimated_cost_per_persona_usd"])) for model in selected_models),
+        start=Decimal("0"),
+    )
+    budget_authorized = False
+    budget_error: QuotaExceededApiError | None = None
+    results: list[dict[str, Any]] = []
+
+    # Acquire every cache lock in stable order before the class lock. Existing
+    # one-model calls take those locks in that order, so reversing it here would
+    # deadlock when a comparison overlaps a normal chat for the same cache key.
+    lock_interview_cache_paths_for_transaction(
+        session,
+        persona_id=persona_id,
+        models=requested_model_ids,
+        question=question,
+        prior_turns=messages[:-1],
+    )
+    # One transaction-scoped class lock covers the complete fan-out. Without
+    # it, parallel model requests can all observe the same remaining budget.
+    lock_class_budget_for_transaction(session)
+
+    for selected_model in selected_models:
+        model_id = str(selected_model["id"])
+
+        def call_provider() -> OpenRouterChatResult:
+            nonlocal budget_authorized, budget_error
+            snapshot = load_interview_budget_snapshot(
+                session,
+                session_id=session_id,
+                run_budget_usd=settings.llm_budget_usd,
+            )
+            enforce_budget_open(snapshot)
+            if not budget_authorized:
+                enforce_run_preflight(
+                    estimated_cost_usd=estimated_comparison_cost,
+                    class_spent_usd=snapshot.class_spent_usd,
+                    run_budget_usd=snapshot.run_budget_usd,
+                )
+                budget_authorized = True
+
+            api_key = settings.openrouter_api_key or ""
+            if not api_key:
+                raise ConflictApiError("OPENROUTER_API_KEY is not configured.")
+            answer = _call_openrouter_messages(
+                api_key=api_key,
+                model=model_id,
+                messages=messages,
+                timeout=90,
+            )
+            try:
+                enforce_measured_cost(snapshot, cost_usd=answer.cost_usd)
+            except QuotaExceededApiError as exc:
+                # The provider already charged the call. Persist it before
+                # returning the hard stop so a retry cannot erase the spend.
+                budget_error = exc
+            return answer
+
+        try:
+            provider_result = resolve_interview_answer(
+                session,
+                cache_mode=settings.cache_mode,
+                persona_id=persona_id,
+                model=model_id,
+                question=question,
+                prior_turns=messages[:-1],
+                call_provider=call_provider,
+            )
+        except ReplayOnlyCacheMissError as exc:
+            results.append({"model_id": model_id, "answer": None, "error": str(exc)})
+            continue
+        except (ConflictApiError, RuntimeError) as exc:
+            results.append({"model_id": model_id, "answer": None, "error": str(exc)})
+            continue
+
+        session.add_all(
+            [
+                InterviewTurn(
+                    study_id=study.id,
+                    persona_id=persona_id,
+                    session_id=session_id,
+                    role="user",
+                    text=question,
+                    model=provider_result.model,
+                    tokens_in=0,
+                    tokens_out=0,
+                    cost_usd=Decimal("0"),
+                    created_at=utcnow(),
+                ),
+                InterviewTurn(
+                    study_id=study.id,
+                    persona_id=persona_id,
+                    session_id=session_id,
+                    role="assistant",
+                    text=provider_result.text,
+                    model=provider_result.model,
+                    tokens_in=provider_result.tokens_in,
+                    tokens_out=provider_result.tokens_out,
+                    cost_usd=provider_result.cost_usd,
+                    created_at=utcnow(),
+                ),
+            ]
+        )
+        session.flush()
+        results.append(
+            {
+                "model_id": model_id,
+                "answer": provider_result.text,
+                "error": None,
+                "cache_hit": provider_result.cache_hit,
+            }
+        )
+        if budget_error is not None:
+            break
+
+    session.commit()
+    usage = _serialize_session_usage(
+        load_interview_budget_snapshot(
+            session,
+            session_id=session_id,
+            run_budget_usd=settings.llm_budget_usd,
+        )
+    )
+    if budget_error is not None:
+        budget_error.details["session_id"] = session_id
+        budget_error.details["session_usage"] = usage
+        raise budget_error
+
+    return {
+        "persona_id": persona_id,
+        "question": question,
+        "session_id": session_id,
+        "results": results,
+        "session_usage": usage,
     }
 
 

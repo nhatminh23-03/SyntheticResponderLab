@@ -163,6 +163,14 @@ class InterviewChatRequest(BaseModel):
     estimated_run_cost_usd: Optional[Decimal] = Field(default=None, ge=0)
 
 
+class InterviewComparisonRequest(BaseModel):
+    persona_id: str
+    question: str
+    model_ids: List[str] = Field(min_length=2, max_length=6)
+    allow_expensive_models: bool = False
+    session_id: Optional[str] = Field(default=None, max_length=128)
+
+
 class InterviewerNextQuestionRequest(BaseModel):
     persona_id: str
     messages: List[InterviewChatMessage] = Field(default_factory=list)

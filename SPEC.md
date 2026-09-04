@@ -79,7 +79,7 @@ step inside the gated study workflow [32:11]. Promote it, do not re-architect it
 - [x] **P2.3** Interviewer agent: given the research brief, asks the next question from the prior
       answer rather than replaying a fixed list. This is the piece that makes it AI-to-AI rather than
       a script.
-- [ ] **P2.4** Side-by-side comparison view — same persona, same question, N models — so the
+- [x] **P2.4** Side-by-side comparison view — same persona, same question, N models — so the
       cheap-vs-expensive difference is visible on screen. This is the pedagogical payload.
 - [ ] **P2.5** Post-interview scoring: `fit_tier` and emotional classification, computed **after**
       the transcript exists, displayed with an explicit "scored after the interview, never before"

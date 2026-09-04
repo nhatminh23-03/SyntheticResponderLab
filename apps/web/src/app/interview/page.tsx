@@ -15,6 +15,15 @@ import {
   type InterviewPersonaCountRange,
 } from "@/lib/api";
 import {
+  canRunInterviewComparison,
+  defaultInterviewComparisonModelIds,
+  orderInterviewComparisonModelIds,
+  removeExpensiveComparisonModels,
+  runInterviewComparison,
+  toggleInterviewComparisonModel,
+  type InterviewComparisonResult,
+} from "@/lib/interview-comparison";
+import {
   estimateInterviewRunCost,
   formatInterviewRunCostEstimate,
   formatInterviewModelOption,
@@ -22,6 +31,7 @@ import {
   resetExpensiveModelSelection,
 } from "@/lib/interview-models";
 import { cn } from "@/lib/utils";
+import { StudyProvider, useStudy } from "@/providers/study-provider";
 
 type Turn = { role: "student" | "persona"; text: string };
 
@@ -33,6 +43,15 @@ const SUGGESTED = [
 ];
 
 export default function InterviewPage() {
+  return (
+    <StudyProvider>
+      <InterviewPageContent />
+    </StudyProvider>
+  );
+}
+
+function InterviewPageContent() {
+  const { studyId, studyBootstrapError } = useStudy();
   const [personas, setPersonas] = useState<InterviewPersona[]>([]);
   const [source, setSource] = useState("");
   const [selectedId, setSelectedId] = useState<string>("");
@@ -50,6 +69,12 @@ export default function InterviewPage() {
   });
   const [costEstimateAssumptions, setCostEstimateAssumptions] =
     useState<InterviewCostEstimateAssumptions | null>(null);
+  const [comparisonModelIds, setComparisonModelIds] = useState<string[]>([]);
+  const [comparisonExpensiveOptIn, setComparisonExpensiveOptIn] = useState(false);
+  const [comparisonQuestion, setComparisonQuestion] = useState(SUGGESTED[0]);
+  const [comparedQuestion, setComparedQuestion] = useState("");
+  const [comparisonResults, setComparisonResults] = useState<InterviewComparisonResult[]>([]);
+  const [comparisonLoading, setComparisonLoading] = useState(false);
   const [question, setQuestion] = useState(SUGGESTED[0]);
   const [turns, setTurns] = useState<Turn[]>([]);
   const [systemPrompt, setSystemPrompt] = useState("");
@@ -69,6 +94,7 @@ export default function InterviewPage() {
         setDefaultModelId(modelData.defaultModelId);
         setInterviewerModel(modelData.defaultModelId);
         setIntervieweeModel(modelData.defaultModelId);
+        setComparisonModelIds(defaultInterviewComparisonModelIds(modelData.models));
         setPersonaCountRange(modelData.personaCount);
         setPersonaCount(modelData.personaCount.default);
         setCostEstimateAssumptions(modelData.costEstimate);
@@ -97,6 +123,10 @@ export default function InterviewPage() {
     setExpensiveOptIn(false);
     setInterviewerModel(defaultModelId);
     setIntervieweeModel(defaultModelId);
+    setComparisonExpensiveOptIn(false);
+    setComparisonModelIds(defaultInterviewComparisonModelIds(models));
+    setComparedQuestion("");
+    setComparisonResults([]);
   }
 
   function setExpensiveModelsForRun(enabled: boolean) {
@@ -109,6 +139,44 @@ export default function InterviewPage() {
         resetExpensiveModelSelection(models, selected, defaultModelId)
       );
     }
+  }
+
+  function setExpensiveComparisonModelsForRun(enabled: boolean) {
+    setComparisonExpensiveOptIn(enabled);
+    if (!enabled) {
+      setComparisonModelIds((selected) =>
+        removeExpensiveComparisonModels(models, selected)
+      );
+    }
+  }
+
+  async function compareModels() {
+    const asked = comparisonQuestion.trim();
+    const orderedModelIds = orderInterviewComparisonModelIds(models, comparisonModelIds);
+    if (
+      !asked ||
+      loading ||
+      comparisonLoading ||
+      !studyId ||
+      !persona ||
+      !canRunInterviewComparison(orderedModelIds)
+    ) {
+      return;
+    }
+
+    setComparisonLoading(true);
+    setComparedQuestion(asked);
+    setComparisonResults([]);
+
+    const results = await runInterviewComparison({
+      studyId,
+      personaId: persona.persona_id,
+      question: asked,
+      modelIds: orderedModelIds,
+      allowExpensiveModels: comparisonExpensiveOptIn,
+    });
+    setComparisonResults(results);
+    setComparisonLoading(false);
   }
 
   async function ask() {
@@ -176,8 +244,9 @@ export default function InterviewPage() {
                   key={entry.persona_id}
                   type="button"
                   onClick={() => selectPersona(entry.persona_id)}
+                  disabled={comparisonLoading}
                   className={cn(
-                    "rounded-xl border px-3.5 py-2.5 text-left transition duration-200",
+                    "rounded-xl border px-3.5 py-2.5 text-left transition duration-200 disabled:cursor-not-allowed disabled:opacity-60",
                     entry.persona_id === selectedId
                       ? "border-app-borderStrong text-app-text [background:var(--button-secondary-bg-hover)]"
                       : "border-app-border text-app-muted hover:border-app-borderStrong hover:text-app-text"
@@ -334,6 +403,195 @@ export default function InterviewPage() {
                 </p>
               </GlassPanel>
             ) : null}
+
+            <GlassPanel className="p-5">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-app-muted">
+                    Compare model answers
+                  </p>
+                  <h2 className="mt-2 font-display text-2xl font-medium tracking-[-0.035em] text-app-text">
+                    Same persona. Same question. Different models.
+                  </h2>
+                  <p className="mt-2 max-w-2xl text-sm leading-6 text-app-muted">
+                    Hold the inputs constant and compare at least two answers side by side. Model
+                    prices stay visible so differences in specificity, tone, and reasoning can be
+                    weighed against cost.
+                  </p>
+                </div>
+                <BadgeChip tone="cyan">Controlled comparison</BadgeChip>
+              </div>
+
+              <fieldset className="mt-5" disabled={comparisonLoading}>
+                <legend className="text-xs font-semibold uppercase tracking-[0.14em] text-app-muted">
+                  Models to compare ({comparisonModelIds.length} selected)
+                </legend>
+                <div className="mt-3 grid gap-2 md:grid-cols-2">
+                  {models.map((model) => {
+                    const expensiveLocked =
+                      model.tier === "expensive" && !comparisonExpensiveOptIn;
+                    return (
+                      <label
+                        key={model.id}
+                        className={cn(
+                          "flex items-start gap-3 rounded-xl border border-app-border px-3.5 py-3 transition",
+                          expensiveLocked
+                            ? "cursor-not-allowed opacity-50"
+                            : "cursor-pointer hover:border-app-borderStrong [background:var(--button-secondary-bg)]"
+                        )}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={comparisonModelIds.includes(model.id)}
+                          onChange={(event) =>
+                            setComparisonModelIds((selected) =>
+                              toggleInterviewComparisonModel(
+                                selected,
+                                model.id,
+                                event.target.checked
+                              )
+                            )
+                          }
+                          disabled={expensiveLocked}
+                          className="mt-0.5 size-4 shrink-0 accent-[var(--color-gold)]"
+                        />
+                        <span className="min-w-0">
+                          <span className="block text-sm font-semibold text-app-text">
+                            {model.name}
+                          </span>
+                          <span className="mt-0.5 block text-xs leading-5 text-app-muted">
+                            {model.tier} · ${model.prompt_price_per_million.toFixed(2)} in / $
+                            {model.completion_price_per_million.toFixed(2)} out per 1M tokens
+                          </span>
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </fieldset>
+
+              <label className="mt-3 flex items-start gap-2 text-xs leading-5 text-app-muted">
+                <input
+                  type="checkbox"
+                  checked={comparisonExpensiveOptIn}
+                  onChange={(event) =>
+                    setExpensiveComparisonModelsForRun(event.target.checked)
+                  }
+                  disabled={comparisonLoading}
+                  className="mt-0.5 size-4 accent-[var(--color-gold)] disabled:cursor-not-allowed"
+                />
+                Enable expensive models for this comparison. Add one above to compare the price
+                extremes; the opt-in resets when you choose another persona.
+              </label>
+
+              {!canRunInterviewComparison(comparisonModelIds) ? (
+                <p className="mt-3 text-xs leading-5 text-app-muted">
+                  Select at least two models to make a comparison.
+                </p>
+              ) : null}
+
+              <div className="mt-5 flex flex-col gap-2 sm:flex-row">
+                <input
+                  aria-label="Question for model comparison"
+                  value={comparisonQuestion}
+                  onChange={(event) => setComparisonQuestion(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") compareModels();
+                  }}
+                  disabled={comparisonLoading}
+                  placeholder="Ask every model the same question…"
+                  className="flex-1 rounded-xl border border-app-border bg-transparent px-4 py-3 text-sm text-app-text outline-none transition placeholder:text-app-muted focus:border-app-borderStrong disabled:cursor-not-allowed disabled:opacity-60"
+                />
+                <Button
+                  onClick={compareModels}
+                  disabled={
+                    loading ||
+                    comparisonLoading ||
+                    !comparisonQuestion.trim() ||
+                    !studyId ||
+                    !persona ||
+                    !canRunInterviewComparison(comparisonModelIds)
+                  }
+                >
+                  {comparisonLoading
+                    ? `Comparing ${comparisonModelIds.length} models…`
+                    : `Compare ${comparisonModelIds.length} models`}
+                </Button>
+              </div>
+
+              {studyBootstrapError ? (
+                <p className="mt-3 text-xs leading-5 text-app-muted">
+                  Model comparison is unavailable: {studyBootstrapError}
+                </p>
+              ) : null}
+
+              {comparisonLoading ? (
+                <p className="mt-5 text-sm text-app-muted" aria-live="polite">
+                  Asking each model independently…
+                </p>
+              ) : null}
+
+              {comparisonResults.length > 0 ? (
+                <section className="mt-6 border-t border-app-border pt-5" aria-live="polite">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-app-muted">
+                        Question held constant
+                      </p>
+                      <p className="mt-2 max-w-3xl text-sm leading-6 text-app-text">
+                        “{comparedQuestion}”
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <BadgeChip>{persona?.persona_id}</BadgeChip>
+                      <BadgeChip>{comparisonResults.length} models</BadgeChip>
+                    </div>
+                  </div>
+
+                  <div className="fine-scrollbar mt-4 grid auto-cols-[minmax(18rem,1fr)] grid-flow-col gap-4 overflow-x-auto pb-2">
+                    {comparisonResults.map((result) => {
+                      const model = models.find((entry) => entry.id === result.modelId);
+                      return (
+                        <article
+                          key={result.modelId}
+                          className="flex min-h-64 flex-col rounded-2xl border border-app-border p-4 [background:var(--button-secondary-bg)]"
+                        >
+                          <div className="flex flex-wrap items-start justify-between gap-2">
+                            <div>
+                              <h3 className="text-sm font-semibold text-app-text">
+                                {model?.name ?? result.modelId}
+                              </h3>
+                              {model ? (
+                                <p className="mt-1 text-[0.68rem] leading-5 text-app-muted">
+                                  ${model.prompt_price_per_million.toFixed(2)} in / $
+                                  {model.completion_price_per_million.toFixed(2)} out per 1M tokens
+                                </p>
+                              ) : null}
+                            </div>
+                            {model ? (
+                              <BadgeChip tone={model.tier === "expensive" ? "gold" : "neutral"}>
+                                {model.tier}
+                              </BadgeChip>
+                            ) : null}
+                          </div>
+                          <div className="mt-4 border-t border-app-border pt-4">
+                            {result.answer ? (
+                              <p className="whitespace-pre-wrap text-sm leading-7 text-app-text">
+                                {result.answer}
+                              </p>
+                            ) : (
+                              <p className="text-sm leading-6 text-app-muted">
+                                {result.error ?? "No answer returned."}
+                              </p>
+                            )}
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                </section>
+              ) : null}
+            </GlassPanel>
 
             <GlassPanel className="flex min-h-[22rem] flex-col p-5">
               <div className="fine-scrollbar flex-1 space-y-4 overflow-y-auto pr-1">

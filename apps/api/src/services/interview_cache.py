@@ -101,6 +101,29 @@ def _lock_cache_key_for_transaction(session: Session, cache_key: str) -> None:
     )
 
 
+def lock_interview_cache_paths_for_transaction(
+    session: Session,
+    *,
+    persona_id: str,
+    models: Sequence[str],
+    question: str,
+    prior_turns: Sequence[Mapping[str, Any]],
+) -> None:
+    """Lock a batch's cache keys in stable order before taking the class lock."""
+    prior_turn_hash = hash_prior_turns(prior_turns)
+    cache_keys = sorted(
+        build_interview_cache_key(
+            persona_id=persona_id,
+            model=model,
+            question=question,
+            prior_turn_hash=prior_turn_hash,
+        )
+        for model in models
+    )
+    for cache_key in cache_keys:
+        _lock_cache_key_for_transaction(session, cache_key)
+
+
 def resolve_interview_answer(
     session: Session,
     *,

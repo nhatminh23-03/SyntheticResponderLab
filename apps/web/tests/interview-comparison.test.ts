@@ -1,0 +1,210 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+
+import {
+  canRunInterviewComparison,
+  defaultInterviewComparisonModelIds,
+  orderInterviewComparisonModelIds,
+  removeExpensiveComparisonModels,
+  runInterviewComparison,
+  toggleInterviewComparisonModel,
+} from "../src/lib/interview-comparison";
+import type { InterviewModelCatalogEntry } from "../src/lib/api";
+
+
+const cheap: InterviewModelCatalogEntry = {
+  id: "provider/cheap",
+  name: "Cheap Model",
+  tier: "cheap",
+  prompt_price_per_million: 0.1,
+  completion_price_per_million: 0.4,
+  estimated_cost_per_persona_usd: 0.0018,
+};
+
+const mid: InterviewModelCatalogEntry = {
+  ...cheap,
+  id: "provider/mid",
+  name: "Mid Model",
+  tier: "mid",
+};
+
+const expensive: InterviewModelCatalogEntry = {
+  ...cheap,
+  id: "provider/expensive",
+  name: "Expensive Model",
+  tier: "expensive",
+};
+
+
+test("comparison defaults to two non-expensive models and requires two unique choices", () => {
+  const defaults = defaultInterviewComparisonModelIds([cheap, mid, expensive]);
+  assert.deepEqual(defaults, [cheap.id, mid.id]);
+  assert.equal(canRunInterviewComparison(defaults), true);
+  assert.equal(canRunInterviewComparison([cheap.id, cheap.id]), false);
+  assert.equal(canRunInterviewComparison([cheap.id]), false);
+});
+
+
+test("comparison model toggles are idempotent and expensive opt-out removes expensive choices", () => {
+  assert.deepEqual(toggleInterviewComparisonModel([cheap.id], mid.id, true), [cheap.id, mid.id]);
+  assert.deepEqual(toggleInterviewComparisonModel([cheap.id], cheap.id, true), [cheap.id]);
+  assert.deepEqual(toggleInterviewComparisonModel([cheap.id, mid.id], cheap.id, false), [mid.id]);
+  assert.deepEqual(
+    removeExpensiveComparisonModels([cheap, mid, expensive], [cheap.id, expensive.id]),
+    [cheap.id]
+  );
+  assert.deepEqual(
+    orderInterviewComparisonModelIds(
+      [cheap, mid, expensive],
+      [expensive.id, "provider/not-curated", cheap.id]
+    ),
+    [cheap.id, expensive.id]
+  );
+});
+
+
+test("comparison sends the complete controlled comparison through the budgeted backend", async () => {
+  let requestUrl = "";
+  let requestBody: Record<string, unknown> = {};
+  const results = await runInterviewComparison(
+    {
+      studyId: "study/unsafe-id",
+      personaId: "persona-07",
+      question: "What matters most to you?",
+      modelIds: [cheap.id, expensive.id],
+      allowExpensiveModels: true,
+    },
+    async (input, init) => {
+      requestUrl = input;
+      requestBody = JSON.parse(String(init.body)) as Record<string, unknown>;
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          data: {
+            interview_comparison: {
+              results: [
+                { model_id: cheap.id, answer: `Answer from ${cheap.id}`, error: null },
+                { model_id: expensive.id, answer: `Answer from ${expensive.id}`, error: null },
+              ],
+            },
+          },
+        }),
+      };
+    }
+  );
+
+  assert.equal(
+    requestUrl,
+    "/api/backend/api/v1/studies/study%2Funsafe-id/interview/compare"
+  );
+  assert.deepEqual(requestBody, {
+    persona_id: "persona-07",
+    question: "What matters most to you?",
+    model_ids: [cheap.id, expensive.id],
+    allow_expensive_models: true,
+  });
+  assert.deepEqual(results, [
+    { modelId: cheap.id, answer: `Answer from ${cheap.id}`, error: null },
+    { modelId: expensive.id, answer: `Answer from ${expensive.id}`, error: null },
+  ]);
+});
+
+
+test("one failed or empty model answer does not hide the other comparison answers", async () => {
+  const results = await runInterviewComparison(
+    {
+      studyId: "study-01",
+      personaId: "persona-07",
+      question: "What matters most to you?",
+      modelIds: [cheap.id, mid.id, expensive.id],
+      allowExpensiveModels: true,
+    },
+    async () => {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          data: {
+            interview_comparison: {
+              results: [
+                { model_id: cheap.id, answer: "Useful answer.", error: null },
+                { model_id: mid.id, answer: null, error: "Provider unavailable." },
+                { model_id: expensive.id, answer: "   ", error: null },
+              ],
+            },
+          },
+        }),
+      };
+    }
+  );
+
+  assert.deepEqual(results, [
+    { modelId: cheap.id, answer: "Useful answer.", error: null },
+    { modelId: mid.id, answer: null, error: "Provider unavailable." },
+    { modelId: expensive.id, answer: null, error: "Model returned an empty answer." },
+  ]);
+});
+
+
+test("comparison repeats a backend budget error on every requested model", async () => {
+  const results = await runInterviewComparison(
+    {
+      studyId: "study-01",
+      personaId: "persona-07",
+      question: "What matters most to you?",
+      modelIds: [cheap.id, mid.id],
+      allowExpensiveModels: false,
+    },
+    async () => {
+      return {
+        ok: false,
+        status: 429,
+        json: async () => ({ error: { code: "quota_exceeded", message: "Budget hard stop." } }),
+      };
+    }
+  );
+
+  assert.deepEqual(results, [
+    { modelId: cheap.id, answer: null, error: "Budget hard stop." },
+    { modelId: mid.id, answer: null, error: "Budget hard stop." },
+  ]);
+});
+
+
+test("comparison records a batch network failure against every requested model", async () => {
+  const results = await runInterviewComparison(
+    {
+      studyId: "study-01",
+      personaId: "persona-07",
+      question: "What matters most to you?",
+      modelIds: [cheap.id, mid.id],
+      allowExpensiveModels: false,
+    },
+    async () => {
+      throw new Error("Network unavailable.");
+    }
+  );
+
+  assert.deepEqual(results, [
+    { modelId: cheap.id, answer: null, error: "Network unavailable." },
+    { modelId: mid.id, answer: null, error: "Network unavailable." },
+  ]);
+
+  const unknownFailures = await runInterviewComparison(
+    {
+      studyId: "study-01",
+      personaId: "persona-07",
+      question: "What matters most to you?",
+      modelIds: [mid.id, cheap.id],
+      allowExpensiveModels: false,
+    },
+    async () => {
+      throw "offline";
+    }
+  );
+  assert.deepEqual(unknownFailures, [
+    { modelId: mid.id, answer: null, error: "Model comparison request failed." },
+    { modelId: cheap.id, answer: null, error: "Model comparison request failed." },
+  ]);
+});

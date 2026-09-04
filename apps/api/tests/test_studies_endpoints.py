@@ -5,7 +5,8 @@ from pathlib import Path
 
 from sqlalchemy import select
 
-from src.persistence.models import InterviewTurn
+from src.persistence.models import InterviewTurn, Persona
+from src.persistence.persona_seed import load_persona_seed_rows
 from src.services.interview_service import OpenRouterChatResult
 
 
@@ -648,6 +649,100 @@ def test_interview_chat_endpoint_continues_selected_persona(client, monkeypatch)
     assert replay_miss_response.status_code == 409
     assert "CACHE_MODE=replay_only" in replay_miss_response.json()["error"]["message"]
     assert provider_call_count == 4
+
+
+def test_interview_comparison_is_budgeted_cached_and_persisted(client, db_session, monkeypatch):
+    persona_row = load_persona_seed_rows()[0]
+    db_session.add(Persona(**persona_row))
+    db_session.commit()
+    study_id = client.post("/api/v1/studies", json={}).json()["data"]["study"]["study_id"]
+    client.app.state.settings.openrouter_api_key = "test-key"
+    provider_models: list[str] = []
+    provider_messages: list[list[dict[str, str]]] = []
+
+    def fake_call_openrouter_messages(**kwargs):
+        provider_models.append(kwargs["model"])
+        provider_messages.append(kwargs["messages"])
+        return OpenRouterChatResult(
+            text=f"Answer from {kwargs['model']}",
+            model=kwargs["model"],
+            tokens_in=100,
+            tokens_out=20,
+            cost_usd=Decimal("0.001"),
+        )
+
+    monkeypatch.setattr(
+        "src.services.interview_service._call_openrouter_messages",
+        fake_call_openrouter_messages,
+    )
+    request_payload = {
+        "persona_id": persona_row["persona_id"],
+        "question": "What matters most to you?",
+        "model_ids": ["google/gemini-2.5-flash-lite", "openai/gpt-4o-mini"],
+        "allow_expensive_models": False,
+    }
+
+    response = client.post(
+        f"/api/v1/studies/{study_id}/interview/compare",
+        json=request_payload,
+    )
+
+    assert response.status_code == 200
+    comparison = response.json()["data"]["interview_comparison"]
+    assert comparison["persona_id"] == persona_row["persona_id"]
+    assert comparison["question"] == request_payload["question"]
+    assert [result["model_id"] for result in comparison["results"]] == request_payload["model_ids"]
+    assert all(result["error"] is None for result in comparison["results"])
+    assert comparison["session_usage"] == {
+        "tokens_in": 200,
+        "tokens_out": 40,
+        "cost_usd": "0.002",
+    }
+    assert provider_models == request_payload["model_ids"]
+    assert all(messages[-1]["content"] == request_payload["question"] for messages in provider_messages)
+    assert all('"fit_tier"' not in messages[0]["content"] for messages in provider_messages)
+
+    session_factory = client.app.state.session_factory
+    with session_factory() as session:
+        turns = session.scalars(
+            select(InterviewTurn).where(
+                InterviewTurn.session_id == comparison["session_id"]
+            )
+        ).all()
+    assert len(turns) == 4
+    assert {turn.study_id for turn in turns} == {turns[0].study_id}
+    assert {turn.persona_id for turn in turns} == {persona_row["persona_id"]}
+
+    # A repeat uses the shared cache even with the zero-dollar kill switch.
+    client.app.state.settings.llm_budget_usd = Decimal("0")
+    repeated = client.post(
+        f"/api/v1/studies/{study_id}/interview/compare",
+        json=request_payload,
+    )
+    assert repeated.status_code == 200
+    repeated_comparison = repeated.json()["data"]["interview_comparison"]
+    assert all(result["cache_hit"] is True for result in repeated_comparison["results"])
+    assert repeated_comparison["session_usage"]["cost_usd"] == "0"
+    assert provider_models == request_payload["model_ids"]
+
+    expensive_without_opt_in = client.post(
+        f"/api/v1/studies/{study_id}/interview/compare",
+        json={
+            **request_payload,
+            "model_ids": ["google/gemini-2.5-flash-lite", "google/gemini-2.5-pro"],
+        },
+    )
+    assert expensive_without_opt_in.status_code == 400
+    assert "require opt-in" in expensive_without_opt_in.json()["error"]["message"]
+    assert provider_models == request_payload["model_ids"]
+
+    blocked = client.post(
+        f"/api/v1/studies/{study_id}/interview/compare",
+        json={**request_payload, "question": "A new paid comparison?"},
+    )
+    assert blocked.status_code == 429
+    assert blocked.json()["error"]["code"] == "quota_exceeded"
+    assert provider_models == request_payload["model_ids"]
 
 
 def test_save_audience_and_get_workflow(client):
