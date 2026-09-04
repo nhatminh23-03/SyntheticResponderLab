@@ -105,15 +105,22 @@ function GroundingReportCard({
 
       {/* Per-dimension bars */}
       <div className="mt-5 space-y-3">
-        {DIMENSIONS.map(({ key, label }) => (
-          <div key={key}>
-            <div className="mb-1 flex justify-between text-xs text-app-muted">
-              <span>{label}</span>
-              <span>{Math.round((report.per_dimension_avg[key as DimensionKey] ?? 0) * 100)}%</span>
+        {DIMENSIONS.map(({ key, label }) => {
+          const value = report.per_dimension_avg[key as DimensionKey];
+          return (
+            <div key={key}>
+              <div className="mb-1 flex justify-between text-xs text-app-muted">
+                <span>{label}</span>
+                <span>{value == null ? "N/A" : `${Math.round(value * 100)}%`}</span>
+              </div>
+              {value == null ? (
+                <div className="h-2 rounded-full bg-white/[0.06]" title="Not applicable" />
+              ) : (
+                <GroundingBar value={value} />
+              )}
             </div>
-            <GroundingBar value={report.per_dimension_avg[key as DimensionKey] ?? 0} />
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Flagged personas */}
@@ -440,7 +447,7 @@ export function InterviewSynthesisSection() {
               <ol className="space-y-2 text-sm text-app-text">
                 {[
                   "Both LLMs interview every persona in parallel",
-                  "A judge LLM scores agreement on 4 dimensions per persona",
+                  "A judge LLM scores 3 dimensions, plus fit-tier when available",
                   "Corpus-level average ≥ 67% = batch passes threshold",
                   "Flagged personas show which dimension drove disagreement",
                   "Proceed to Research Brief to frame your analysis",

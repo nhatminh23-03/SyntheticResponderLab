@@ -727,7 +727,7 @@ export type InterviewSynthesisConfig = {
 export type InterviewDimensionScores = {
   purchase_intent: 0 | 1;
   primary_objection: 0 | 1;
-  fit_tier_alignment: 0 | 1;
+  fit_tier_alignment: 0 | 1 | null;
   use_case_specificity: 0 | 1;
 };
 
@@ -735,6 +735,7 @@ export type InterviewPersonaScore = {
   persona_id: string;
   score: number;
   dimension_scores: InterviewDimensionScores;
+  not_applicable_dimensions?: string[];
   has_error: boolean;
 };
 
@@ -745,7 +746,7 @@ export type InterviewGroundingReport = {
   per_dimension_avg: {
     purchase_intent: number;
     primary_objection: number;
-    fit_tier_alignment: number;
+    fit_tier_alignment: number | null;
     use_case_specificity: number;
   };
   flagged_persona_ids: string[];

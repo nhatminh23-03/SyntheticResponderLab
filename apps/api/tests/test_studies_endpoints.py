@@ -400,6 +400,8 @@ def test_interview_chat_endpoint_continues_selected_persona(client, monkeypatch)
     assert payload["model"] == latest_interview["pairs"][0]["model_a"]["model"]
     assert captured["api_key"] == "test-key"
     assert captured["messages"][0]["role"] == "system"
+    assert '"fit_tier"' not in captured["messages"][0]["content"]
+    assert '"likely_use_case": "Dedicated home office"' in captured["messages"][0]["content"]
     assert captured["messages"][-1] == {
         "role": "user",
         "content": "What would make you more confident about buying?",

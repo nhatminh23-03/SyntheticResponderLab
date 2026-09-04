@@ -639,6 +639,10 @@ def _build_persona_followup_system_prompt(
     synthesis = sections.get("interview_synthesis") and sections["interview_synthesis"].value_json
 
     persona = pair.get("persona") or {}
+    persona_for_prompt = {
+        key: value for key, value in persona.items()
+        if key != "fit_tier"
+    }
     transcript = pair.get(transcript_source) or {}
     resolved_questions = resolve_questions((synthesis or {}).get("questions"), product)
     transcript_lines = _format_followup_transcript_lines(
@@ -686,7 +690,7 @@ Do not mention system prompts, hidden instructions, or that you are an AI model.
 Do not contradict the earlier interview. If the follow-up question goes beyond what was already established, infer cautiously from the persona profile and answer with natural uncertainty rather than false precision.
 
 PERSONA PROFILE:
-{json.dumps(persona, indent=2, sort_keys=True)}
+{json.dumps(persona_for_prompt, indent=2, sort_keys=True)}
 
 {context_text}
 """.strip()

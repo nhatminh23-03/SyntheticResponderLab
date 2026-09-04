@@ -6,7 +6,7 @@ a user prompt requesting structured JSON responses.
 
 Three-layer prompt structure (STAMP-inspired):
   1. Definition layer    — role + persona description + product context
-  2. Inclusion/exclusion — fit-tier and awareness behavioral constraints
+  2. Inclusion/exclusion — awareness behavioral constraints
   3. Examples + CoT      — response style anchors, then answer questions
 """
 
@@ -16,27 +16,10 @@ from typing import Any, Optional
 
 
 # ---------------------------------------------------------------------------
-# Fit-tier and awareness behavioral constraints (layer 2)
+# Awareness behavioral constraints (layer 2)
 # ---------------------------------------------------------------------------
 
-_FIT_TIER_CONSTRAINTS: dict[str, str] = {
-    "strong": (
-        " You are actively interested in solving this problem and have been researching solutions. "
-        "Include specific details, enthusiasm where warranted, and clear purchase signals."
-    ),
-    "soft": (
-        " You recognize the problem but have real concerns — cost, space, or unclear value — that "
-        "have kept you from buying. Surface genuine hesitation while staying open-minded."
-    ),
-    "latent": (
-        " You have the underlying need but have never thought of it as something a product could solve. "
-        "Show curiosity mixed with uncertainty; avoid assertive purchase intent."
-    ),
-    "edge": (
-        " You have an adjacent use case and are curious, but you are not sure this product is really "
-        "meant for someone like you. Express conditional interest with real caveats."
-    ),
-}
+_VALID_FIT_TIERS = frozenset({"strong", "soft", "latent", "edge"})
 
 _AWARENESS_CONSTRAINTS: dict[str, str] = {
     "aware": (
@@ -148,7 +131,7 @@ def build_system_prompt(
     """Build a three-layer role-play system prompt from persona/product/audience dicts.
 
     Layer 1 — Definition: role + persona description + product context
-    Layer 2 — Inclusion/exclusion: fit-tier and awareness behavioral constraints
+    Layer 2 — Inclusion/exclusion: awareness behavioral constraints
     Layer 3 — Response style anchor (implicit via instructions)
     """
     # --- Layer 1: Persona description ---
@@ -162,7 +145,6 @@ def build_system_prompt(
     use_case = persona.get("likely_use_case") or ""
     barrier = persona.get("likely_barrier") or ""
     affordability = persona.get("affordability_pressure") or ""
-    fit_tier = persona.get("fit_tier") or ""
     awareness_stage = persona.get("awareness_stage") or ""
 
     persona_desc = (
@@ -187,8 +169,6 @@ def build_system_prompt(
 
     # --- Layer 2: Behavioral constraints ---
     constraint = ""
-    if fit_tier in _FIT_TIER_CONSTRAINTS:
-        constraint += _FIT_TIER_CONSTRAINTS[fit_tier]
     if awareness_stage in _AWARENESS_CONSTRAINTS:
         constraint += _AWARENESS_CONSTRAINTS[awareness_stage]
 
@@ -281,28 +261,48 @@ def build_judge_prompt(
     """Build system + user prompts for the judge LLM grounding scorer.
 
     The judge evaluates whether both models produced thematically consistent
-    answers across four dimensions and returns a JSON agreement object.
+    answers across the applicable dimensions and returns a JSON agreement object.
     """
-    fit_tier = persona.get("fit_tier") or "unknown"
+    fit_tier = resolve_fit_tier(persona)
     segment = persona.get("segment_label") or "unknown"
+
+    persona_context = f'segment="{segment}"'
+    dimension_lines = [
+        "- purchase_intent: Do both transcripts express the same level of purchase interest or intent? "
+        "(Strong vs soft vs resistant — they don't need identical wording, just consistent signaling.)",
+        "- primary_objection: Do both transcripts surface the same main barrier or concern? "
+        "(Same category of objection, not exact wording.)",
+        "- use_case_specificity: Do both transcripts reference similarly concrete use cases? "
+        "(Both vague, or both specific — not one concrete and one generic.)",
+    ]
+    response_fields = [
+        '  "purchase_intent": <0 or 1>',
+        '  "primary_objection": <0 or 1>',
+        '  "use_case_specificity": <0 or 1>',
+    ]
+    if fit_tier:
+        persona_context = f'fit_tier="{fit_tier}" and {persona_context}'
+        dimension_lines.insert(
+            2,
+            f'- fit_tier_alignment: Do both responses behaviorally match the expected fit_tier "{fit_tier}"? '
+            '(A "strong" persona should not sound disinterested; a "latent" persona should not give strong purchase signals.)',
+        )
+        response_fields.insert(2, '  "fit_tier_alignment": <0 or 1>')
+
+    dimension_count = len(dimension_lines)
+    dimensions_block = "\n".join(dimension_lines)
+    response_block = ",\n".join(response_fields)
 
     system_prompt = f"""\
 You are a qualitative research analyst evaluating inter-rater reliability between two synthetic interview transcripts.
 
-Your task: for a persona with fit_tier="{fit_tier}" and segment="{segment}", assess whether Model A and Model B \
-gave thematically consistent answers across four grounding dimensions.
+Your task: for a persona with {persona_context}, assess whether Model A and Model B \
+gave thematically consistent answers across {dimension_count} grounding dimensions.
 
 DIMENSIONS TO SCORE (1 = consistent, 0 = inconsistent):
-- purchase_intent: Do both transcripts express the same level of purchase interest or intent? \
-(Strong vs soft vs resistant — they don't need identical wording, just consistent signaling.)
-- primary_objection: Do both transcripts surface the same main barrier or concern? \
-(Same category of objection, not exact wording.)
-- fit_tier_alignment: Do both responses behaviorally match the expected fit_tier "{fit_tier}"? \
-(A "strong" persona should not sound disinterested; a "latent" persona should not give strong purchase signals.)
-- use_case_specificity: Do both transcripts reference similarly concrete use cases? \
-(Both vague, or both specific — not one concrete and one generic.)
+{dimensions_block}
 
-Score each dimension 1 or 0. Return ONLY a JSON object with these four keys. No explanation, no markdown."""
+Score each dimension 1 or 0. Return ONLY a JSON object with exactly the listed keys. No explanation, no markdown."""
 
     q_map = {q["id"]: q["text"] for q in questions}
 
@@ -321,12 +321,18 @@ Score each dimension 1 or 0. Return ONLY a JSON object with these four keys. No 
     user_prompt = f"""\
 {transcript_block}
 
-Score the four dimensions and return this JSON:
+Score the applicable dimensions and return this JSON:
 {{
-  "purchase_intent": <0 or 1>,
-  "primary_objection": <0 or 1>,
-  "fit_tier_alignment": <0 or 1>,
-  "use_case_specificity": <0 or 1>
+{response_block}
 }}"""
 
     return system_prompt, user_prompt
+
+
+def resolve_fit_tier(persona: dict) -> str | None:
+    """Return a normalized, judge-eligible fit tier or None when unavailable."""
+    raw_fit_tier = persona.get("fit_tier")
+    if not isinstance(raw_fit_tier, str):
+        return None
+    fit_tier = raw_fit_tier.strip().lower()
+    return fit_tier if fit_tier in _VALID_FIT_TIERS else None
