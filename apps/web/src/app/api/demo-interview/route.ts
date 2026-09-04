@@ -3,7 +3,8 @@ import path from "node:path";
 
 import { NextRequest, NextResponse } from "next/server";
 
-import type { InterviewPersona } from "@/lib/api";
+import type { InterviewModelCatalogEntry, InterviewPersona } from "@/lib/api";
+import { isInterviewModelSelectable } from "@/lib/interview-models";
 import { getDeploymentSharedSecret, getServerApiBaseUrl } from "@/lib/server-env";
 
 export const runtime = "nodejs";
@@ -41,6 +42,37 @@ async function loadPersonas(): Promise<InterviewPersona[]> {
     throw new Error("The backend returned an invalid persona list.");
   }
   return payload.data.personas;
+}
+
+type InterviewModelCatalog = {
+  defaultModelId: string;
+  models: InterviewModelCatalogEntry[];
+};
+
+async function loadInterviewModels(): Promise<InterviewModelCatalog> {
+  const headers = new Headers({ Accept: "application/json" });
+  const secret = getDeploymentSharedSecret();
+  if (secret) headers.set("X-Deployment-Secret", secret);
+
+  const response = await fetch(`${getServerApiBaseUrl()}/api/v1/interview/models`, {
+    method: "GET",
+    headers,
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error(`Could not load interview models from the backend (${response.status}).`);
+  }
+
+  const payload = (await response.json()) as {
+    data?: { default_model_id?: string; models?: InterviewModelCatalogEntry[] };
+  };
+  if (!payload.data?.default_model_id || !Array.isArray(payload.data.models)) {
+    throw new Error("The backend returned an invalid interview model catalog.");
+  }
+  return {
+    defaultModelId: payload.data.default_model_id,
+    models: payload.data.models,
+  };
 }
 
 function buildSystemPrompt(persona: InterviewPersona): string {
@@ -81,10 +113,21 @@ async function openRouterKey(): Promise<string> {
 }
 
 export async function POST(request: NextRequest) {
-  const { personaId, question, model, history } = (await request.json()) as {
+  const {
+    personaId,
+    question,
+    model,
+    interviewerModel,
+    intervieweeModel,
+    allowExpensiveModels,
+    history,
+  } = (await request.json()) as {
     personaId?: string;
     question?: string;
     model?: string;
+    interviewerModel?: string;
+    intervieweeModel?: string;
+    allowExpensiveModels?: boolean;
     history?: { role: string; text: string }[];
   };
 
@@ -93,8 +136,9 @@ export async function POST(request: NextRequest) {
   }
 
   let personas: InterviewPersona[];
+  let modelCatalog: InterviewModelCatalog;
   try {
-    personas = await loadPersonas();
+    [personas, modelCatalog] = await Promise.all([loadPersonas(), loadInterviewModels()]);
   } catch (error) {
     return NextResponse.json({ error: (error as Error).message }, { status: 500 });
   }
@@ -102,6 +146,27 @@ export async function POST(request: NextRequest) {
   const persona = personaId ? personas.find((p) => p.persona_id === personaId) : personas[0];
   if (!persona) {
     return NextResponse.json({ error: `Persona ${personaId} not found.` }, { status: 404 });
+  }
+
+  const selectedInterviewerId = interviewerModel || modelCatalog.defaultModelId;
+  const selectedIntervieweeId = intervieweeModel || model || modelCatalog.defaultModelId;
+  const selectedInterviewer = modelCatalog.models.find(
+    (entry) => entry.id === selectedInterviewerId
+  );
+  const selectedInterviewee = modelCatalog.models.find(
+    (entry) => entry.id === selectedIntervieweeId
+  );
+  if (!selectedInterviewer || !selectedInterviewee) {
+    return NextResponse.json({ error: "Select models from the curated interview catalog." }, { status: 400 });
+  }
+  if (
+    !isInterviewModelSelectable(selectedInterviewer, allowExpensiveModels === true) ||
+    !isInterviewModelSelectable(selectedInterviewee, allowExpensiveModels === true)
+  ) {
+    return NextResponse.json(
+      { error: "Expensive interview models require opt-in for this run." },
+      { status: 400 }
+    );
   }
 
   const systemPrompt = buildSystemPrompt(persona);
@@ -117,7 +182,7 @@ export async function POST(request: NextRequest) {
     method: "POST",
     headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: model || "google/gemini-2.5-flash",
+      model: selectedInterviewee.id,
       messages: [
         { role: "system", content: systemPrompt },
         // Without the prior turns the model re-answers every follow-up as if it were the first
@@ -146,5 +211,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Model returned an empty answer.", systemPrompt }, { status: 502 });
   }
 
-  return NextResponse.json({ answer, systemPrompt, persona });
+  return NextResponse.json({
+    answer,
+    systemPrompt,
+    persona,
+    interviewerModel: selectedInterviewer.id,
+    intervieweeModel: selectedInterviewee.id,
+  });
 }

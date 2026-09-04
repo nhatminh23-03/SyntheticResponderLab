@@ -9,5 +9,5 @@
     "isolatedModules": false,
     "incremental": false
   },
-  "include": ["tests/**/*.ts", "src/lib/setup-flow-utils.ts"]
+  "include": ["tests/**/*.ts", "src/lib/setup-flow-utils.ts", "src/lib/interview-models.ts"]
 }

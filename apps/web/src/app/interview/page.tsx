@@ -6,7 +6,17 @@ import { AnimatePresence, motion } from "framer-motion";
 import { BadgeChip } from "@/components/ui/badge-chip";
 import { Button } from "@/components/ui/button";
 import { GlassPanel } from "@/components/ui/glass-panel";
-import { getInterviewPersonas, type InterviewPersona } from "@/lib/api";
+import {
+  getInterviewModelCatalog,
+  getInterviewPersonas,
+  type InterviewModelCatalogEntry,
+  type InterviewPersona,
+} from "@/lib/api";
+import {
+  formatInterviewModelOption,
+  isInterviewModelSelectable,
+  resetExpensiveModelSelection,
+} from "@/lib/interview-models";
 import { cn } from "@/lib/utils";
 
 type Turn = { role: "student" | "persona"; text: string };
@@ -22,6 +32,12 @@ export default function InterviewPage() {
   const [personas, setPersonas] = useState<InterviewPersona[]>([]);
   const [source, setSource] = useState("");
   const [selectedId, setSelectedId] = useState<string>("");
+  const [models, setModels] = useState<InterviewModelCatalogEntry[]>([]);
+  const [pricingAsOf, setPricingAsOf] = useState("");
+  const [defaultModelId, setDefaultModelId] = useState("");
+  const [interviewerModel, setInterviewerModel] = useState("");
+  const [intervieweeModel, setIntervieweeModel] = useState("");
+  const [expensiveOptIn, setExpensiveOptIn] = useState(false);
   const [question, setQuestion] = useState(SUGGESTED[0]);
   const [turns, setTurns] = useState<Turn[]>([]);
   const [systemPrompt, setSystemPrompt] = useState("");
@@ -31,11 +47,16 @@ export default function InterviewPage() {
   const transcriptEnd = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    getInterviewPersonas()
-      .then((data) => {
-        setPersonas(data.personas);
-        setSource(data.source);
-        setSelectedId(data.personas[0]?.persona_id ?? "");
+    Promise.all([getInterviewPersonas(), getInterviewModelCatalog()])
+      .then(([personaData, modelData]) => {
+        setPersonas(personaData.personas);
+        setSource(personaData.source);
+        setSelectedId(personaData.personas[0]?.persona_id ?? "");
+        setModels(modelData.models);
+        setPricingAsOf(modelData.pricingAsOf);
+        setDefaultModelId(modelData.defaultModelId);
+        setInterviewerModel(modelData.defaultModelId);
+        setIntervieweeModel(modelData.defaultModelId);
       })
       .catch((err: Error) => setError(err.message));
   }, []);
@@ -45,17 +66,33 @@ export default function InterviewPage() {
   }, [turns, loading]);
 
   const persona = personas.find((entry) => entry.persona_id === selectedId);
+  const modelsLocked = turns.length > 0 || loading;
 
   function selectPersona(id: string) {
     setSelectedId(id);
     setTurns([]);
     setSystemPrompt("");
     setError("");
+    setExpensiveOptIn(false);
+    setInterviewerModel(defaultModelId);
+    setIntervieweeModel(defaultModelId);
+  }
+
+  function setExpensiveModelsForRun(enabled: boolean) {
+    setExpensiveOptIn(enabled);
+    if (!enabled) {
+      setInterviewerModel((selected) =>
+        resetExpensiveModelSelection(models, selected, defaultModelId)
+      );
+      setIntervieweeModel((selected) =>
+        resetExpensiveModelSelection(models, selected, defaultModelId)
+      );
+    }
   }
 
   async function ask() {
     const asked = question.trim();
-    if (!asked || loading) return;
+    if (!asked || loading || !persona || !interviewerModel || !intervieweeModel) return;
 
     setLoading(true);
     setError("");
@@ -67,7 +104,14 @@ export default function InterviewPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         // turns is the pre-append render value, i.e. history without the question being asked.
-        body: JSON.stringify({ personaId: selectedId, question: asked, history: turns }),
+        body: JSON.stringify({
+          personaId: selectedId,
+          question: asked,
+          history: turns,
+          interviewerModel,
+          intervieweeModel,
+          allowExpensiveModels: expensiveOptIn,
+        }),
       });
       const data = await response.json();
       if (data.systemPrompt) setSystemPrompt(data.systemPrompt);
@@ -128,6 +172,77 @@ export default function InterviewPage() {
           </GlassPanel>
 
           <div className="flex flex-col gap-5">
+            <GlassPanel className="p-5">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-app-muted">
+                    Models for this run
+                  </p>
+                  <p className="mt-2 text-xs leading-5 text-app-muted">
+                    Selections lock after the first question. The interviewer choice is ready for
+                    AI-led runs; this student-led interview uses the interviewee model now.
+                  </p>
+                </div>
+                {pricingAsOf ? <BadgeChip>prices checked {pricingAsOf}</BadgeChip> : null}
+              </div>
+
+              <div className="mt-4 grid gap-4 md:grid-cols-2">
+                <label className="text-xs font-semibold uppercase tracking-[0.14em] text-app-muted">
+                  Interviewer model
+                  <select
+                    aria-label="Interviewer model"
+                    value={interviewerModel}
+                    onChange={(event) => setInterviewerModel(event.target.value)}
+                    disabled={modelsLocked || models.length === 0}
+                    className="mt-2 w-full rounded-xl border border-app-border bg-transparent px-3 py-3 text-sm normal-case tracking-normal text-app-text outline-none transition focus:border-app-borderStrong disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {models.map((model) => (
+                      <option
+                        key={model.id}
+                        value={model.id}
+                        disabled={!isInterviewModelSelectable(model, expensiveOptIn)}
+                      >
+                        {formatInterviewModelOption(model)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="text-xs font-semibold uppercase tracking-[0.14em] text-app-muted">
+                  Interviewee model
+                  <select
+                    aria-label="Interviewee model"
+                    value={intervieweeModel}
+                    onChange={(event) => setIntervieweeModel(event.target.value)}
+                    disabled={modelsLocked || models.length === 0}
+                    className="mt-2 w-full rounded-xl border border-app-border bg-transparent px-3 py-3 text-sm normal-case tracking-normal text-app-text outline-none transition focus:border-app-borderStrong disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {models.map((model) => (
+                      <option
+                        key={model.id}
+                        value={model.id}
+                        disabled={!isInterviewModelSelectable(model, expensiveOptIn)}
+                      >
+                        {formatInterviewModelOption(model)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
+              <label className="mt-4 flex items-start gap-2 text-xs leading-5 text-app-muted">
+                <input
+                  type="checkbox"
+                  checked={expensiveOptIn}
+                  onChange={(event) => setExpensiveModelsForRun(event.target.checked)}
+                  disabled={modelsLocked}
+                  className="mt-0.5 size-4 accent-[var(--color-gold)] disabled:cursor-not-allowed"
+                />
+                Enable expensive models for this run. This opt-in resets when you start over with
+                another persona.
+              </label>
+            </GlassPanel>
+
             {persona ? (
               <GlassPanel className="p-5">
                 <div className="flex flex-wrap items-center gap-2">
@@ -213,7 +328,16 @@ export default function InterviewPage() {
                   placeholder="Ask a follow-up…"
                   className="flex-1 rounded-xl border border-app-border bg-transparent px-4 py-3 text-sm text-app-text outline-none transition placeholder:text-app-muted focus:border-app-borderStrong"
                 />
-                <Button onClick={ask} disabled={loading || !question.trim()}>
+                <Button
+                  onClick={ask}
+                  disabled={
+                    loading ||
+                    !question.trim() ||
+                    !persona ||
+                    !interviewerModel ||
+                    !intervieweeModel
+                  }
+                >
                   {loading ? "Asking…" : "Ask"}
                 </Button>
               </div>

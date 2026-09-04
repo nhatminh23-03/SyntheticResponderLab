@@ -74,6 +74,26 @@ export type InterviewPersona = {
   headline: string;
 };
 
+export type InterviewModelTier = "cheap" | "mid" | "expensive";
+
+export type InterviewModelCatalogEntry = {
+  id: string;
+  name: string;
+  tier: InterviewModelTier;
+  prompt_price_per_million: number;
+  completion_price_per_million: number;
+};
+
+type InterviewModelCatalogResponse = {
+  data?: {
+    source?: "curated";
+    pricing_as_of?: string;
+    pricing_source?: string;
+    default_model_id?: string;
+    models?: InterviewModelCatalogEntry[];
+  };
+};
+
 type InterviewPersonasResponse = {
   data?: {
     personas?: InterviewPersona[];
@@ -99,6 +119,58 @@ export async function getInterviewPersonas() {
   return {
     personas: result.data?.personas ?? [],
     source: result.data?.source ?? "database",
+  };
+}
+
+export async function getInterviewModelCatalog() {
+  const response = await fetch(`${getApiBaseUrl()}/api/v1/interview/models`, {
+    method: "GET",
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      await readApiErrorMessage(
+        response,
+        `Interview model catalog load failed with status ${response.status}`
+      )
+    );
+  }
+
+  const result = (await response.json()) as InterviewModelCatalogResponse;
+  const data = result.data;
+  const models = data?.models;
+  const defaultModelId = data?.default_model_id;
+  const validTiers: InterviewModelTier[] = ["cheap", "mid", "expensive"];
+  const hasValidModels =
+    Array.isArray(models) &&
+    models.length > 0 &&
+    models.every(
+      (model) =>
+        typeof model?.id === "string" &&
+        model.id.trim().length > 0 &&
+        typeof model.name === "string" &&
+        model.name.trim().length > 0 &&
+        validTiers.includes(model.tier) &&
+        Number.isFinite(model.prompt_price_per_million) &&
+        model.prompt_price_per_million >= 0 &&
+        Number.isFinite(model.completion_price_per_million) &&
+        model.completion_price_per_million >= 0
+    );
+
+  if (
+    !hasValidModels ||
+    typeof defaultModelId !== "string" ||
+    !models.some((model) => model.id === defaultModelId)
+  ) {
+    throw new Error("The backend returned an invalid interview model catalog.");
+  }
+
+  return {
+    source: data?.source ?? "curated",
+    pricingAsOf: data?.pricing_as_of ?? "",
+    pricingSource: data?.pricing_source ?? "",
+    defaultModelId,
+    models,
   };
 }
 
