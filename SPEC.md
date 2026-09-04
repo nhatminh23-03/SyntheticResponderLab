@@ -126,7 +126,7 @@ Wang's design, confirmed on the call. **Three comparisons, not one.**
 - [x] **P4.6** **Non-LLM baseline arm — this is the piece that removes the 18,000-query problem.**
       See the section below. Implement all five baselines; they are cheap and the comparison is the
       contribution.
-- [ ] **P4.7** Interview validation is qualitative by design [15:19]: LLM extracts themes from real
+- [x] **P4.7** Interview validation is qualitative by design [15:19]: LLM extracts themes from real
       and synthetic transcripts, then measure theme overlap. Use a fixed codebook and report
       inter-rater agreement between two different judge models — a single judge grading itself is
       not evidence.
