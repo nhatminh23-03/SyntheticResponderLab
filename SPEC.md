@@ -66,7 +66,7 @@ step inside the gated study workflow [32:11]. Promote it, do not re-architect it
 - [x] **P1.5** Persist transcripts. New table `interview_turn` (study_id, persona_id, session_id,
       role, text, model, tokens_in, tokens_out, cost_usd, created_at). Every turn is logged with its
       cost — this is what makes P3 and the budget answer possible.
-- [ ] **P1.6** Export a session transcript to CSV/markdown so students can hand it in.
+- [x] **P1.6** Export a session transcript to CSV/markdown so students can hand it in.
 - [ ] **P1.7** Show the built prompt behind a toggle (already in the demo). Wang's team used it to
       confirm grounding; keep it.
 

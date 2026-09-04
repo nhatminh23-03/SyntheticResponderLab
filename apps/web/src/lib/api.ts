@@ -1056,6 +1056,48 @@ export type InterviewChatResponse = {
   session_usage: InterviewSessionUsage;
 };
 
+export type InterviewTranscriptExportFormat = "csv" | "markdown";
+
+export type InterviewTranscriptExportTurn = {
+  role: "student" | "persona";
+  text: string;
+};
+
+export async function getInterviewTranscriptExport(
+  studyId: string,
+  payload: {
+    persona_id: string;
+    interviewee_model: string;
+    turns: InterviewTranscriptExportTurn[];
+  },
+  format: InterviewTranscriptExportFormat
+) {
+  const response = await fetch(
+    `${getApiBaseUrl()}/api/v1/studies/${encodeURIComponent(studyId)}/interview/export?format=${format}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      await readApiErrorMessage(
+        response,
+        `Transcript export failed with status ${response.status}`
+      )
+    );
+  }
+
+  const disposition = response.headers.get("Content-Disposition") ?? "";
+  const filename = disposition.match(/filename="([^"]+)"/)?.[1];
+  return {
+    blob: await response.blob(),
+    filename: filename ?? `interview-transcript.${format === "csv" ? "csv" : "md"}`,
+  };
+}
+
 export type GetStudyResponse = {
   data?: {
     study?: CanonicalStudy;

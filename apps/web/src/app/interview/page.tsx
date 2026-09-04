@@ -9,10 +9,12 @@ import { GlassPanel } from "@/components/ui/glass-panel";
 import {
   getInterviewModelCatalog,
   getInterviewPersonas,
+  getInterviewTranscriptExport,
   type InterviewCostEstimateAssumptions,
   type InterviewModelCatalogEntry,
   type InterviewPersona,
   type InterviewPersonaCountRange,
+  type InterviewTranscriptExportFormat,
 } from "@/lib/api";
 import {
   canRunInterviewComparison,
@@ -81,6 +83,8 @@ function InterviewPageContent() {
   const [systemPrompt, setSystemPrompt] = useState("");
   const [showPrompt, setShowPrompt] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [exportingFormat, setExportingFormat] =
+    useState<InterviewTranscriptExportFormat | null>(null);
   const [error, setError] = useState("");
   const transcriptEnd = useRef<HTMLDivElement | null>(null);
 
@@ -214,6 +218,36 @@ function InterviewPageContent() {
       setError((err as Error).message);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function exportTranscript(format: InterviewTranscriptExportFormat) {
+    if (!studyId || !persona || turns.length === 0 || exportingFormat) return;
+
+    setExportingFormat(format);
+    setError("");
+    try {
+      const exported = await getInterviewTranscriptExport(
+        studyId,
+        {
+          persona_id: persona.persona_id,
+          interviewee_model: intervieweeModel,
+          turns,
+        },
+        format
+      );
+      const downloadUrl = URL.createObjectURL(exported.blob);
+      const link = document.createElement("a");
+      link.href = downloadUrl;
+      link.download = exported.filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(downloadUrl);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setExportingFormat(null);
     }
   }
 
@@ -607,7 +641,34 @@ function InterviewPageContent() {
             </GlassPanel>
 
             <GlassPanel className="flex min-h-[22rem] flex-col p-5">
-              <div className="fine-scrollbar flex-1 space-y-4 overflow-y-auto pr-1">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-app-muted">
+                    Session transcript
+                  </p>
+                  <p className="mt-1 text-xs leading-5 text-app-muted">
+                    Download your interview as CSV or Markdown to submit it.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="secondary"
+                    onClick={() => exportTranscript("csv")}
+                    disabled={turns.length === 0 || loading || exportingFormat !== null || !studyId}
+                  >
+                    {exportingFormat === "csv" ? "Exporting…" : "Export CSV"}
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={() => exportTranscript("markdown")}
+                    disabled={turns.length === 0 || loading || exportingFormat !== null || !studyId}
+                  >
+                    {exportingFormat === "markdown" ? "Exporting…" : "Export Markdown"}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="fine-scrollbar mt-4 flex-1 space-y-4 overflow-y-auto pr-1">
                 {turns.length === 0 && !loading ? (
                   <p className="text-sm leading-7 text-app-muted">
                     Ask the first question to start the interview.

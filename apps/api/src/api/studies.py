@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Literal, Optional
 
 from fastapi import APIRouter, Body, Depends, File, Form, Query, Request, UploadFile
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from src.api.auth import AuthUser, get_current_user
@@ -13,6 +14,7 @@ from src.services.exceptions import PayloadTooLargeApiError, UnsupportedMediaTyp
 from src.schemas.study import (
     InterviewChatRequest,
     InterviewComparisonRequest,
+    InterviewTranscriptExportRequest,
     InterviewerNextQuestionRequest,
     PersonaPreviewRequest,
     ProductUrlAutofillRequest,
@@ -59,6 +61,7 @@ from src.services.interview_service import (
     save_research_brief,
     get_interview_insights,
 )
+from src.services.interview_export import build_interview_transcript_export
 
 
 router = APIRouter(tags=["studies"])
@@ -652,6 +655,23 @@ def interview_chat_endpoint(
     study = get_owned_study_or_404(db, study_id, current_user)
     result = continue_interview_chat(db, settings, study, payload.model_dump())
     return response_envelope(request, {"interview_chat": result})
+
+
+@router.post("/api/v1/studies/{study_id}/interview/export")
+def interview_transcript_export_endpoint(
+    study_id: str,
+    payload: InterviewTranscriptExportRequest,
+    export_format: Literal["csv", "markdown"] = Query(alias="format"),
+    db: Session = Depends(get_db_session),
+    current_user: AuthUser = Depends(get_current_user),
+):
+    get_owned_study_or_404(db, study_id, current_user)
+    export = build_interview_transcript_export(payload.model_dump(), export_format)
+    return Response(
+        content=export.content,
+        media_type=export.media_type,
+        headers={"Content-Disposition": f'attachment; filename="{export.filename}"'},
+    )
 
 
 @router.post("/api/v1/studies/{study_id}/interview/compare")

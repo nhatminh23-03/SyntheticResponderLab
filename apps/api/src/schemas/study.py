@@ -163,6 +163,17 @@ class InterviewChatRequest(BaseModel):
     estimated_run_cost_usd: Optional[Decimal] = Field(default=None, ge=0)
 
 
+class InterviewTranscriptExportTurn(BaseModel):
+    role: Literal["student", "persona"]
+    text: str = Field(min_length=1, max_length=50_000)
+
+
+class InterviewTranscriptExportRequest(BaseModel):
+    persona_id: str = Field(min_length=1, max_length=128)
+    interviewee_model: str = Field(min_length=1, max_length=256)
+    turns: List[InterviewTranscriptExportTurn] = Field(min_length=1, max_length=200)
+
+
 class InterviewComparisonRequest(BaseModel):
     persona_id: str
     question: str
