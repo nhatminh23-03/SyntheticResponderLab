@@ -8,6 +8,8 @@ from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine.url import make_url
 
+from src.services.interview_cache import CACHE_MODE, normalize_cache_mode
+
 API_ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -20,6 +22,7 @@ class AppSettings(BaseSettings):
 
     openrouter_api_key: Optional[str] = Field(default=None, alias="OPENROUTER_API_KEY")
     openrouter_base_url: str = Field(default="https://openrouter.ai/api/v1", alias="OPENROUTER_BASE_URL")
+    cache_mode: str = Field(default=CACHE_MODE, alias="CACHE_MODE")
 
     google_cloud_api_key: Optional[str] = Field(default=None, alias="GOOGLE_CLOUD_API_KEY")
     google_cloud_service_account_json: Optional[str] = Field(default=None, alias="GOOGLE_CLOUD_SERVICE_ACCOUNT_JSON")
@@ -73,6 +76,11 @@ class AppSettings(BaseSettings):
         if not normalized:
             raise ValueError("APP_ENV cannot be empty.")
         return normalized
+
+    @field_validator("cache_mode", mode="before")
+    @classmethod
+    def _normalize_cache_mode(cls, value: str) -> str:
+        return normalize_cache_mode(value)
 
     @field_validator("database_url")
     @classmethod

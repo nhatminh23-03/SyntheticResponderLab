@@ -40,3 +40,41 @@ def test_settings_reject_non_positive_upload_limits():
             LEGACY_APP_ROOT="../../NeoSmart-Hackathon-App",
             MAX_SURVEY_UPLOAD_BYTES=0,
         )
+
+
+@pytest.mark.parametrize("cache_mode", ["cache_first", "replay_only", "off"])
+def test_settings_accept_cache_modes(cache_mode):
+    settings = AppSettings(
+        APP_ENV="development",
+        APP_DEBUG=True,
+        DATABASE_URL="sqlite:///./local-dev.db",
+        ARTIFACTS_ROOT="./artifacts",
+        LEGACY_APP_ROOT="../../NeoSmart-Hackathon-App",
+        CACHE_MODE=cache_mode.upper(),
+    )
+
+    assert settings.cache_mode == cache_mode
+
+
+def test_settings_default_cache_mode_is_cache_first():
+    settings = AppSettings(
+        APP_ENV="development",
+        APP_DEBUG=True,
+        DATABASE_URL="sqlite:///./local-dev.db",
+        ARTIFACTS_ROOT="./artifacts",
+        LEGACY_APP_ROOT="../../NeoSmart-Hackathon-App",
+    )
+
+    assert settings.cache_mode == "cache_first"
+
+
+def test_settings_reject_unknown_cache_mode():
+    with pytest.raises(ValidationError, match="CACHE_MODE must be one of"):
+        AppSettings(
+            APP_ENV="development",
+            APP_DEBUG=True,
+            DATABASE_URL="sqlite:///./local-dev.db",
+            ARTIFACTS_ROOT="./artifacts",
+            LEGACY_APP_ROOT="../../NeoSmart-Hackathon-App",
+            CACHE_MODE="sometimes",
+        )

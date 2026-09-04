@@ -369,8 +369,11 @@ def test_interview_chat_endpoint_continues_selected_persona(client, monkeypatch)
 
     client.app.state.settings.openrouter_api_key = "test-key"
     captured = {}
+    provider_call_count = 0
 
     def fake_call_openrouter_messages(**kwargs):
+        nonlocal provider_call_count
+        provider_call_count += 1
         captured.update(kwargs)
         return OpenRouterChatResult(
             text="I would move faster if the install felt predictable and the price included everything.",
@@ -385,23 +388,24 @@ def test_interview_chat_endpoint_continues_selected_persona(client, monkeypatch)
         fake_call_openrouter_messages,
     )
 
+    first_question = {
+        "persona_id": persona_id,
+        "prompt": "What would make you more confident about buying?",
+        "messages": [
+            {
+                "role": "user",
+                "content": "Remind me what matters most in your decision?",
+            },
+            {
+                "role": "assistant",
+                "content": "I need to trust the install process and feel like I will use it every week.",
+            },
+        ],
+        "transcript_source": "model_a",
+    }
     response = client.post(
         f"/api/v1/studies/{study_id}/interview/chat",
-        json={
-            "persona_id": persona_id,
-            "prompt": "What would make you more confident about buying?",
-            "messages": [
-                {
-                    "role": "user",
-                    "content": "Remind me what matters most in your decision?",
-                },
-                {
-                    "role": "assistant",
-                    "content": "I need to trust the install process and feel like I will use it every week.",
-                },
-            ],
-            "transcript_source": "model_a",
-        },
+        json=first_question,
     )
 
     assert response.status_code == 200
@@ -411,6 +415,8 @@ def test_interview_chat_endpoint_continues_selected_persona(client, monkeypatch)
     assert payload["reply"].startswith("I would move faster")
     assert payload["model"] == latest_interview["pairs"][0]["model_a"]["model"]
     assert payload["session_id"].startswith("ses_")
+    assert payload["cache_hit"] is False
+    assert provider_call_count == 1
     assert captured["api_key"] == "test-key"
     assert captured["messages"][0]["role"] == "system"
     assert '"fit_tier"' not in captured["messages"][0]["content"]
@@ -419,6 +425,20 @@ def test_interview_chat_endpoint_continues_selected_persona(client, monkeypatch)
         "role": "user",
         "content": "What would make you more confident about buying?",
     }
+
+    client.app.state.settings.openrouter_api_key = ""
+    repeated_response = client.post(
+        f"/api/v1/studies/{study_id}/interview/chat",
+        json=first_question,
+    )
+    assert repeated_response.status_code == 200
+    repeated_payload = repeated_response.json()["data"]["interview_chat"]
+    assert repeated_payload["reply"] == payload["reply"]
+    assert repeated_payload["cache_hit"] is True
+    assert repeated_payload["session_id"] != payload["session_id"]
+    assert provider_call_count == 1
+
+    client.app.state.settings.openrouter_api_key = "test-key"
 
     followup_response = client.post(
         f"/api/v1/studies/{study_id}/interview/chat",
@@ -439,6 +459,8 @@ def test_interview_chat_endpoint_continues_selected_persona(client, monkeypatch)
     assert followup_response.status_code == 200
     followup_payload = followup_response.json()["data"]["interview_chat"]
     assert followup_payload["session_id"] == payload["session_id"]
+    assert followup_payload["cache_hit"] is False
+    assert provider_call_count == 2
 
     session_factory = client.app.state.session_factory
     with session_factory() as session:
@@ -469,6 +491,29 @@ def test_interview_chat_endpoint_continues_selected_persona(client, monkeypatch)
         (0, 0, Decimal("0E-18")),
         (347, 19, Decimal("0.000184250000000000")),
     ]
+
+    with session_factory() as session:
+        repeated_turns = session.scalars(
+            select(InterviewTurn)
+            .where(InterviewTurn.session_id == repeated_payload["session_id"])
+            .order_by(InterviewTurn.created_at, InterviewTurn.id)
+        ).all()
+    assert [(turn.role, turn.tokens_in, turn.tokens_out, turn.cost_usd) for turn in repeated_turns] == [
+        ("user", 0, 0, Decimal("0E-18")),
+        ("assistant", 0, 0, Decimal("0E-18")),
+    ]
+
+    client.app.state.settings.cache_mode = "replay_only"
+    replay_miss_response = client.post(
+        f"/api/v1/studies/{study_id}/interview/chat",
+        json={
+            **first_question,
+            "prompt": "Which entirely new concern should we discuss?",
+        },
+    )
+    assert replay_miss_response.status_code == 409
+    assert "CACHE_MODE=replay_only" in replay_miss_response.json()["error"]["message"]
+    assert provider_call_count == 2
 
 
 def test_save_audience_and_get_workflow(client):

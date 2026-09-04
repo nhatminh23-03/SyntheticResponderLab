@@ -889,6 +889,7 @@ export type InterviewChatResponse = {
   model: string | null;
   source_run_id: string;
   reply: string;
+  cache_hit: boolean;
 };
 
 export type GetStudyResponse = {

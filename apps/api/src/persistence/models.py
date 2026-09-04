@@ -209,6 +209,19 @@ class InterviewTurn(Base):
     study: Mapped[Study] = relationship(back_populates="interview_turns")
 
 
+class InterviewCacheEntry(Base):
+    __tablename__ = "interview_cache"
+
+    cache_key: Mapped[str] = mapped_column(Text, primary_key=True)
+    persona_id: Mapped[str] = mapped_column(Text, nullable=False)
+    model: Mapped[str] = mapped_column(Text, nullable=False)
+    question: Mapped[str] = mapped_column(Text, nullable=False)
+    prior_turn_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    answer_text: Mapped[str] = mapped_column(Text, nullable=False)
+    response_model: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
 class Job(Base):
     __tablename__ = "jobs"
 

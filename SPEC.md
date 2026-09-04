@@ -92,7 +92,7 @@ step inside the gated study workflow [32:11]. Promote it, do not re-architect it
 Wang is firm that students must never spend their own money [18:43]. Anderson's objection stands and
 is recorded: a pure replay "wouldn't really be an app." The resolution is a **cache, not a fixture**.
 
-- [ ] **P3.1** Cache key = hash(persona_id, model, question, prior-turn-hash). A repeated question on
+- [x] **P3.1** Cache key = hash(persona_id, model, question, prior-turn-hash). A repeated question on
       a repeated persona returns the stored answer for free; a genuinely new question calls the API.
       Students get a live, leading interview; the common paths cost nothing.
 - [ ] **P3.2** Pre-warm the cache: batch-run the suggested questions across all 30 personas on the

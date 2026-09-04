@@ -11,7 +11,6 @@ from __future__ import annotations
 import json
 import random
 import time
-from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any, Dict, List, Optional
@@ -25,6 +24,11 @@ from src.persistence.models import InterviewTurn, Job, PersonaPreviewRun, Study,
 from src.services.demo_interview_fixtures import ensure_demo_interview_run
 from src.services.exceptions import ConflictApiError, ValidationApiError
 from src.services.ids import make_public_id
+from src.services.interview_cache import (
+    InterviewAnswer as OpenRouterChatResult,
+    ReplayOnlyCacheMissError,
+    resolve_interview_answer,
+)
 from src.services.usage_limits import (
     METRIC_INTERVIEW_RUN,
     assert_no_in_flight_provider_job,
@@ -43,15 +47,6 @@ _OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 _MAX_RETRIES = 3
 
 INTERVIEW_SECTION_KEYS = ("interview_synthesis", "research_brief")
-
-
-@dataclass(frozen=True)
-class OpenRouterChatResult:
-    text: str
-    model: str
-    tokens_in: int
-    tokens_out: int
-    cost_usd: Decimal
 
 
 def utcnow() -> datetime:
@@ -496,10 +491,6 @@ def continue_interview_chat(
             f"Persona '{persona_id}' was not found in the latest interview run."
         )
 
-    api_key = settings.openrouter_api_key or ""
-    if not api_key:
-        raise ConflictApiError("OPENROUTER_API_KEY is not configured.")
-
     transcript = pair.get(transcript_source) or {}
     model = str(payload.get("model") or transcript.get("model") or DEFAULT_MODEL_A).strip()
     if not model:
@@ -518,12 +509,30 @@ def continue_interview_chat(
         {"role": "user", "content": prompt},
     ]
     user_created_at = utcnow()
-    provider_result = _call_openrouter_messages(
-        api_key=api_key,
-        model=model,
-        messages=full_messages,
-        timeout=90,
-    )
+
+    def call_provider() -> OpenRouterChatResult:
+        api_key = settings.openrouter_api_key or ""
+        if not api_key:
+            raise ConflictApiError("OPENROUTER_API_KEY is not configured.")
+        return _call_openrouter_messages(
+            api_key=api_key,
+            model=model,
+            messages=full_messages,
+            timeout=90,
+        )
+
+    try:
+        provider_result = resolve_interview_answer(
+            session,
+            cache_mode=settings.cache_mode,
+            persona_id=persona_id,
+            model=model,
+            question=prompt,
+            prior_turns=full_messages[:-1],
+            call_provider=call_provider,
+        )
+    except ReplayOnlyCacheMissError as exc:
+        raise ConflictApiError(str(exc)) from exc
     session.add_all(
         [
             InterviewTurn(
@@ -561,6 +570,7 @@ def continue_interview_chat(
         "model": provider_result.model,
         "source_run_id": latest_run.public_id,
         "reply": provider_result.text,
+        "cache_hit": provider_result.cache_hit,
     }
 
 
