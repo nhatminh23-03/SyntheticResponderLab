@@ -41,7 +41,7 @@ cd ~/dev/SyntheticResponderLab && npm --prefix apps/web run build \
       placeholder — one of four grounding dimensions is currently scoring noise. Either drop the
       dimension or score it only when a real tier exists. **Do not** feed `fit_tier` into the
       interview prompt; it is scored after, never before (Ann's section 3).
-- [ ] **P0.3** Answer Wang's unanswered question from [00:59]: how many households survive the
+- [x] **P0.3** Answer Wang's unanswered question from [00:59]: how many households survive the
       screen? Write `analysis/screen_counts.R` that reads the PUMS frame and reports N at each
       screen step (raw → detached single-family → income ≥ $100k ADJINC-adjusted → householder age
       30-65 → weighted draw). Nobody on the team currently knows this number.
