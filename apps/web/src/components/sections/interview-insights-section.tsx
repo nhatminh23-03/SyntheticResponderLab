@@ -165,6 +165,7 @@ export function InterviewInsightsSection() {
   const [selectedPersonaId, setSelectedPersonaId] = useState("");
   const [transcriptSource, setTranscriptSource] = useState<TranscriptSource>("model_a");
   const [chatMessages, setChatMessages] = useState<InterviewChatMessage[]>([]);
+  const [chatSessionId, setChatSessionId] = useState<string | null>(null);
   const [chatDraft, setChatDraft] = useState("");
   const [chatError, setChatError] = useState<string | null>(null);
   const [isSendingChat, setIsSendingChat] = useState(false);
@@ -243,9 +244,10 @@ export function InterviewInsightsSection() {
 
   useEffect(() => {
     setChatMessages([]);
+    setChatSessionId(null);
     setChatDraft("");
     setChatError(null);
-  }, [selectedPersonaId, transcriptSource]);
+  }, [studyId, selectedPersonaId, transcriptSource]);
 
   const selectedPair = useMemo<InterviewPair | null>(
     () => pairs.find((pair) => pair.persona_id === selectedPersonaId) ?? null,
@@ -283,8 +285,10 @@ export function InterviewInsightsSection() {
         prompt,
         messages: priorMessages,
         transcript_source: transcriptSource,
+        session_id: chatSessionId,
       });
 
+      setChatSessionId(response.session_id);
       setChatMessages([
         ...optimisticMessages,
         { role: "assistant", content: response.reply },

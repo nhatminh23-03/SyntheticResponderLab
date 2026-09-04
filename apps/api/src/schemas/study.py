@@ -158,3 +158,4 @@ class InterviewChatRequest(BaseModel):
     messages: List[InterviewChatMessage] = Field(default_factory=list)
     transcript_source: Literal["model_a", "model_b"] = "model_a"
     model: Optional[str] = None
+    session_id: Optional[str] = Field(default=None, max_length=128)

@@ -2,9 +2,23 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, datetime, timezone
+from decimal import Decimal
 from typing import Dict, List, Optional
 
-from sqlalchemy import BigInteger, Boolean, Date, DateTime, ForeignKey, Integer, JSON, Text, UniqueConstraint
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    CheckConstraint,
+    Date,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    JSON,
+    Numeric,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.persistence.base import Base
@@ -42,6 +56,10 @@ class Study(Base):
         back_populates="study",
         cascade="all, delete-orphan",
         foreign_keys="PersonaPreviewRun.study_id",
+    )
+    interview_turns: Mapped[List["InterviewTurn"]] = relationship(
+        back_populates="study",
+        cascade="all, delete-orphan",
     )
     latest_persona_preview_run: Mapped[Optional["PersonaPreviewRun"]] = relationship(
         foreign_keys=[latest_persona_preview_run_id],
@@ -159,6 +177,36 @@ class Persona(Base):
     row_index: Mapped[int] = mapped_column(Integer, unique=True, nullable=False)
     profile_json: Mapped[Dict] = mapped_column(JSON, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class InterviewTurn(Base):
+    __tablename__ = "interview_turn"
+    __table_args__ = (
+        Index(
+            "ix_interview_turn_study_session_created",
+            "study_id",
+            "session_id",
+            "created_at",
+        ),
+        CheckConstraint("role IN ('user', 'assistant')", name="ck_interview_turn_role"),
+        CheckConstraint("tokens_in >= 0", name="ck_interview_turn_tokens_in_nonnegative"),
+        CheckConstraint("tokens_out >= 0", name="ck_interview_turn_tokens_out_nonnegative"),
+        CheckConstraint("cost_usd >= 0", name="ck_interview_turn_cost_usd_nonnegative"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    study_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("studies.id", ondelete="CASCADE"), nullable=False)
+    persona_id: Mapped[str] = mapped_column(Text, nullable=False)
+    session_id: Mapped[str] = mapped_column(Text, nullable=False)
+    role: Mapped[str] = mapped_column(Text, nullable=False)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    model: Mapped[str] = mapped_column(Text, nullable=False)
+    tokens_in: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    tokens_out: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    cost_usd: Mapped[Decimal] = mapped_column(Numeric(24, 18), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+    study: Mapped[Study] = relationship(back_populates="interview_turns")
 
 
 class Job(Base):

@@ -1,6 +1,12 @@
 from __future__ import annotations
 
+from decimal import Decimal
 from pathlib import Path
+
+from sqlalchemy import select
+
+from src.persistence.models import InterviewTurn
+from src.services.interview_service import OpenRouterChatResult
 
 
 def _create_ready_to_run_study(client, study_mode: str = "neo_smart") -> str:
@@ -366,7 +372,13 @@ def test_interview_chat_endpoint_continues_selected_persona(client, monkeypatch)
 
     def fake_call_openrouter_messages(**kwargs):
         captured.update(kwargs)
-        return "I would move faster if the install felt predictable and the price included everything."
+        return OpenRouterChatResult(
+            text="I would move faster if the install felt predictable and the price included everything.",
+            model=kwargs["model"],
+            tokens_in=347,
+            tokens_out=19,
+            cost_usd=Decimal("0.000184250000"),
+        )
 
     monkeypatch.setattr(
         "src.services.interview_service._call_openrouter_messages",
@@ -398,6 +410,7 @@ def test_interview_chat_endpoint_continues_selected_persona(client, monkeypatch)
     assert payload["transcript_source"] == "model_a"
     assert payload["reply"].startswith("I would move faster")
     assert payload["model"] == latest_interview["pairs"][0]["model_a"]["model"]
+    assert payload["session_id"].startswith("ses_")
     assert captured["api_key"] == "test-key"
     assert captured["messages"][0]["role"] == "system"
     assert '"fit_tier"' not in captured["messages"][0]["content"]
@@ -406,6 +419,56 @@ def test_interview_chat_endpoint_continues_selected_persona(client, monkeypatch)
         "role": "user",
         "content": "What would make you more confident about buying?",
     }
+
+    followup_response = client.post(
+        f"/api/v1/studies/{study_id}/interview/chat",
+        json={
+            "persona_id": persona_id,
+            "prompt": "What would predictable installation look like?",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "What would make you more confident about buying?",
+                },
+                {"role": "assistant", "content": payload["reply"]},
+            ],
+            "transcript_source": "model_a",
+            "session_id": payload["session_id"],
+        },
+    )
+    assert followup_response.status_code == 200
+    followup_payload = followup_response.json()["data"]["interview_chat"]
+    assert followup_payload["session_id"] == payload["session_id"]
+
+    session_factory = client.app.state.session_factory
+    with session_factory() as session:
+        turns = session.scalars(
+            select(InterviewTurn)
+            .where(InterviewTurn.session_id == payload["session_id"])
+            .order_by(InterviewTurn.created_at, InterviewTurn.id)
+        ).all()
+
+    assert [(turn.role, turn.text) for turn in turns] == [
+        ("user", "What would make you more confident about buying?"),
+        (
+            "assistant",
+            "I would move faster if the install felt predictable and the price included everything.",
+        ),
+        ("user", "What would predictable installation look like?"),
+        (
+            "assistant",
+            "I would move faster if the install felt predictable and the price included everything.",
+        ),
+    ]
+    assert all(turn.study_id is not None for turn in turns)
+    assert all(turn.persona_id == persona_id for turn in turns)
+    assert all(turn.model == payload["model"] for turn in turns)
+    assert [(turn.tokens_in, turn.tokens_out, turn.cost_usd) for turn in turns] == [
+        (0, 0, Decimal("0E-18")),
+        (347, 19, Decimal("0.000184250000000000")),
+        (0, 0, Decimal("0E-18")),
+        (347, 19, Decimal("0.000184250000000000")),
+    ]
 
 
 def test_save_audience_and_get_workflow(client):

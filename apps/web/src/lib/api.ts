@@ -879,10 +879,12 @@ export type InterviewChatPayload = {
   messages?: InterviewChatMessage[];
   transcript_source?: "model_a" | "model_b";
   model?: string;
+  session_id: string | null;
 };
 
 export type InterviewChatResponse = {
   persona_id: string;
+  session_id: string;
   transcript_source: "model_a" | "model_b";
   model: string | null;
   source_run_id: string;

@@ -11,7 +11,9 @@ from __future__ import annotations
 import json
 import random
 import time
+from dataclasses import dataclass
 from datetime import datetime, timezone
+from decimal import Decimal, InvalidOperation
 from typing import Any, Dict, List, Optional
 
 import requests
@@ -19,7 +21,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from src.config.settings import AppSettings
-from src.persistence.models import Job, PersonaPreviewRun, Study, StudySectionState
+from src.persistence.models import InterviewTurn, Job, PersonaPreviewRun, Study, StudySectionState
 from src.services.demo_interview_fixtures import ensure_demo_interview_run
 from src.services.exceptions import ConflictApiError, ValidationApiError
 from src.services.ids import make_public_id
@@ -41,6 +43,15 @@ _OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 _MAX_RETRIES = 3
 
 INTERVIEW_SECTION_KEYS = ("interview_synthesis", "research_brief")
+
+
+@dataclass(frozen=True)
+class OpenRouterChatResult:
+    text: str
+    model: str
+    tokens_in: int
+    tokens_out: int
+    cost_usd: Decimal
 
 
 def utcnow() -> datetime:
@@ -493,6 +504,7 @@ def continue_interview_chat(
     model = str(payload.get("model") or transcript.get("model") or DEFAULT_MODEL_A).strip()
     if not model:
         model = DEFAULT_MODEL_A
+    session_id = str(payload.get("session_id") or "").strip() or make_public_id("ses")
 
     system_prompt = _build_persona_followup_system_prompt(
         session=session,
@@ -505,19 +517,50 @@ def continue_interview_chat(
         *sanitized_history,
         {"role": "user", "content": prompt},
     ]
-    reply = _call_openrouter_messages(
+    user_created_at = utcnow()
+    provider_result = _call_openrouter_messages(
         api_key=api_key,
         model=model,
         messages=full_messages,
         timeout=90,
     )
+    session.add_all(
+        [
+            InterviewTurn(
+                study_id=study.id,
+                persona_id=persona_id,
+                session_id=session_id,
+                role="user",
+                text=prompt,
+                model=provider_result.model,
+                tokens_in=0,
+                tokens_out=0,
+                cost_usd=Decimal("0"),
+                created_at=user_created_at,
+            ),
+            InterviewTurn(
+                study_id=study.id,
+                persona_id=persona_id,
+                session_id=session_id,
+                role="assistant",
+                text=provider_result.text,
+                model=provider_result.model,
+                tokens_in=provider_result.tokens_in,
+                tokens_out=provider_result.tokens_out,
+                cost_usd=provider_result.cost_usd,
+                created_at=utcnow(),
+            ),
+        ]
+    )
+    session.commit()
 
     return {
         "persona_id": persona_id,
+        "session_id": session_id,
         "transcript_source": transcript_source,
-        "model": model,
+        "model": provider_result.model,
         "source_run_id": latest_run.public_id,
-        "reply": reply,
+        "reply": provider_result.text,
     }
 
 
@@ -760,7 +803,7 @@ def _call_openrouter_messages(
     model: str,
     messages: list[dict[str, str]],
     timeout: int = 90,
-) -> str:
+) -> OpenRouterChatResult:
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
@@ -776,7 +819,6 @@ def _call_openrouter_messages(
         try:
             resp = requests.post(_OPENROUTER_URL, headers=headers, json=body, timeout=timeout)
             resp.raise_for_status()
-            return resp.json()["choices"][0]["message"]["content"]
         except Exception as exc:
             if attempt < _MAX_RETRIES - 1:
                 wait = min(65, (2 ** attempt) + random.uniform(0, 1))
@@ -785,5 +827,68 @@ def _call_openrouter_messages(
                 raise RuntimeError(
                     f"OpenRouter chat call failed after {_MAX_RETRIES} attempts: {exc}"
                 ) from exc
+        else:
+            try:
+                response_payload = resp.json(parse_float=Decimal)
+            except (TypeError, ValueError) as exc:
+                raise RuntimeError("OpenRouter chat returned invalid JSON.") from exc
+            return _parse_openrouter_chat_response(response_payload, requested_model=model)
 
     raise RuntimeError("Exhausted retries.")
+
+
+def _parse_openrouter_chat_response(
+    payload: Any,
+    *,
+    requested_model: str,
+) -> OpenRouterChatResult:
+    if not isinstance(payload, dict):
+        raise RuntimeError("OpenRouter chat response must be a JSON object.")
+
+    try:
+        text = payload["choices"][0]["message"]["content"]
+    except (KeyError, IndexError, TypeError) as exc:
+        raise RuntimeError("OpenRouter chat response did not include assistant text.") from exc
+    if not isinstance(text, str) or not text.strip():
+        raise RuntimeError("OpenRouter chat response included empty assistant text.")
+
+    usage = payload.get("usage")
+    if not isinstance(usage, dict):
+        raise RuntimeError(
+            "OpenRouter chat response did not include measured usage; refusing to persist estimated cost."
+        )
+
+    tokens_in = _required_nonnegative_usage_int(usage, "prompt_tokens")
+    tokens_out = _required_nonnegative_usage_int(usage, "completion_tokens")
+    cost_usd = _required_nonnegative_usage_cost(usage)
+    response_model = str(payload.get("model") or requested_model).strip() or requested_model
+
+    return OpenRouterChatResult(
+        text=text,
+        model=response_model,
+        tokens_in=tokens_in,
+        tokens_out=tokens_out,
+        cost_usd=cost_usd,
+    )
+
+
+def _required_nonnegative_usage_int(usage: dict[str, Any], key: str) -> int:
+    value = usage.get(key)
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise RuntimeError(f"OpenRouter usage.{key} must be a non-negative integer.")
+    return value
+
+
+def _required_nonnegative_usage_cost(usage: dict[str, Any]) -> Decimal:
+    value = usage.get("cost")
+    if isinstance(value, bool) or value is None:
+        raise RuntimeError(
+            "OpenRouter usage.cost is required; refusing to persist estimated cost."
+        )
+    try:
+        cost = Decimal(str(value))
+    except (InvalidOperation, ValueError) as exc:
+        raise RuntimeError("OpenRouter usage.cost must be a non-negative number.") from exc
+    if not cost.is_finite() or cost < 0:
+        raise RuntimeError("OpenRouter usage.cost must be a non-negative number.")
+    return cost
