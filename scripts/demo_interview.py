@@ -68,7 +68,7 @@ def ask_openrouter(system_prompt: str, question: str, model: str) -> str:
                     {"role": "user", "content": question},
                 ],
                 "temperature": 0.8,
-                "max_tokens": 500,
+                "max_tokens": 900,
             }
         ).encode(),
         headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
@@ -85,6 +85,7 @@ def main() -> int:
     parser.add_argument("--question", default=DEFAULT_QUESTION)
     parser.add_argument("--model", default="google/gemini-2.5-flash")
     parser.add_argument("--list", action="store_true", help="List the personas and exit.")
+    parser.add_argument("--json", action="store_true", help="Keep the batch runner's JSON output contract.")
     args = parser.parse_args()
 
     if args.list:
@@ -105,6 +106,13 @@ def main() -> int:
     print(f"fit_tier:  {persona['fit_tier'] or '(blank — retired, scored after the interview)'}")
 
     system_prompt = build_system_prompt(persona, PRODUCT, None)
+    if not args.json:
+        # The shared builder ends with a "return only JSON" instruction meant for the batch
+        # runner. A single spoken question should come back as speech, not a JSON blob.
+        system_prompt = "\n".join(
+            line for line in system_prompt.splitlines()
+            if "JSON" not in line
+        ).rstrip() + "\n- Answer this one question conversationally, in plain prose."
     print("\n" + "=" * 78)
     print("SYSTEM PROMPT BUILT FROM THAT RECORD")
     print("=" * 78)
