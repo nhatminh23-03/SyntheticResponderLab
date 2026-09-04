@@ -74,7 +74,7 @@ step inside the gated study workflow [32:11]. Promote it, do not re-architect it
 
 - [x] **P2.1** Interviewer model picker and interviewee model picker, independent. Curated list with
       a price-per-1M-token label next to each, cheapest first.
-- [ ] **P2.2** Persona-count selector. Floor of 3 (Anderson's stated minimum for a meaningful
+- [x] **P2.2** Persona-count selector. Floor of 3 (Anderson's stated minimum for a meaningful
       comparison), default 3, ceiling 30.
 - [ ] **P2.3** Interviewer agent: given the research brief, asks the next question from the prior
       answer rather than replaying a fixed list. This is the piece that makes it AI-to-AI rather than
