@@ -13,11 +13,14 @@ import {
   InterviewInsightsPayload,
   InterviewPair,
   InterviewRunPayload,
+  InterviewChatApiError,
+  InterviewSessionUsage,
   InterviewTheme,
   getInterviewInsights,
   getLatestInterviewRun,
   sendInterviewChatMessage,
 } from "@/lib/api";
+import { formatMeasuredInterviewCost } from "@/lib/interview-models";
 import { cn } from "@/lib/utils";
 import { useStudy } from "@/providers/study-provider";
 
@@ -166,6 +169,7 @@ export function InterviewInsightsSection() {
   const [transcriptSource, setTranscriptSource] = useState<TranscriptSource>("model_a");
   const [chatMessages, setChatMessages] = useState<InterviewChatMessage[]>([]);
   const [chatSessionId, setChatSessionId] = useState<string | null>(null);
+  const [chatUsage, setChatUsage] = useState<InterviewSessionUsage | null>(null);
   const [chatDraft, setChatDraft] = useState("");
   const [chatError, setChatError] = useState<string | null>(null);
   const [isSendingChat, setIsSendingChat] = useState(false);
@@ -245,6 +249,7 @@ export function InterviewInsightsSection() {
   useEffect(() => {
     setChatMessages([]);
     setChatSessionId(null);
+    setChatUsage(null);
     setChatDraft("");
     setChatError(null);
   }, [studyId, selectedPersonaId, transcriptSource]);
@@ -289,11 +294,16 @@ export function InterviewInsightsSection() {
       });
 
       setChatSessionId(response.session_id);
+      setChatUsage(response.session_usage);
       setChatMessages([
         ...optimisticMessages,
         { role: "assistant", content: response.reply },
       ]);
     } catch (error) {
+      if (error instanceof InterviewChatApiError) {
+        if (error.sessionId) setChatSessionId(error.sessionId);
+        if (error.sessionUsage) setChatUsage(error.sessionUsage);
+      }
       setChatMessages(priorMessages);
       setChatDraft(prompt);
       setChatError(error instanceof Error ? error.message : "Interview chat failed.");
@@ -442,6 +452,25 @@ export function InterviewInsightsSection() {
                   </div>
 
                   <div className="space-y-4">
+                    <div
+                      aria-live="polite"
+                      className="rounded-2xl border border-app-gold/20 bg-app-gold/[0.06] p-4"
+                    >
+                      <p className="text-[0.68rem] uppercase tracking-[0.12em] text-app-muted">
+                        Live session cost
+                      </p>
+                      <p className="mt-1 text-2xl font-bold tabular-nums text-app-gold">
+                        {formatMeasuredInterviewCost(chatUsage?.cost_usd ?? "0")}
+                      </p>
+                      <p className="mt-1 text-xs tabular-nums text-app-muted">
+                        {(chatUsage?.tokens_in ?? 0).toLocaleString()} input ·{" "}
+                        {(chatUsage?.tokens_out ?? 0).toLocaleString()} output tokens
+                      </p>
+                      <p className="mt-1 text-[0.68rem] leading-5 text-app-muted">
+                        Provider-measured usage saved with this transcript. Cache hits add $0.
+                      </p>
+                    </div>
+
                     <div className="rounded-2xl border border-white/[0.08] bg-white/[0.02] p-4">
                       <div className="flex items-center justify-between gap-3">
                         <p className="text-[0.68rem] uppercase tracking-[0.12em] text-app-muted">

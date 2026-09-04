@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   estimateInterviewRunCost,
+  formatMeasuredInterviewCost,
   formatInterviewRunCostEstimate,
   formatInterviewModelOption,
   isInterviewModelSelectable,
@@ -62,4 +63,10 @@ test("pre-flight estimate scales from the three-person default to the thirty-per
   assert.equal(estimateInterviewRunCost(3, cheap, expensive), 0.1854);
   assert.equal(estimateInterviewRunCost(30, cheap, expensive), 1.854);
   assert.equal(formatInterviewRunCostEstimate(0.1854), "$0.185");
+});
+
+
+test("live session cost keeps enough precision for a measured cheap-model turn", () => {
+  assert.equal(formatMeasuredInterviewCost("0.000184250000000000"), "$0.000184");
+  assert.equal(formatMeasuredInterviewCost("0E-18"), "$0.000000");
 });

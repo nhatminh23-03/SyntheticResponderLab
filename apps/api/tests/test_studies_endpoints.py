@@ -416,6 +416,11 @@ def test_interview_chat_endpoint_continues_selected_persona(client, monkeypatch)
     assert payload["model"] == latest_interview["pairs"][0]["model_a"]["model"]
     assert payload["session_id"].startswith("ses_")
     assert payload["cache_hit"] is False
+    assert payload["session_usage"] == {
+        "tokens_in": 347,
+        "tokens_out": 19,
+        "cost_usd": "0.00018425",
+    }
     assert provider_call_count == 1
     assert captured["api_key"] == "test-key"
     assert captured["messages"][0]["role"] == "system"
@@ -435,6 +440,11 @@ def test_interview_chat_endpoint_continues_selected_persona(client, monkeypatch)
     repeated_payload = repeated_response.json()["data"]["interview_chat"]
     assert repeated_payload["reply"] == payload["reply"]
     assert repeated_payload["cache_hit"] is True
+    assert repeated_payload["session_usage"] == {
+        "tokens_in": 0,
+        "tokens_out": 0,
+        "cost_usd": "0",
+    }
     assert repeated_payload["session_id"] != payload["session_id"]
     assert provider_call_count == 1
 
@@ -477,6 +487,11 @@ def test_interview_chat_endpoint_continues_selected_persona(client, monkeypatch)
     followup_payload = followup_response.json()["data"]["interview_chat"]
     assert followup_payload["session_id"] == payload["session_id"]
     assert followup_payload["cache_hit"] is False
+    assert followup_payload["session_usage"] == {
+        "tokens_in": 694,
+        "tokens_out": 38,
+        "cost_usd": "0.00036850",
+    }
     assert provider_call_count == 2
 
     session_factory = client.app.state.session_factory
@@ -534,6 +549,12 @@ def test_interview_chat_endpoint_continues_selected_persona(client, monkeypatch)
     )
     assert measured_overage.status_code == 429
     assert measured_overage.json()["error"]["details"]["measured_cost_usd"] == "0.000184250000"
+    assert measured_overage.json()["error"]["details"]["session_id"] == payload["session_id"]
+    assert measured_overage.json()["error"]["details"]["session_usage"] == {
+        "tokens_in": 1041,
+        "tokens_out": 57,
+        "cost_usd": "0.00055275",
+    }
     assert provider_call_count == 3
 
     blocked_after_overage = client.post(
@@ -572,6 +593,37 @@ def test_interview_chat_endpoint_continues_selected_persona(client, monkeypatch)
     assert "Budget hard stop" in kill_switch_stop.json()["error"]["message"]
     assert provider_call_count == 3
 
+    client.app.state.settings.llm_budget_usd = Decimal("0.0001")
+    first_call_overage = client.post(
+        f"/api/v1/studies/{study_id}/interview/chat",
+        json={
+            **first_question,
+            "prompt": "Can a newly started session exceed its first-call budget?",
+        },
+    )
+    assert first_call_overage.status_code == 429
+    first_call_error = first_call_overage.json()["error"]
+    over_budget_session_id = first_call_error["details"]["session_id"]
+    assert over_budget_session_id.startswith("ses_")
+    assert first_call_error["details"]["session_usage"] == {
+        "tokens_in": 347,
+        "tokens_out": 19,
+        "cost_usd": "0.00018425",
+    }
+    assert provider_call_count == 4
+
+    retry_over_budget_session = client.post(
+        f"/api/v1/studies/{study_id}/interview/chat",
+        json={
+            **first_question,
+            "prompt": "This retry must retain the generated session and stop before charging.",
+            "session_id": over_budget_session_id,
+        },
+    )
+    assert retry_over_budget_session.status_code == 429
+    assert retry_over_budget_session.json()["error"]["details"]["scope"] == "run"
+    assert provider_call_count == 4
+
     client.app.state.settings.llm_budget_usd = Decimal("0.75")
 
     with session_factory() as session:
@@ -595,7 +647,7 @@ def test_interview_chat_endpoint_continues_selected_persona(client, monkeypatch)
     )
     assert replay_miss_response.status_code == 409
     assert "CACHE_MODE=replay_only" in replay_miss_response.json()["error"]["message"]
-    assert provider_call_count == 3
+    assert provider_call_count == 4
 
 
 def test_save_audience_and_get_workflow(client):

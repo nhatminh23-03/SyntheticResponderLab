@@ -299,7 +299,7 @@ export default function InterviewPage() {
                   <p className="mt-1 text-lg font-semibold tabular-nums text-app-text">
                     {preflightCostEstimate == null
                       ? "Calculating…"
-                      : `~${formatInterviewRunCostEstimate(preflightCostEstimate)}`}
+                      : `This run will cost about ${formatInterviewRunCostEstimate(preflightCostEstimate)}`}
                   </p>
                   <p className="mt-1 text-xs leading-5 text-app-muted">
                     For {personaCount} personas with both selected models

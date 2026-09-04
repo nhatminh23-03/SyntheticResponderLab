@@ -84,7 +84,7 @@ step inside the gated study workflow [32:11]. Promote it, do not re-architect it
 - [ ] **P2.5** Post-interview scoring: `fit_tier` and emotional classification, computed **after**
       the transcript exists, displayed with an explicit "scored after the interview, never before"
       label. (Depends on P0.2.)
-- [ ] **P2.6** Live cost meter — running total for the session, and a pre-flight estimate before the
+- [x] **P2.6** Live cost meter — running total for the session, and a pre-flight estimate before the
       run starts ("this run will cost about $X").
 
 ## P3 — Cost control (Yaza's proposal, Wang endorsed [23:02])

@@ -1,7 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { getDisplayApiErrorMessage } from "../src/lib/api";
+import {
+  getDisplayApiErrorMessage,
+  getInterviewSessionIdFromApiError,
+  getInterviewSessionUsageFromApiError,
+} from "../src/lib/api";
 
 test("getDisplayApiErrorMessage returns friendly quota copy", () => {
   assert.equal(
@@ -29,4 +33,31 @@ test("getDisplayApiErrorMessage keeps generic retry-later copy for unknown 429s"
     getDisplayApiErrorMessage(429, "too_many_requests", "fallback", "raw backend"),
     "Too many requests right now. Please wait a moment and try again."
   );
+});
+
+test("measured interview usage is recovered from a budget error", () => {
+  assert.deepEqual(
+    getInterviewSessionUsageFromApiError({
+      error: {
+        code: "quota_exceeded",
+        details: {
+          session_id: "ses_over_budget",
+          session_usage: {
+            tokens_in: 1041,
+            tokens_out: 57,
+            cost_usd: "0.00055275",
+          },
+        },
+      },
+    }),
+    { tokens_in: 1041, tokens_out: 57, cost_usd: "0.00055275" }
+  );
+  assert.equal(
+    getInterviewSessionIdFromApiError({
+      error: { details: { session_id: "ses_over_budget" } },
+    }),
+    "ses_over_budget"
+  );
+  assert.equal(getInterviewSessionUsageFromApiError({ error: { details: {} } }), null);
+  assert.equal(getInterviewSessionIdFromApiError({ error: { details: {} } }), null);
 });

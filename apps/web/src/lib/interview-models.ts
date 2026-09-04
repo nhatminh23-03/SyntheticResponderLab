@@ -39,3 +39,7 @@ export function estimateInterviewRunCost(
 export function formatInterviewRunCostEstimate(costUsd: number) {
   return `$${costUsd.toFixed(3)}`;
 }
+
+export function formatMeasuredInterviewCost(costUsd: string) {
+  return `$${Number(costUsd).toFixed(6)}`;
+}

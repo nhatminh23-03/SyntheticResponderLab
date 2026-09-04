@@ -27,6 +27,8 @@ _CLASS_BUDGET_LOCK_ID: Final[int] = 6_724_146_956_501_044_844
 @dataclass(frozen=True)
 class LlmBudgetSnapshot:
     run_spent_usd: Decimal
+    run_tokens_in: int
+    run_tokens_out: int
     run_budget_usd: Decimal
     class_spent_usd: Decimal
     class_budget_usd: Decimal
@@ -98,6 +100,8 @@ def load_interview_budget_snapshot(
     ).all()
     class_costs = session.scalars(select(cast(InterviewTurn.cost_usd, Text))).all()
     run_spent = sum((Decimal(row[0]) for row in run_usage), start=_ZERO_USD)
+    run_tokens_in = sum(row[1] for row in run_usage)
+    run_tokens_out = sum(row[2] for row in run_usage)
     class_spent = sum((Decimal(cost) for cost in class_costs), start=_ZERO_USD)
     run_provider_call_count = sum(
         Decimal(row[0]) > 0 or row[1] > 0 or row[2] > 0
@@ -105,6 +109,8 @@ def load_interview_budget_snapshot(
     )
     return LlmBudgetSnapshot(
         run_spent_usd=Decimal(run_spent),
+        run_tokens_in=run_tokens_in,
+        run_tokens_out=run_tokens_out,
         run_budget_usd=run_budget,
         class_spent_usd=class_spent,
         class_budget_usd=class_budget_usd(run_budget),

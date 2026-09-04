@@ -599,7 +599,20 @@ def continue_interview_chat(
     )
     session.commit()
 
+    session_usage = load_interview_budget_snapshot(
+        session,
+        session_id=session_id,
+        run_budget_usd=settings.llm_budget_usd,
+    )
+    session_usage_payload = {
+        "tokens_in": session_usage.run_tokens_in,
+        "tokens_out": session_usage.run_tokens_out,
+        "cost_usd": str(session_usage.run_spent_usd),
+    }
+
     if budget_error is not None:
+        budget_error.details["session_id"] = session_id
+        budget_error.details["session_usage"] = session_usage_payload
         raise budget_error
 
     return {
@@ -610,6 +623,7 @@ def continue_interview_chat(
         "source_run_id": latest_run.public_id,
         "reply": provider_result.text,
         "cache_hit": provider_result.cache_hit,
+        "session_usage": session_usage_payload,
     }
 
 

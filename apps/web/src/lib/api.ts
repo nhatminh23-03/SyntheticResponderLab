@@ -985,6 +985,66 @@ export type InterviewChatPayload = {
   session_id: string | null;
 };
 
+export type InterviewSessionUsage = {
+  tokens_in: number;
+  tokens_out: number;
+  cost_usd: string;
+};
+
+export class InterviewChatApiError extends Error {
+  readonly sessionId: string | null;
+  readonly sessionUsage: InterviewSessionUsage | null;
+
+  constructor(
+    message: string,
+    sessionId: string | null,
+    sessionUsage: InterviewSessionUsage | null
+  ) {
+    super(message);
+    this.name = "InterviewChatApiError";
+    this.sessionId = sessionId;
+    this.sessionUsage = sessionUsage;
+  }
+}
+
+function getInterviewErrorDetails(payload: unknown): Record<string, unknown> | null {
+  if (!payload || typeof payload !== "object") return null;
+  const error = (payload as { error?: unknown }).error;
+  if (!error || typeof error !== "object") return null;
+  const details = (error as { details?: unknown }).details;
+  return details && typeof details === "object"
+    ? (details as Record<string, unknown>)
+    : null;
+}
+
+export function getInterviewSessionIdFromApiError(payload: unknown): string | null {
+  const sessionId = getInterviewErrorDetails(payload)?.session_id;
+  return typeof sessionId === "string" && sessionId.trim() ? sessionId : null;
+}
+
+export function getInterviewSessionUsageFromApiError(
+  payload: unknown
+): InterviewSessionUsage | null {
+  const usage = getInterviewErrorDetails(payload)?.session_usage;
+  if (!usage || typeof usage !== "object") return null;
+
+  const { tokens_in, tokens_out, cost_usd } = usage as Record<string, unknown>;
+  if (
+    !Number.isInteger(tokens_in) ||
+    Number(tokens_in) < 0 ||
+    !Number.isInteger(tokens_out) ||
+    Number(tokens_out) < 0 ||
+    typeof cost_usd !== "string"
+  ) {
+    return null;
+  }
+  return {
+    tokens_in: Number(tokens_in),
+    tokens_out: Number(tokens_out),
+    cost_usd,
+  };
+}
+
 export type InterviewChatResponse = {
   persona_id: string;
   session_id: string;
@@ -993,6 +1053,7 @@ export type InterviewChatResponse = {
   source_run_id: string;
   reply: string;
   cache_hit: boolean;
+  session_usage: InterviewSessionUsage;
 };
 
 export type GetStudyResponse = {
@@ -2029,11 +2090,20 @@ export async function sendInterviewChatMessage(
   );
 
   if (!response.ok) {
-    throw new Error(
-      await readApiErrorMessage(
-        response,
-        `Interview chat failed with status ${response.status}`
-      )
+    const errorResponse = response.clone();
+    let sessionId: string | null = null;
+    let sessionUsage: InterviewSessionUsage | null = null;
+    try {
+      const errorPayload = await errorResponse.json();
+      sessionId = getInterviewSessionIdFromApiError(errorPayload);
+      sessionUsage = getInterviewSessionUsageFromApiError(errorPayload);
+    } catch {
+      // The shared message parser below handles empty and non-JSON responses.
+    }
+    throw new InterviewChatApiError(
+      await readApiErrorMessage(response, `Interview chat failed with status ${response.status}`),
+      sessionId,
+      sessionUsage
     );
   }
 

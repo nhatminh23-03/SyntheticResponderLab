@@ -32,6 +32,8 @@ def _snapshot(
     budget = Decimal(run_budget)
     return LlmBudgetSnapshot(
         run_spent_usd=Decimal(run_spent),
+        run_tokens_in=0,
+        run_tokens_out=0,
         run_budget_usd=budget,
         class_spent_usd=Decimal(class_spent),
         class_budget_usd=class_budget_usd(budget),
@@ -141,7 +143,11 @@ def test_snapshot_aggregates_one_run_and_the_whole_class(db_session):
     )
     db_session.add(study)
     db_session.flush()
-    for session_id, cost in [("session-a", "0.10"), ("session-a", "0.02"), ("session-b", "0.30")]:
+    for session_id, cost, tokens_in, tokens_out in [
+        ("session-a", "0.10", 100, 10),
+        ("session-a", "0.02", 125, 12),
+        ("session-b", "0.30", 300, 30),
+    ]:
         db_session.add(
             InterviewTurn(
                 study_id=study.id,
@@ -150,8 +156,8 @@ def test_snapshot_aggregates_one_run_and_the_whole_class(db_session):
                 role="assistant",
                 text="Measured answer",
                 model="provider/model",
-                tokens_in=100,
-                tokens_out=10,
+                tokens_in=tokens_in,
+                tokens_out=tokens_out,
                 cost_usd=Decimal(cost),
             )
         )
@@ -164,6 +170,8 @@ def test_snapshot_aggregates_one_run_and_the_whole_class(db_session):
     )
 
     assert snapshot.run_spent_usd == Decimal("0.12")
+    assert snapshot.run_tokens_in == 225
+    assert snapshot.run_tokens_out == 22
     assert snapshot.class_spent_usd == Decimal("0.42")
     assert snapshot.run_budget_usd == Decimal("0.50")
     assert snapshot.class_budget_usd == Decimal("15.00")
