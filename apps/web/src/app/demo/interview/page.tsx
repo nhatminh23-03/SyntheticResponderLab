@@ -83,7 +83,8 @@ export default function InterviewDemoPage() {
       const response = await fetch("/api/demo-interview", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ personaId: selectedId, question: asked }),
+        // turns is the pre-append render value, i.e. history without the question being asked.
+        body: JSON.stringify({ personaId: selectedId, question: asked, history: turns }),
       });
       const data = await response.json();
       if (data.systemPrompt) setSystemPrompt(data.systemPrompt);

@@ -194,10 +194,11 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const { personaId, question, model } = (await request.json()) as {
+  const { personaId, question, model, history } = (await request.json()) as {
     personaId?: string;
     question?: string;
     model?: string;
+    history?: { role: string; text: string }[];
   };
 
   if (!question?.trim()) {
@@ -232,6 +233,12 @@ export async function POST(request: NextRequest) {
       model: model || "google/gemini-2.5-flash",
       messages: [
         { role: "system", content: systemPrompt },
+        // Without the prior turns the model re-answers every follow-up as if it were the first
+        // question, so two similar questions come back with the same text.
+        ...(history ?? []).map((turn) => ({
+          role: turn.role === "persona" ? "assistant" : "user",
+          content: turn.text,
+        })),
         { role: "user", content: question },
       ],
       temperature: 0.8,
