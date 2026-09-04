@@ -81,7 +81,7 @@ step inside the gated study workflow [32:11]. Promote it, do not re-architect it
       a script.
 - [x] **P2.4** Side-by-side comparison view — same persona, same question, N models — so the
       cheap-vs-expensive difference is visible on screen. This is the pedagogical payload.
-- [ ] **P2.5** Post-interview scoring: `fit_tier` and emotional classification, computed **after**
+- [x] **P2.5** Post-interview scoring: `fit_tier` and emotional classification, computed **after**
       the transcript exists, displayed with an explicit "scored after the interview, never before"
       label. (Depends on P0.2.)
 - [x] **P2.6** Live cost meter — running total for the session, and a pre-flight estimate before the

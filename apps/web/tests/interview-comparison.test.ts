@@ -5,6 +5,7 @@ import {
   canRunInterviewComparison,
   defaultInterviewComparisonModelIds,
   orderInterviewComparisonModelIds,
+  POST_INTERVIEW_SCORE_LABEL,
   removeExpensiveComparisonModels,
   runInterviewComparison,
   toggleInterviewComparisonModel,
@@ -84,8 +85,26 @@ test("comparison sends the complete controlled comparison through the budgeted b
           data: {
             interview_comparison: {
               results: [
-                { model_id: cheap.id, answer: `Answer from ${cheap.id}`, error: null },
-                { model_id: expensive.id, answer: `Answer from ${expensive.id}`, error: null },
+                {
+                  model_id: cheap.id,
+                  answer: `Answer from ${cheap.id}`,
+                  error: null,
+                  post_interview_score: {
+                    fit_tier: "soft",
+                    emotional_classification: "positive",
+                    label: POST_INTERVIEW_SCORE_LABEL,
+                  },
+                },
+                {
+                  model_id: expensive.id,
+                  answer: `Answer from ${expensive.id}`,
+                  error: null,
+                  post_interview_score: {
+                    fit_tier: "strong",
+                    emotional_classification: "neutral",
+                    label: POST_INTERVIEW_SCORE_LABEL,
+                  },
+                },
               ],
             },
           },
@@ -105,8 +124,18 @@ test("comparison sends the complete controlled comparison through the budgeted b
     allow_expensive_models: true,
   });
   assert.deepEqual(results, [
-    { modelId: cheap.id, answer: `Answer from ${cheap.id}`, error: null },
-    { modelId: expensive.id, answer: `Answer from ${expensive.id}`, error: null },
+    {
+      modelId: cheap.id,
+      answer: `Answer from ${cheap.id}`,
+      error: null,
+      postInterviewScore: { fitTier: "soft", emotionalClassification: "positive" },
+    },
+    {
+      modelId: expensive.id,
+      answer: `Answer from ${expensive.id}`,
+      error: null,
+      postInterviewScore: { fitTier: "strong", emotionalClassification: "neutral" },
+    },
   ]);
 });
 
@@ -140,9 +169,14 @@ test("one failed or empty model answer does not hide the other comparison answer
   );
 
   assert.deepEqual(results, [
-    { modelId: cheap.id, answer: "Useful answer.", error: null },
-    { modelId: mid.id, answer: null, error: "Provider unavailable." },
-    { modelId: expensive.id, answer: null, error: "Model returned an empty answer." },
+    { modelId: cheap.id, answer: "Useful answer.", error: null, postInterviewScore: null },
+    { modelId: mid.id, answer: null, error: "Provider unavailable.", postInterviewScore: null },
+    {
+      modelId: expensive.id,
+      answer: null,
+      error: "Model returned an empty answer.",
+      postInterviewScore: null,
+    },
   ]);
 });
 
@@ -166,8 +200,8 @@ test("comparison repeats a backend budget error on every requested model", async
   );
 
   assert.deepEqual(results, [
-    { modelId: cheap.id, answer: null, error: "Budget hard stop." },
-    { modelId: mid.id, answer: null, error: "Budget hard stop." },
+    { modelId: cheap.id, answer: null, error: "Budget hard stop.", postInterviewScore: null },
+    { modelId: mid.id, answer: null, error: "Budget hard stop.", postInterviewScore: null },
   ]);
 });
 
@@ -187,8 +221,8 @@ test("comparison records a batch network failure against every requested model",
   );
 
   assert.deepEqual(results, [
-    { modelId: cheap.id, answer: null, error: "Network unavailable." },
-    { modelId: mid.id, answer: null, error: "Network unavailable." },
+    { modelId: cheap.id, answer: null, error: "Network unavailable.", postInterviewScore: null },
+    { modelId: mid.id, answer: null, error: "Network unavailable.", postInterviewScore: null },
   ]);
 
   const unknownFailures = await runInterviewComparison(
@@ -204,7 +238,17 @@ test("comparison records a batch network failure against every requested model",
     }
   );
   assert.deepEqual(unknownFailures, [
-    { modelId: mid.id, answer: null, error: "Model comparison request failed." },
-    { modelId: cheap.id, answer: null, error: "Model comparison request failed." },
+    {
+      modelId: mid.id,
+      answer: null,
+      error: "Model comparison request failed.",
+      postInterviewScore: null,
+    },
+    {
+      modelId: cheap.id,
+      answer: null,
+      error: "Model comparison request failed.",
+      postInterviewScore: null,
+    },
   ]);
 });

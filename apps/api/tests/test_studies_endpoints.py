@@ -693,6 +693,14 @@ def test_interview_comparison_is_budgeted_cached_and_persisted(client, db_sessio
     assert comparison["question"] == request_payload["question"]
     assert [result["model_id"] for result in comparison["results"]] == request_payload["model_ids"]
     assert all(result["error"] is None for result in comparison["results"])
+    assert all(
+        result["post_interview_score"] == {
+            "fit_tier": "latent",
+            "emotional_classification": "neutral",
+            "label": "scored after the interview, never before",
+        }
+        for result in comparison["results"]
+    )
     assert comparison["session_usage"] == {
         "tokens_in": 200,
         "tokens_out": 40,

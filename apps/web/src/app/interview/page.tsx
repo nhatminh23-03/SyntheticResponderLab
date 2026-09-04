@@ -18,6 +18,7 @@ import {
   canRunInterviewComparison,
   defaultInterviewComparisonModelIds,
   orderInterviewComparisonModelIds,
+  POST_INTERVIEW_SCORE_LABEL,
   removeExpensiveComparisonModels,
   runInterviewComparison,
   toggleInterviewComparisonModel,
@@ -398,9 +399,6 @@ function InterviewPageContent() {
                     {persona.lifestyle_tags.join(" · ")}
                   </p>
                 ) : null}
-                <p className="mt-3 text-xs leading-6 text-app-muted">
-                  fit tier: {persona.fit_tier || "not scored — scoring runs after the interview, never before"}
-                </p>
               </GlassPanel>
             ) : null}
 
@@ -585,6 +583,21 @@ function InterviewPageContent() {
                               </p>
                             )}
                           </div>
+                          {result.postInterviewScore ? (
+                            <div className="mt-auto border-t border-app-border pt-4">
+                              <p className="text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-app-muted">
+                                {POST_INTERVIEW_SCORE_LABEL}
+                              </p>
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                <BadgeChip>
+                                  fit tier: {result.postInterviewScore.fitTier}
+                                </BadgeChip>
+                                <BadgeChip>
+                                  emotion: {result.postInterviewScore.emotionalClassification}
+                                </BadgeChip>
+                              </div>
+                            </div>
+                          ) : null}
                         </article>
                       );
                     })}

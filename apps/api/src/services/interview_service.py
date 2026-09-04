@@ -36,6 +36,7 @@ from src.services.interviewer_agent import (
     normalize_interviewer_question,
     sanitize_interview_transcript,
 )
+from src.services.interview_scoring import score_persisted_interview_transcript
 from src.services.llm_budget import (
     LlmBudgetSnapshot,
     enforce_budget_open,
@@ -643,12 +644,20 @@ def compare_interview_models(
             ]
         )
         session.flush()
+        post_interview_score = score_persisted_interview_transcript(
+            session,
+            study_id=study.id,
+            persona_id=persona_id,
+            session_id=session_id,
+            model=provider_result.model,
+        )
         results.append(
             {
                 "model_id": model_id,
                 "answer": provider_result.text,
                 "error": None,
                 "cache_hit": provider_result.cache_hit,
+                "post_interview_score": post_interview_score,
             }
         )
         if budget_error is not None:
