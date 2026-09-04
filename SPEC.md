@@ -109,7 +109,7 @@ is recorded: a pure replay "wouldn't really be an app." The resolution is a **ca
 Wang's design, confirmed on the call. **Three comparisons, not one.**
 
 - [x] **P4.1** `analysis/` directory, R project, `renv` lockfile. R is at `/usr/local/bin/Rscript`.
-- [ ] **P4.2** **Arm A** — hard-screened draw. Apply the existing filters, randomly draw 600, compare
+- [x] **P4.2** **Arm A** — hard-screened draw. Apply the existing filters, randomly draw 600, compare
       to the real 600. [12:58]
 - [ ] **P4.3** **Arm B** — distribution-matched draw. Draw 600 matched to the *observed demographic
       distribution of the real 600*, via iterative proportional fitting (IPF) against the PUMS frame.

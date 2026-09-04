@@ -48,6 +48,34 @@ mean-, standard-deviation-, and correlation-RMSE metrics and a held-out audit. S
 are replaced with positional held-out IDs in written predictions. The real held-out answers are
 used only for local R evaluation; this workflow has no model/provider calls and no prompt path.
 
+## Arm A: hard-screened draw
+
+`run_arm_a.R` reuses the three PUMS screens in `screen_counts.R`, then makes one reproducible,
+`WGTP`-weighted draw of 600 California households without replacement. The seed is fixed in code
+at `20260904`; it is deliberately not a command-line option. It compares the draw with the 600
+completed real-panel respondents on harmonized age, income, gender, geography, outdoor-space
+screen/proxy, and combined hard-screen eligibility.
+
+For the real panel's frozen PQ1 screener, both “Yes” and “I'm not sure, but possibly” pass: either
+response says the structure could potentially be placed, and both routes reached the completed
+survey. This preserves the SPEC's documented approximately 21% real-panel hard-screen pass rate.
+
+The real file is read locally and only aggregate comparison counts leave the analysis process. The
+individual output contains synthetic PUMS respondents only, and this script has no model/provider
+call or prompt path.
+
+```sh
+/usr/local/bin/Rscript analysis/run_arm_a.R \
+  --housing /read-only/pums/acs_housing_slim.parquet \
+  --person /read-only/pums/acs_person_slim.parquet \
+  --real /read-only/neo_smart_living/survey-760085-2026-03-25-raw-data.csv \
+  --output analysis/output/arm_a
+```
+
+Parquet input uses the same optional `arrow` dependency as `screen_counts.R`. The output directory
+contains the 600-row synthetic draw, aggregate categorical and age comparisons, the screen audit,
+the PUMS funnel, and provenance recording the fixed seed and data-isolation rule.
+
 Run the analysis checks from the repository root:
 
 ```sh

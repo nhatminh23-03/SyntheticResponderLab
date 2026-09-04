@@ -26,6 +26,7 @@ person <- data.frame(
   SERIALNO = c("h1", "h2", "h3", "h4", "h4", "h5", "h6", "h7", "h8", "h9", "h10"),
   RELSHIPP = c(rep(20, 4), 21, rep(20, 3), 21, 20, 20),
   AGEP = c(40, 40, 40, 30, 8, 65, 29, 66, 45, 45, 45),
+  SEX = rep(c(1, 2), length.out = 11),
   stringsAsFactors = FALSE
 )
 

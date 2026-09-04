@@ -63,7 +63,7 @@ screen_pums_frames <- function(housing, person, draw_n = DEFAULT_DRAW_N, seed = 
     c("SERIALNO", "WGTP", "TEN", "BLD", "HINCP", "ADJINC"),
     "housing PUMS frame"
   )
-  require_columns(person, c("SERIALNO", "RELSHIPP", "AGEP"), "person PUMS frame")
+  require_columns(person, c("SERIALNO", "RELSHIPP", "AGEP", "SEX"), "person PUMS frame")
 
   if (anyDuplicated(housing$SERIALNO)) {
     stop("Housing PUMS SERIALNO must be unique for the pipeline's one-to-one join.")
@@ -101,7 +101,7 @@ screen_pums_frames <- function(housing, person, draw_n = DEFAULT_DRAW_N, seed = 
 
   householders <- person[
     !is.na(as_number(person$RELSHIPP)) & as_number(person$RELSHIPP) == REFERENCE_PERSON,
-    c("SERIALNO", "AGEP"),
+    c("SERIALNO", "AGEP", "SEX"),
     drop = FALSE
   ]
   if (anyDuplicated(householders$SERIALNO)) {
