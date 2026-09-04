@@ -48,6 +48,42 @@ mean-, standard-deviation-, and correlation-RMSE metrics and a held-out audit. S
 are replaced with positional held-out IDs in written predictions. The real held-out answers are
 used only for local R evaluation; this workflow has no model/provider calls and no prompt path.
 
+## Registered question-type test battery
+
+`run_test_battery.R` compares one real response file with one synthetic response file using a
+question registry that must be frozen before examining comparison results. The registry has one row
+per pre-coded analyzable item and the columns `question_id`, `question_type`,
+`equivalence_margin`, and (for binary items) `positive_level`. Supported types are:
+
+- `continuous`: Welch two-sample t-test, raw mean difference with a 95% CI, Hedges' g with an
+  approximate 95% CI, and a Welch TOST on the raw-unit margin.
+- `binary`: two-sample unpooled Wald z-test and risk difference with a 95% CI; TOST uses the
+  registered absolute risk-difference margin. Pre-code each multi-select option as its own binary
+  item.
+- `categorical`: Pearson chi-square test and Cramer's V with a fixed-seed bootstrap standard-error 95%
+  CI. TOST is applied to every category's proportion difference, and the question is equivalent
+  only if every category passes the registered absolute proportion-difference margin.
+
+Likert items must be registered according to the analysis decision made before seeing results:
+`continuous` when numeric spacing is being treated as meaningful, otherwise `categorical`. The
+runner does not infer types or margins from observed answers. At alpha 0.05, TOST reports the
+corresponding 90% CI. Small expected cells are retained for the requested Wald/chi-square battery
+but explicitly flagged in `assumption_note`.
+
+```sh
+/usr/local/bin/Rscript analysis/run_test_battery.R \
+  --real /read-only/real-responses.csv \
+  --synthetic analysis/output/synthetic-responses.csv \
+  --registry analysis/question-test-registry.csv \
+  --real-id respondent_id \
+  --synthetic-id synthetic_id \
+  --output analysis/output/test_battery
+```
+
+The output contains `test_results.csv`, per-estimand `tost_details.csv`, the exact validated registry
+snapshot, and provenance including a registry checksum. It never writes respondent-level real
+answers and has no model/provider call or prompt path.
+
 ## Arm A: hard-screened draw
 
 `run_arm_a.R` reuses the three PUMS screens in `screen_counts.R`, then makes one reproducible,

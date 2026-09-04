@@ -118,7 +118,7 @@ Wang's design, confirmed on the call. **Three comparisons, not one.**
 - [ ] **P4.4** **Arm C** — Yufan's ~300-person convenience sample (students' families and friends).
       Match its demographics, draw 300, compare. [13:46] **Blocked: we do not have this file.** Ask
       Wang for it — she does not know whether Yufan ever sent it.
-- [ ] **P4.5** Test battery keyed to question type: t-test for continuous, **Wald test**, chi-square
+- [x] **P4.5** Test battery keyed to question type: t-test for continuous, **Wald test**, chi-square
       for categorical. [14:23] Report effect sizes and CIs, not bare p-values — "not significantly
       different" on n=600 is not evidence of equivalence. Add an equivalence test (TOST) with a
       pre-registered margin so "close enough" is a claim we can actually defend.
