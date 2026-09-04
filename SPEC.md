@@ -57,7 +57,7 @@ step inside the gated study workflow [32:11]. Promote it, do not re-architect it
 - [x] **P1.2** Persona list reads from the backend, not a local CSV path. Add
       `GET /api/v1/personas` serving the 30 fixed personas from the database, seeded from
       `personas-B.csv`. The `DEMO_PERSONA_CSV` env fallback goes away.
-- [ ] **P1.3** Free-text question box (already present) plus the suggested-question chips. Student
+- [x] **P1.3** Free-text question box (already present) plus the suggested-question chips. Student
       leads the interview; the transcript is the artifact.
 - [x] **P1.4** Route the section through the FastAPI interview endpoints
       (`POST /api/v1/studies/{id}/interview/chat`, which exists and has no caller) instead of the

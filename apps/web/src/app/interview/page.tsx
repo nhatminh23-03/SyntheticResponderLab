@@ -287,7 +287,7 @@ function InterviewPageContent() {
                   key={entry.persona_id}
                   type="button"
                   onClick={() => selectPersona(entry.persona_id)}
-                  disabled={comparisonLoading}
+                  disabled={loading || comparisonLoading}
                   className={cn(
                     "rounded-xl border px-3.5 py-2.5 text-left transition duration-200 disabled:cursor-not-allowed disabled:opacity-60",
                     entry.persona_id === selectedId
