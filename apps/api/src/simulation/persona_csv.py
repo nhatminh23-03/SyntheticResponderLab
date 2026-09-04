@@ -75,8 +75,11 @@ def _census_profile(row: dict) -> str:
         parts.append(f"Your household income is about ${int(income):,} a year")
 
     beds, built = _clean(row.get("bedrooms")), _clean(row.get("year_built"))
-    if beds:
+    # "0 bedrooms" is a studio in ACS terms; saying it out loud reads like missing data.
+    if beds and beds != "0":
         parts.append(f"Your home has {beds} bedrooms" + (f" and was built {built}" if built else ""))
+    elif built:
+        parts.append(f"Your home was built {built}")
 
     burden = _clean(row.get("housing_cost_pct_of_income"))
     if burden:
