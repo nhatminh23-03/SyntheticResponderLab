@@ -76,6 +76,35 @@ Parquet input uses the same optional `arrow` dependency as `screen_counts.R`. Th
 contains the 600-row synthetic draw, aggregate categorical and age comparisons, the screen audit,
 the PUMS funnel, and provenance recording the fixed seed and data-isolation rule.
 
+## Arm B: distribution-matched draw
+
+`run_arm_b.R` builds an unscreened frame of occupied adult PUMS householders and uses iterative
+proportional fitting (raking) to match the observed real-panel margins for age band, gender,
+household-income band, and state. Raking starts from `WGTP`, must converge within a fixed tolerance,
+and is followed by a reproducible, quota-balanced 600-person draw without replacement. The emitted
+draw must reproduce every observed marginal count exactly; it fails if the joint PUMS support cannot
+realize those margins. The seed is fixed in code at `20260904` and cannot be changed from the command
+line.
+
+Because the real 600 is national, Arm B requires nationwide PUMS housing and person inputs (for
+example, the state PUMS extracts concatenated with their original `ST` fields). The California-only
+files created by `research/neo_persona_set/01_fetch_acs.py` cannot support the real panel's state
+margin; Arm B rejects them rather than silently reporting a false geographic match. This task does
+not change Yaza's pipeline or its files.
+
+Only the six demographic columns needed for validation are read from the real file inside the Arm B
+analysis. Outputs contain synthetic PUMS respondents, aggregate demographic margins, IPF convergence,
+frame counts, and provenance. Individual real rows and survey answers are never written, and there is
+no model/provider call or prompt path.
+
+```sh
+/usr/local/bin/Rscript analysis/run_arm_b.R \
+  --housing /read-only/national-pums/acs_housing_slim.parquet \
+  --person /read-only/national-pums/acs_person_slim.parquet \
+  --real /read-only/neo_smart_living/survey-760085-2026-03-25-raw-data.csv \
+  --output analysis/output/arm_b
+```
+
 Run the analysis checks from the repository root:
 
 ```sh
