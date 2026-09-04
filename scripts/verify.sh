@@ -15,6 +15,12 @@ if [ -f apps/web/package.json ]; then
   # into the pytest process below makes 31 API tests fail with 503s.
   (
     if [ -f apps/web/.env.local ]; then set -a; . ./apps/web/.env.local; set +a; fi
+    # A clean checkout has blank production-only values in .env.example. The build only validates
+    # these strings; it does not contact the configured backend, so isolated verify-only values keep
+    # the gate runnable without requiring developer or deployment secrets.
+    export API_BASE_URL="${API_BASE_URL:-http://127.0.0.1:8000}"
+    export DEPLOYMENT_SHARED_SECRET="${DEPLOYMENT_SHARED_SECRET:-verify-only-shared-secret}"
+    export APP_ACCESS_PASSWORD="${APP_ACCESS_PASSWORD:-verify-only-access-password}"
     npm --prefix apps/web run build
   ) >/tmp/verify-web.log 2>&1 \
     || { echo "[verify] FAIL web"; grep -E "^Error|error TS|Failed to compile" /tmp/verify-web.log | head -20; rc=1; }

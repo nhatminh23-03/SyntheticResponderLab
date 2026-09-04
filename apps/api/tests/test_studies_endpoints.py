@@ -465,10 +465,8 @@ def test_load_neo_survey_preset_endpoint(client):
 
 
 def test_upload_aytm_docx_succeeds_with_fallback_parser(client):
-    workspace_root = Path(__file__).resolve().parents[3]
     docx_path = (
-        workspace_root
-        / "NeoSmart-Hackathon-App"
+        Path(client.app.state.settings.legacy_app_root)
         / "Provided Info"
         / "aytm Survey #760085  (Neo Smart Living — Tahoe Mini Survey).docx"
     )
