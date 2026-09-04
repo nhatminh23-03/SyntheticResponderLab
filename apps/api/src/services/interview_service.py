@@ -29,13 +29,21 @@ from src.services.interview_cache import (
     ReplayOnlyCacheMissError,
     resolve_interview_answer,
 )
+from src.services.interviewer_agent import (
+    build_interviewer_messages,
+    derive_interviewer_turn_plan,
+    normalize_interviewer_question,
+    sanitize_interview_transcript,
+)
 from src.services.llm_budget import (
+    LlmBudgetSnapshot,
     enforce_budget_open,
     enforce_measured_cost,
     enforce_run_preflight,
     load_interview_budget_snapshot,
     lock_class_budget_for_transaction,
 )
+from src.services.model_catalog import DEFAULT_INTERVIEW_MODEL_ID
 from src.services.usage_limits import (
     METRIC_INTERVIEW_RUN,
     assert_no_in_flight_provider_job,
@@ -624,6 +632,184 @@ def continue_interview_chat(
         "reply": provider_result.text,
         "cache_hit": provider_result.cache_hit,
         "session_usage": session_usage_payload,
+    }
+
+
+def generate_interviewer_question(
+    session: Session,
+    settings: AppSettings,
+    study: Study,
+    payload: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Ask the AI interviewer for one brief-led, answer-derived question."""
+    brief_section = _get_section_or_none(session, study, "research_brief")
+    research_brief = brief_section and brief_section.value_json
+    if not research_brief or not str(research_brief.get("primary_question") or "").strip():
+        raise ConflictApiError("Save a research brief before starting an AI-led interview.")
+
+    persona_id = str(payload.get("persona_id") or "").strip()
+    if not persona_id:
+        raise ValidationApiError("persona_id is required.")
+    interviewer_model = str(
+        payload.get("interviewer_model") or DEFAULT_INTERVIEW_MODEL_ID
+    ).strip()
+    interviewee_model = str(
+        payload.get("interviewee_model") or DEFAULT_INTERVIEW_MODEL_ID
+    ).strip()
+    persona_count = payload.get("persona_count", 3)
+    try:
+        transcript = sanitize_interview_transcript(payload.get("messages") or [])
+        turn_plan = derive_interviewer_turn_plan(
+            persona_count=persona_count,
+            interviewer_model=interviewer_model,
+            interviewee_model=interviewee_model,
+        )
+    except ValueError as exc:
+        raise ValidationApiError(str(exc)) from exc
+
+    session_id = str(payload.get("session_id") or "").strip() or make_public_id("ses")
+    persisted_answer_count = len(
+        session.scalars(
+            select(InterviewTurn).where(
+                InterviewTurn.study_id == study.id,
+                InterviewTurn.persona_id == persona_id,
+                InterviewTurn.session_id == session_id,
+                InterviewTurn.role == "assistant",
+            )
+        ).all()
+    )
+    completed_turns = max(
+        sum(message["role"] == "assistant" for message in transcript),
+        persisted_answer_count,
+    )
+    if completed_turns >= turn_plan.turn_limit:
+        return {
+            "persona_id": persona_id,
+            "session_id": session_id,
+            "question": None,
+            "complete": True,
+            "turn_number": turn_plan.turn_limit,
+            "turn_limit": turn_plan.turn_limit,
+            "interviewer_model": interviewer_model,
+            "interviewee_model": interviewee_model,
+            "estimated_cost_per_turn_usd": str(turn_plan.estimated_cost_per_turn_usd),
+            "estimated_run_cost_usd": str(turn_plan.estimated_run_cost_usd),
+            "session_usage": _serialize_session_usage(
+                load_interview_budget_snapshot(
+                    session,
+                    session_id=session_id,
+                    run_budget_usd=settings.llm_budget_usd,
+                )
+            ),
+        }
+
+    turn_number = completed_turns + 1
+    messages = build_interviewer_messages(
+        research_brief=research_brief,
+        transcript=transcript,
+        turn_number=turn_number,
+        turn_limit=turn_plan.turn_limit,
+    )
+    budget_error: QuotaExceededApiError | None = None
+
+    def call_provider() -> OpenRouterChatResult:
+        nonlocal budget_error
+        lock_class_budget_for_transaction(session)
+        snapshot = load_interview_budget_snapshot(
+            session,
+            session_id=session_id,
+            run_budget_usd=settings.llm_budget_usd,
+        )
+        enforce_budget_open(snapshot)
+        # Recheck the run estimate on every paid cache miss. The request carries
+        # the selected models and batch size, so checking only the first call
+        # would let a later request switch to an over-budget configuration.
+        enforce_run_preflight(
+            estimated_cost_usd=turn_plan.estimated_run_cost_usd,
+            class_spent_usd=(
+                snapshot.class_spent_usd
+                if snapshot.run_provider_call_count == 0
+                else Decimal("0")
+            ),
+            run_budget_usd=snapshot.run_budget_usd,
+        )
+
+        api_key = settings.openrouter_api_key or ""
+        if not api_key:
+            raise ConflictApiError("OPENROUTER_API_KEY is not configured.")
+        answer = _call_openrouter_messages(
+            api_key=api_key,
+            model=interviewer_model,
+            messages=messages,
+            timeout=90,
+        )
+        try:
+            enforce_measured_cost(snapshot, cost_usd=answer.cost_usd)
+        except QuotaExceededApiError as exc:
+            budget_error = exc
+        return answer
+
+    try:
+        provider_result = resolve_interview_answer(
+            session,
+            cache_mode=settings.cache_mode,
+            persona_id=persona_id,
+            model=interviewer_model,
+            question="AI interviewer: derive the next question",
+            prior_turns=messages,
+            call_provider=call_provider,
+        )
+    except ReplayOnlyCacheMissError as exc:
+        raise ConflictApiError(str(exc)) from exc
+
+    question = normalize_interviewer_question(provider_result.text)
+    session.add(
+        InterviewTurn(
+            study_id=study.id,
+            persona_id=persona_id,
+            session_id=session_id,
+            role="user",
+            text=question,
+            model=provider_result.model,
+            tokens_in=provider_result.tokens_in,
+            tokens_out=provider_result.tokens_out,
+            cost_usd=provider_result.cost_usd,
+            created_at=utcnow(),
+        )
+    )
+    session.commit()
+    session_usage = load_interview_budget_snapshot(
+        session,
+        session_id=session_id,
+        run_budget_usd=settings.llm_budget_usd,
+    )
+    session_usage_payload = _serialize_session_usage(session_usage)
+    if budget_error is not None:
+        budget_error.details["session_id"] = session_id
+        budget_error.details["session_usage"] = session_usage_payload
+        raise budget_error
+
+    return {
+        "persona_id": persona_id,
+        "session_id": session_id,
+        "question": question,
+        "complete": False,
+        "turn_number": turn_number,
+        "turn_limit": turn_plan.turn_limit,
+        "interviewer_model": provider_result.model,
+        "interviewee_model": interviewee_model,
+        "cache_hit": provider_result.cache_hit,
+        "estimated_cost_per_turn_usd": str(turn_plan.estimated_cost_per_turn_usd),
+        "estimated_run_cost_usd": str(turn_plan.estimated_run_cost_usd),
+        "session_usage": session_usage_payload,
+    }
+
+
+def _serialize_session_usage(snapshot: LlmBudgetSnapshot) -> dict[str, Any]:
+    return {
+        "tokens_in": snapshot.run_tokens_in,
+        "tokens_out": snapshot.run_tokens_out,
+        "cost_usd": str(snapshot.run_spent_usd),
     }
 
 

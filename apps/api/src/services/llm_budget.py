@@ -93,10 +93,7 @@ def load_interview_budget_snapshot(
             cast(InterviewTurn.cost_usd, Text),
             InterviewTurn.tokens_in,
             InterviewTurn.tokens_out,
-        ).where(
-            InterviewTurn.session_id == session_id,
-            InterviewTurn.role == "assistant",
-        )
+        ).where(InterviewTurn.session_id == session_id)
     ).all()
     class_costs = session.scalars(select(cast(InterviewTurn.cost_usd, Text))).all()
     run_spent = sum((Decimal(row[0]) for row in run_usage), start=_ZERO_USD)

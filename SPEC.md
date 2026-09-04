@@ -76,7 +76,7 @@ step inside the gated study workflow [32:11]. Promote it, do not re-architect it
       a price-per-1M-token label next to each, cheapest first.
 - [x] **P2.2** Persona-count selector. Floor of 3 (Anderson's stated minimum for a meaningful
       comparison), default 3, ceiling 30.
-- [ ] **P2.3** Interviewer agent: given the research brief, asks the next question from the prior
+- [x] **P2.3** Interviewer agent: given the research brief, asks the next question from the prior
       answer rather than replaying a fixed list. This is the piece that makes it AI-to-AI rather than
       a script.
 - [ ] **P2.4** Side-by-side comparison view — same persona, same question, N models — so the

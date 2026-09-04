@@ -12,6 +12,7 @@ from src.config.settings import AppSettings
 from src.services.exceptions import PayloadTooLargeApiError, UnsupportedMediaTypeApiError
 from src.schemas.study import (
     InterviewChatRequest,
+    InterviewerNextQuestionRequest,
     PersonaPreviewRequest,
     ProductUrlAutofillRequest,
     SimulationRunRequest,
@@ -47,6 +48,7 @@ from src.services.study_service import (
 )
 from src.services.interview_service import (
     continue_interview_chat,
+    generate_interviewer_question,
     get_interview_synthesis,
     save_interview_synthesis_config,
     start_interview_run,
@@ -648,3 +650,17 @@ def interview_chat_endpoint(
     study = get_owned_study_or_404(db, study_id, current_user)
     result = continue_interview_chat(db, settings, study, payload.model_dump())
     return response_envelope(request, {"interview_chat": result})
+
+
+@router.post("/api/v1/studies/{study_id}/interview/interviewer/next-question")
+def interviewer_next_question_endpoint(
+    study_id: str,
+    payload: InterviewerNextQuestionRequest,
+    request: Request,
+    db: Session = Depends(get_db_session),
+    settings: AppSettings = Depends(get_settings),
+    current_user: AuthUser = Depends(get_current_user),
+):
+    study = get_owned_study_or_404(db, study_id, current_user)
+    result = generate_interviewer_question(db, settings, study, payload.model_dump())
+    return response_envelope(request, {"interviewer_question": result})

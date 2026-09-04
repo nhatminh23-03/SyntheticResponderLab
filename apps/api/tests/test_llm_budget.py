@@ -178,6 +178,43 @@ def test_snapshot_aggregates_one_run_and_the_whole_class(db_session):
     assert snapshot.run_provider_call_count == 2
 
 
+def test_snapshot_includes_paid_ai_interviewer_questions(db_session):
+    study = Study(
+        public_id="study_interviewer_budget",
+        owner_user_id="student",
+        owner_org_id=None,
+        study_mode="neo_smart",
+        lifecycle_status="draft",
+    )
+    db_session.add(study)
+    db_session.flush()
+    db_session.add(
+        InterviewTurn(
+            study_id=study.id,
+            persona_id="neo-001",
+            session_id="agent-session",
+            role="user",
+            text="Which part of installation feels uncertain?",
+            model="provider/interviewer",
+            tokens_in=80,
+            tokens_out=9,
+            cost_usd=Decimal("0.004"),
+        )
+    )
+    db_session.flush()
+
+    snapshot = load_interview_budget_snapshot(
+        db_session,
+        session_id="agent-session",
+        run_budget_usd="0.75",
+    )
+
+    assert snapshot.run_spent_usd == Decimal("0.004")
+    assert snapshot.run_tokens_in == 80
+    assert snapshot.run_tokens_out == 9
+    assert snapshot.run_provider_call_count == 1
+
+
 def test_postgres_budget_lock_uses_one_class_wide_advisory_lock():
     calls = []
 
