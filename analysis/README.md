@@ -11,6 +11,54 @@ renv::restore(project = "analysis")
 The initial P4.1 suite uses only base R. Add a package to `renv.lock` in the same change that first
 uses it.
 
+## Complete reproducible report
+
+`run_all.R` rebuilds every implemented validation component in memory and writes one self-contained
+HTML report. It does not read prior files from `analysis/output/`. The report includes Arm A, Arm B,
+an explicit blocked record for Arm C, all five held-out non-LLM baselines, every registered question
+test and per-estimand TOST result, fixed-seed provenance, and input checksums. It contains aggregate
+results only and makes no model or provider calls.
+
+For the zero-argument command, place the local, ignored inputs at these paths:
+
+- `analysis/data/arm_a_housing.parquet` and `analysis/data/arm_a_person.parquet` — California PUMS
+- `analysis/data/arm_b_housing.parquet` and `analysis/data/arm_b_person.parquet` — nationwide PUMS
+- `analysis/data/real_responses.csv` — the read-only real panel source (do not copy it into prompts)
+- `analysis/data/synthetic_responses.csv` — the synthetic response comparison sample
+- `analysis/data/question_registry.csv` — the frozen 32-item test registry
+
+Then run:
+
+```sh
+/usr/local/bin/Rscript analysis/run_all.R
+```
+
+The report is rebuilt at `analysis/output/validation_report.html`. Defaults assume `Response ID` and
+`synthetic_id` ID columns, `Gender,Household Income,State` strata, and
+`Age,Gender,Household Income,State` k-NN predictors. All paths and column selections can be supplied
+explicitly without making seeds configurable:
+
+```sh
+/usr/local/bin/Rscript analysis/run_all.R \
+  --arm-a-housing /read-only/california/acs_housing_slim.parquet \
+  --arm-a-person /read-only/california/acs_person_slim.parquet \
+  --arm-b-housing /read-only/national/acs_housing_slim.parquet \
+  --arm-b-person /read-only/national/acs_person_slim.parquet \
+  --real /read-only/neo_smart_living/real-responses.csv \
+  --synthetic /local/synthetic-responses.csv \
+  --registry /local/question-registry.csv \
+  --real-id "Response ID" \
+  --synthetic-id synthetic_id \
+  --strata "Gender,Household Income,State" \
+  --knn "Age,Gender,Household Income,State" \
+  --output analysis/output/validation_report.html
+```
+
+Arm C is not accepted as an optional substitute: until Yufan's convenience-sample file is received,
+the report keeps that arm visibly blocked and does not fabricate a comparison. P4.7 interview-theme
+validation is also identified as outside this quantitative report rather than represented by a
+placeholder statistic.
+
 ## Layout
 
 - `R/` contains reusable analysis functions.

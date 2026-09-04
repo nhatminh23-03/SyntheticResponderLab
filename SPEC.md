@@ -129,7 +129,7 @@ Wang's design, confirmed on the call. **Three comparisons, not one.**
       and synthetic transcripts, then measure theme overlap. Use a fixed codebook and report
       inter-rater agreement between two different judge models — a single judge grading itself is
       not evidence.
-- [ ] **P4.8** One reproducible report: `Rscript analysis/run_all.R` → a single HTML with every arm,
+- [x] **P4.8** One reproducible report: `Rscript analysis/run_all.R` → a single HTML with every arm,
       every test, seeds fixed. Wang teaches from this; it has to rebuild from scratch.
 
 ## P5 — Class-readiness (before Sept 21)

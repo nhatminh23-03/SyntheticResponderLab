@@ -91,10 +91,17 @@ read_arm_b_real_demographics <- function(path) {
   )
 }
 
-harmonize_arm_b_real <- function(real_data, expected_rows = ARM_B_DRAW_N) {
+harmonize_arm_b_real <- function(
+  real_data,
+  expected_rows = ARM_B_DRAW_N,
+  id_column = "Response ID"
+) {
+  if (length(id_column) != 1L || is.na(id_column) || !nzchar(id_column)) {
+    stop("Arm B real respondent ID must name exactly one non-empty column.")
+  }
   arm_b_require_columns(
     real_data,
-    c("Response ID", "Status", "Gender", "Age", "Household Income", "State"),
+    c(id_column, "Status", "Gender", "Age", "Household Income", "State"),
     "real panel"
   )
   status <- trimws(as.character(real_data$Status))
@@ -103,8 +110,8 @@ harmonize_arm_b_real <- function(real_data, expected_rows = ARM_B_DRAW_N) {
     stop(sprintf("Expected exactly %d completed real respondents; found %d.", expected_rows, nrow(completed)))
   }
 
-  response_ids <- trimws(as.character(completed[["Response ID"]]))
-  if (any(is.na(completed[["Response ID"]])) || any(response_ids == "") || anyDuplicated(response_ids)) {
+  response_ids <- trimws(as.character(completed[[id_column]]))
+  if (any(is.na(completed[[id_column]])) || any(response_ids == "") || anyDuplicated(response_ids)) {
     stop("Completed real respondent IDs must be present and unique.")
   }
 
@@ -658,9 +665,14 @@ run_arm_b <- function(
   seed = ARM_B_SEED,
   expected_real_rows = ARM_B_DRAW_N,
   tolerance = ARM_B_IPF_TOLERANCE,
-  max_iterations = ARM_B_IPF_MAX_ITERATIONS
+  max_iterations = ARM_B_IPF_MAX_ITERATIONS,
+  real_id_column = "Response ID"
 ) {
-  real <- harmonize_arm_b_real(real_data, expected_rows = expected_real_rows)
+  real <- harmonize_arm_b_real(
+    real_data,
+    expected_rows = expected_real_rows,
+    id_column = real_id_column
+  )
   pums <- build_arm_b_pums_frame(housing, person)
   targets <- arm_b_targets(real)
   fitted <- fit_arm_b_ipf(

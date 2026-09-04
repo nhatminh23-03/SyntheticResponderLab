@@ -115,10 +115,17 @@ harmonize_arm_a_synthetic <- function(selected) {
   )
 }
 
-harmonize_arm_a_real <- function(real_data, expected_rows = ARM_A_DRAW_N) {
+harmonize_arm_a_real <- function(
+  real_data,
+  expected_rows = ARM_A_DRAW_N,
+  id_column = "Response ID"
+) {
+  if (length(id_column) != 1L || is.na(id_column) || !nzchar(id_column)) {
+    stop("Arm A real respondent ID must name exactly one non-empty column.")
+  }
   arm_a_require_columns(
     real_data,
-    c("Response ID", "Status", "Gender", "Age", "Household Income", "State"),
+    c(id_column, "Status", "Gender", "Age", "Household Income", "State"),
     "real panel"
   )
   outdoor_column <- arm_a_prefixed_column(real_data, ARM_A_OUTDOOR_PREFIX)
@@ -128,8 +135,8 @@ harmonize_arm_a_real <- function(real_data, expected_rows = ARM_A_DRAW_N) {
     stop(sprintf("Expected exactly %d completed real respondents; found %d.", expected_rows, nrow(completed)))
   }
 
-  response_ids <- trimws(as.character(completed[["Response ID"]]))
-  if (any(is.na(completed[["Response ID"]])) || any(response_ids == "") || anyDuplicated(response_ids)) {
+  response_ids <- trimws(as.character(completed[[id_column]]))
+  if (any(is.na(completed[[id_column]])) || any(response_ids == "") || anyDuplicated(response_ids)) {
     stop("Completed real respondent IDs must be present and unique.")
   }
 
@@ -276,12 +283,17 @@ run_arm_a <- function(
   real_data,
   draw_n = ARM_A_DRAW_N,
   seed = ARM_A_SEED,
-  expected_real_rows = ARM_A_DRAW_N
+  expected_real_rows = ARM_A_DRAW_N,
+  real_id_column = "Response ID"
 ) {
   validate_arm_a_pums_sources(housing, person)
   screened <- screen_pums_frames(housing, person, draw_n = draw_n, seed = seed)
   synthetic <- harmonize_arm_a_synthetic(screened$selected)
-  real <- harmonize_arm_a_real(real_data, expected_rows = expected_real_rows)
+  real <- harmonize_arm_a_real(
+    real_data,
+    expected_rows = expected_real_rows,
+    id_column = real_id_column
+  )
   comparison <- compare_arm_a(synthetic, real)
   age_summary <- summarize_arm_a_age(synthetic, real)
   screen_audit <- arm_a_screen_audit(synthetic, real)
