@@ -168,8 +168,12 @@ def build_system_prompt(
     persona_desc = (
         f"You are a {age} year-old {ownership} living in a {home_type}. "
         f"Your household income is in the {income} range. "
-        f"You work {work_mode}."
+        f"Your work arrangement: {work_mode}."
     )
+    # Census-grounded personas carry real household detail; the buckets above lose all of it.
+    census_profile = persona.get("census_profile") or ""
+    if census_profile:
+        persona_desc += f" {census_profile}"
     if lifestyle_tags:
         persona_desc += f" Your lifestyle includes: {', '.join(lifestyle_tags)}."
     if segment:
