@@ -139,7 +139,7 @@ Wang's design, confirmed on the call. **Three comparisons, not one.**
 - [ ] **P5.2** Team walkthrough session before Yufan's class [04:31].
 - [x] **P5.3** Seed accounts / no-login path for students. They cannot hit a Clerk wall in a 50-minute
       class.
-- [ ] **P5.4** Instructor one-pager: what the section teaches, what to click, what the students
+- [x] **P5.4** Instructor one-pager: what the section teaches, what to click, what the students
       should notice.
 - [ ] **P5.5** Load check — a class of ~30 hitting it at once.
 
