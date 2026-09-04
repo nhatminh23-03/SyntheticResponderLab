@@ -34,3 +34,14 @@ test("persona selection is locked while an interview reply is in flight", () => 
     /personas\.map\(\(entry\) => \([\s\S]*?onClick=\{\(\) => selectPersona\(entry\.persona_id\)\}[\s\S]*?disabled=\{loading \|\| comparisonLoading\}/
   );
 });
+
+test("the interview page toggles the exact system prompt returned by FastAPI", () => {
+  assert.match(
+    interviewPageSource,
+    /const \[systemPrompt, setSystemPrompt\] = useState\(""\);[\s\S]*?const response = await sendInterviewChatMessage\([\s\S]*?if \(response\.system_prompt\) setSystemPrompt\(response\.system_prompt\);[\s\S]*?err instanceof InterviewChatApiError && err\.systemPrompt[\s\S]*?setSystemPrompt\(err\.systemPrompt\);/
+  );
+  assert.match(
+    interviewPageSource,
+    /\{systemPrompt \? \([\s\S]*?onClick=\{\(\) => setShowPrompt\(\(value\) => !value\)\}[\s\S]*?\{showPrompt \? "Hide" : "Show"\} the prompt built from this record[\s\S]*?\{showPrompt \? \([\s\S]*?<pre[\s\S]*?\{systemPrompt\}[\s\S]*?<\/pre>/
+  );
+});

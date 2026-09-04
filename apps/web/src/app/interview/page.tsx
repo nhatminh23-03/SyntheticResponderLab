@@ -10,6 +10,7 @@ import {
   getInterviewModelCatalog,
   getInterviewPersonas,
   getInterviewTranscriptExport,
+  InterviewChatApiError,
   sendInterviewChatMessage,
   type InterviewCostEstimateAssumptions,
   type InterviewModelCatalogEntry,
@@ -223,6 +224,9 @@ function InterviewPageContent() {
       if (response.system_prompt) setSystemPrompt(response.system_prompt);
       setTurns((previous) => [...previous, { role: "persona", text: response.reply }]);
     } catch (err) {
+      if (err instanceof InterviewChatApiError && err.systemPrompt) {
+        setSystemPrompt(err.systemPrompt);
+      }
       setError((err as Error).message);
     } finally {
       setLoading(false);

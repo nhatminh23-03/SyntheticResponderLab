@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   getInterviewModelCatalog,
   getInterviewPersonas,
+  InterviewChatApiError,
   sendInterviewChatMessage,
 } from "../src/lib/api";
 
@@ -99,6 +100,41 @@ test("sendInterviewChatMessage routes standalone interviews through FastAPI", as
     assert.equal(result.transcript_source, "standalone");
     assert.equal(result.reply, "My answer.");
     assert.equal(result.system_prompt, "Persona prompt");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+
+test("sendInterviewChatMessage preserves the built prompt from an API error", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async () =>
+    new Response(
+      JSON.stringify({
+        error: {
+          code: "provider_unavailable",
+          message: "Model unavailable.",
+          details: { system_prompt: "Prompt built before the failed call." },
+        },
+      }),
+      { status: 503, headers: { "Content-Type": "application/json" } }
+    )) as typeof fetch;
+
+  try {
+    await assert.rejects(
+      sendInterviewChatMessage("study_1", {
+        persona_id: "P001",
+        prompt: "What matters?",
+        model: "provider/cheap",
+        session_id: null,
+        standalone: true,
+      }),
+      (error: unknown) => {
+        assert.ok(error instanceof InterviewChatApiError);
+        assert.equal(error.systemPrompt, "Prompt built before the failed call.");
+        return true;
+      }
+    );
   } finally {
     globalThis.fetch = originalFetch;
   }

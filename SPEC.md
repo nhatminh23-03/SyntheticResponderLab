@@ -11,6 +11,7 @@ Test command (must pass before any phase is checked off):
 
 ```bash
 cd ~/dev/SyntheticResponderLab && npm --prefix apps/web run build \
+  && npm --prefix apps/web run test:unit \
   && python -m pytest apps/api/tests -q \
   && Rscript analysis/tests/test_all.R
 ```
@@ -67,7 +68,7 @@ step inside the gated study workflow [32:11]. Promote it, do not re-architect it
       role, text, model, tokens_in, tokens_out, cost_usd, created_at). Every turn is logged with its
       cost — this is what makes P3 and the budget answer possible.
 - [x] **P1.6** Export a session transcript to CSV/markdown so students can hand it in.
-- [ ] **P1.7** Show the built prompt behind a toggle (already in the demo). Wang's team used it to
+- [x] **P1.7** Show the built prompt behind a toggle (already in the demo). Wang's team used it to
       confirm grounding; keep it.
 
 ## P2 — AI-to-AI interview lab (Wang approved [17:50], [32:22])

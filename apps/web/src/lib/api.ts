@@ -996,16 +996,19 @@ export type InterviewSessionUsage = {
 export class InterviewChatApiError extends Error {
   readonly sessionId: string | null;
   readonly sessionUsage: InterviewSessionUsage | null;
+  readonly systemPrompt: string | null;
 
   constructor(
     message: string,
     sessionId: string | null,
-    sessionUsage: InterviewSessionUsage | null
+    sessionUsage: InterviewSessionUsage | null,
+    systemPrompt: string | null
   ) {
     super(message);
     this.name = "InterviewChatApiError";
     this.sessionId = sessionId;
     this.sessionUsage = sessionUsage;
+    this.systemPrompt = systemPrompt;
   }
 }
 
@@ -1022,6 +1025,11 @@ function getInterviewErrorDetails(payload: unknown): Record<string, unknown> | n
 export function getInterviewSessionIdFromApiError(payload: unknown): string | null {
   const sessionId = getInterviewErrorDetails(payload)?.session_id;
   return typeof sessionId === "string" && sessionId.trim() ? sessionId : null;
+}
+
+export function getInterviewSystemPromptFromApiError(payload: unknown): string | null {
+  const systemPrompt = getInterviewErrorDetails(payload)?.system_prompt;
+  return typeof systemPrompt === "string" && systemPrompt.trim() ? systemPrompt : null;
 }
 
 export function getInterviewSessionUsageFromApiError(
@@ -2138,17 +2146,20 @@ export async function sendInterviewChatMessage(
     const errorResponse = response.clone();
     let sessionId: string | null = null;
     let sessionUsage: InterviewSessionUsage | null = null;
+    let systemPrompt: string | null = null;
     try {
       const errorPayload = await errorResponse.json();
       sessionId = getInterviewSessionIdFromApiError(errorPayload);
       sessionUsage = getInterviewSessionUsageFromApiError(errorPayload);
+      systemPrompt = getInterviewSystemPromptFromApiError(errorPayload);
     } catch {
       // The shared message parser below handles empty and non-JSON responses.
     }
     throw new InterviewChatApiError(
       await readApiErrorMessage(response, `Interview chat failed with status ${response.status}`),
       sessionId,
-      sessionUsage
+      sessionUsage,
+      systemPrompt
     );
   }
 

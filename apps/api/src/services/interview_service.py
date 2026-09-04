@@ -22,7 +22,13 @@ from sqlalchemy.orm import Session
 from src.config.settings import AppSettings
 from src.persistence.models import InterviewTurn, Job, Persona, PersonaPreviewRun, Study, StudySectionState
 from src.services.demo_interview_fixtures import ensure_demo_interview_run
-from src.services.exceptions import ConflictApiError, QuotaExceededApiError, ValidationApiError
+from src.services.exceptions import (
+    ApiError,
+    ConflictApiError,
+    ProviderUnavailableApiError,
+    QuotaExceededApiError,
+    ValidationApiError,
+)
 from src.services.ids import make_public_id
 from src.services.interview_cache import (
     InterviewAnswer as OpenRouterChatResult,
@@ -796,7 +802,16 @@ def continue_standalone_interview_chat(
             call_provider=call_provider,
         )
     except ReplayOnlyCacheMissError as exc:
-        raise ConflictApiError(str(exc)) from exc
+        raise ConflictApiError(str(exc), details={"system_prompt": system_prompt}) from exc
+    except ApiError as exc:
+        # The demo exposed the built prompt even when a model call could not
+        # complete. Preserve that grounding aid through the FastAPI error path.
+        exc.details.setdefault("system_prompt", system_prompt)
+        raise
+    except RuntimeError as exc:
+        raise ProviderUnavailableApiError(
+            str(exc), details={"system_prompt": system_prompt}
+        ) from exc
 
     session.add_all(
         [
@@ -838,6 +853,7 @@ def continue_standalone_interview_chat(
     if budget_error is not None:
         budget_error.details["session_id"] = session_id
         budget_error.details["session_usage"] = session_usage_payload
+        budget_error.details["system_prompt"] = system_prompt
         raise budget_error
 
     return {

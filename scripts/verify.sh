@@ -24,6 +24,10 @@ if [ -f apps/web/package.json ]; then
     npm --prefix apps/web run build
   ) >/tmp/verify-web.log 2>&1 \
     || { echo "[verify] FAIL web"; grep -E "^Error|error TS|Failed to compile" /tmp/verify-web.log | head -20; rc=1; }
+
+  echo "[verify] web unit tests"
+  npm --prefix apps/web run test:unit >/tmp/verify-web-unit.log 2>&1 \
+    || { echo "[verify] FAIL web unit tests"; tail -25 /tmp/verify-web-unit.log; rc=1; }
 fi
 
 PY=apps/api/.venv/bin/python

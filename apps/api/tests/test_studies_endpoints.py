@@ -727,6 +727,16 @@ def test_interview_chat_endpoint_supports_standalone_fixed_personas(
         ("assistant", "I would first want to understand the total installed cost."),
     ]
 
+    client.app.state.settings.openrouter_api_key = ""
+    missing_key = client.post(
+        f"/api/v1/studies/{study_id}/interview/chat",
+        json={**request_payload, "prompt": "What is one uncached concern?"},
+    )
+    assert missing_key.status_code == 409
+    missing_key_details = missing_key.json()["error"]["details"]
+    assert missing_key_details["system_prompt"] == payload["system_prompt"]
+    assert "fit_tier" not in missing_key_details["system_prompt"]
+
     unknown_model = client.post(
         f"/api/v1/studies/{study_id}/interview/chat",
         json={**request_payload, "model": "provider/not-curated"},
