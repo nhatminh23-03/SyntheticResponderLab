@@ -142,7 +142,7 @@ Wang's design, confirmed on the call. **Three comparisons, not one.**
       class.
 - [x] **P5.4** Instructor one-pager: what the section teaches, what to click, what the students
       should notice.
-- [ ] **P5.5** Load check — a class of ~30 hitting it at once.
+- [x] **P5.5** Load check — a class of ~30 hitting it at once.
 
 ---
 
