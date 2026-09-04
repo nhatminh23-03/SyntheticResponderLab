@@ -59,7 +59,7 @@ step inside the gated study workflow [32:11]. Promote it, do not re-architect it
       `personas-B.csv`. The `DEMO_PERSONA_CSV` env fallback goes away.
 - [ ] **P1.3** Free-text question box (already present) plus the suggested-question chips. Student
       leads the interview; the transcript is the artifact.
-- [ ] **P1.4** Route the section through the FastAPI interview endpoints
+- [x] **P1.4** Route the section through the FastAPI interview endpoints
       (`POST /api/v1/studies/{id}/interview/chat`, which exists and has no caller) instead of the
       Next.js route calling OpenRouter directly. The Next.js route stays as the demo fallback until
       this passes.

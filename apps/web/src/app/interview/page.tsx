@@ -10,6 +10,7 @@ import {
   getInterviewModelCatalog,
   getInterviewPersonas,
   getInterviewTranscriptExport,
+  sendInterviewChatMessage,
   type InterviewCostEstimateAssumptions,
   type InterviewModelCatalogEntry,
   type InterviewPersona,
@@ -80,6 +81,7 @@ function InterviewPageContent() {
   const [comparisonLoading, setComparisonLoading] = useState(false);
   const [question, setQuestion] = useState(SUGGESTED[0]);
   const [turns, setTurns] = useState<Turn[]>([]);
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const [systemPrompt, setSystemPrompt] = useState("");
   const [showPrompt, setShowPrompt] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -123,6 +125,7 @@ function InterviewPageContent() {
   function selectPersona(id: string) {
     setSelectedId(id);
     setTurns([]);
+    setSessionId(null);
     setSystemPrompt("");
     setError("");
     setExpensiveOptIn(false);
@@ -186,7 +189,16 @@ function InterviewPageContent() {
 
   async function ask() {
     const asked = question.trim();
-    if (!asked || loading || !persona || !interviewerModel || !intervieweeModel) return;
+    if (
+      !asked ||
+      loading ||
+      !studyId ||
+      !persona ||
+      !interviewerModel ||
+      !intervieweeModel
+    ) {
+      return;
+    }
 
     setLoading(true);
     setError("");
@@ -194,26 +206,22 @@ function InterviewPageContent() {
     setQuestion("");
 
     try {
-      const response = await fetch("/api/demo-interview", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+      const response = await sendInterviewChatMessage(studyId, {
+        persona_id: selectedId,
+        prompt: asked,
         // turns is the pre-append render value, i.e. history without the question being asked.
-        body: JSON.stringify({
-          personaId: selectedId,
-          question: asked,
-          history: turns,
-          interviewerModel,
-          intervieweeModel,
-          allowExpensiveModels: expensiveOptIn,
-        }),
+        messages: turns.map((turn) => ({
+          role: turn.role === "persona" ? "assistant" : "user",
+          content: turn.text,
+        })),
+        model: intervieweeModel,
+        session_id: sessionId,
+        standalone: true,
+        allow_expensive_models: expensiveOptIn,
       });
-      const data = await response.json();
-      if (data.systemPrompt) setSystemPrompt(data.systemPrompt);
-      if (!response.ok) {
-        setError(data.error ?? "Request failed.");
-        return;
-      }
-      setTurns((previous) => [...previous, { role: "persona", text: data.answer }]);
+      setSessionId(response.session_id);
+      if (response.system_prompt) setSystemPrompt(response.system_prompt);
+      setTurns((previous) => [...previous, { role: "persona", text: response.reply }]);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -736,6 +744,7 @@ function InterviewPageContent() {
                   disabled={
                     loading ||
                     !question.trim() ||
+                    !studyId ||
                     !persona ||
                     !interviewerModel ||
                     !intervieweeModel

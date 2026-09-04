@@ -44,6 +44,7 @@ from src.services.llm_budget import (
     enforce_run_preflight,
     load_interview_budget_snapshot,
     lock_class_budget_for_transaction,
+    parse_budget_usd,
 )
 from src.services.model_catalog import DEFAULT_INTERVIEW_MODEL_ID, list_interview_model_catalog
 from src.services.usage_limits import (
@@ -685,6 +686,173 @@ def compare_interview_models(
     }
 
 
+def continue_standalone_interview_chat(
+    session: Session,
+    settings: AppSettings,
+    study: Study,
+    payload: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Continue the student-led interview with one fixed database persona."""
+    persona_id = str(payload.get("persona_id") or "").strip()
+    prompt = str(payload.get("prompt") or "").strip()
+    if not persona_id:
+        raise ValidationApiError("persona_id is required.")
+    if not prompt:
+        raise ValidationApiError("prompt is required.")
+
+    history = payload.get("messages") or []
+    if not isinstance(history, list):
+        raise ValidationApiError("messages must be a list of {role, content} objects.")
+
+    sanitized_history: list[dict[str, str]] = []
+    for message in history[-12:]:
+        if not isinstance(message, dict):
+            raise ValidationApiError("Each message must be an object.")
+        role = str(message.get("role") or "").strip()
+        content = str(message.get("content") or "").strip()
+        if role not in {"user", "assistant"} or not content:
+            raise ValidationApiError(
+                "Each message must include a non-empty user or assistant role and content."
+            )
+        sanitized_history.append({"role": role, "content": content})
+
+    catalog = list_interview_model_catalog()
+    catalog_by_id = {str(entry["id"]): entry for entry in catalog["models"]}
+    model = str(payload.get("model") or DEFAULT_INTERVIEW_MODEL_ID).strip()
+    selected_model = catalog_by_id.get(model)
+    if selected_model is None:
+        raise ValidationApiError("Select a model from the curated interview catalog.")
+    if selected_model["tier"] == "expensive" and not payload.get("allow_expensive_models"):
+        raise ValidationApiError("Expensive interview models require opt-in for this run.")
+
+    persona = session.get(Persona, persona_id)
+    if persona is None:
+        raise ValidationApiError(f"Persona '{persona_id}' was not found.")
+
+    session_id = str(payload.get("session_id") or "").strip() or make_public_id("ses")
+    system_prompt = _build_fixed_persona_system_prompt(dict(persona.profile_json))
+    full_messages = [
+        {"role": "system", "content": system_prompt},
+        *sanitized_history,
+        {"role": "user", "content": prompt},
+    ]
+    user_created_at = utcnow()
+    budget_error: QuotaExceededApiError | None = None
+
+    def call_provider() -> OpenRouterChatResult:
+        nonlocal budget_error
+        lock_class_budget_for_transaction(session)
+        snapshot = load_interview_budget_snapshot(
+            session,
+            session_id=session_id,
+            run_budget_usd=settings.llm_budget_usd,
+        )
+        enforce_budget_open(snapshot)
+        if snapshot.run_provider_call_count == 0:
+            catalog_estimate = parse_budget_usd(
+                selected_model["estimated_cost_per_persona_usd"],
+                name="catalog model estimate",
+            )
+            requested_estimate = payload.get("estimated_run_cost_usd")
+            estimated_run_cost = (
+                catalog_estimate
+                if requested_estimate is None
+                else max(
+                    catalog_estimate,
+                    parse_budget_usd(requested_estimate, name="estimated run cost"),
+                )
+            )
+            enforce_run_preflight(
+                # A client may provide a more conservative whole-run estimate,
+                # but cannot lower the server-owned catalog estimate.
+                estimated_cost_usd=estimated_run_cost,
+                class_spent_usd=snapshot.class_spent_usd,
+                run_budget_usd=snapshot.run_budget_usd,
+            )
+
+        api_key = settings.openrouter_api_key or ""
+        if not api_key:
+            raise ConflictApiError("OPENROUTER_API_KEY is not configured.")
+        answer = _call_openrouter_messages(
+            api_key=api_key,
+            model=model,
+            messages=full_messages,
+            timeout=90,
+        )
+        try:
+            enforce_measured_cost(snapshot, cost_usd=answer.cost_usd)
+        except QuotaExceededApiError as exc:
+            budget_error = exc
+        return answer
+
+    try:
+        provider_result = resolve_interview_answer(
+            session,
+            cache_mode=settings.cache_mode,
+            persona_id=persona_id,
+            model=model,
+            question=prompt,
+            prior_turns=full_messages[:-1],
+            call_provider=call_provider,
+        )
+    except ReplayOnlyCacheMissError as exc:
+        raise ConflictApiError(str(exc)) from exc
+
+    session.add_all(
+        [
+            InterviewTurn(
+                study_id=study.id,
+                persona_id=persona_id,
+                session_id=session_id,
+                role="user",
+                text=prompt,
+                model=provider_result.model,
+                tokens_in=0,
+                tokens_out=0,
+                cost_usd=Decimal("0"),
+                created_at=user_created_at,
+            ),
+            InterviewTurn(
+                study_id=study.id,
+                persona_id=persona_id,
+                session_id=session_id,
+                role="assistant",
+                text=provider_result.text,
+                model=provider_result.model,
+                tokens_in=provider_result.tokens_in,
+                tokens_out=provider_result.tokens_out,
+                cost_usd=provider_result.cost_usd,
+                created_at=utcnow(),
+            ),
+        ]
+    )
+    session.commit()
+
+    session_usage_payload = _serialize_session_usage(
+        load_interview_budget_snapshot(
+            session,
+            session_id=session_id,
+            run_budget_usd=settings.llm_budget_usd,
+        )
+    )
+    if budget_error is not None:
+        budget_error.details["session_id"] = session_id
+        budget_error.details["session_usage"] = session_usage_payload
+        raise budget_error
+
+    return {
+        "persona_id": persona_id,
+        "session_id": session_id,
+        "transcript_source": "standalone",
+        "model": provider_result.model,
+        "source_run_id": None,
+        "reply": provider_result.text,
+        "cache_hit": provider_result.cache_hit,
+        "session_usage": session_usage_payload,
+        "system_prompt": system_prompt,
+    }
+
+
 def continue_interview_chat(
     session: Session,
     settings: AppSettings,
@@ -692,6 +860,9 @@ def continue_interview_chat(
     payload: Dict[str, Any],
 ) -> Dict[str, Any]:
     """Continue a follow-up conversation with a selected interview persona."""
+    if payload.get("standalone"):
+        return continue_standalone_interview_chat(session, settings, study, payload)
+
     latest_run = _latest_interview_job(session, study.id)
     if not latest_run or latest_run.status != "completed" or not latest_run.result_json:
         raise ConflictApiError(

@@ -161,6 +161,8 @@ class InterviewChatRequest(BaseModel):
     model: Optional[str] = None
     session_id: Optional[str] = Field(default=None, max_length=128)
     estimated_run_cost_usd: Optional[Decimal] = Field(default=None, ge=0)
+    standalone: bool = False
+    allow_expensive_models: bool = False
 
 
 class InterviewTranscriptExportTurn(BaseModel):

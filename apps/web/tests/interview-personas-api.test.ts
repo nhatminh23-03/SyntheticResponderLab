@@ -1,7 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { getInterviewModelCatalog, getInterviewPersonas } from "../src/lib/api";
+import {
+  getInterviewModelCatalog,
+  getInterviewPersonas,
+  sendInterviewChatMessage,
+} from "../src/lib/api";
 
 
 test("getInterviewPersonas loads the FastAPI persona endpoint", async () => {
@@ -42,6 +46,59 @@ test("getInterviewPersonas reports backend errors", async () => {
 
   try {
     await assert.rejects(getInterviewPersonas(), /Persona database unavailable/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+
+test("sendInterviewChatMessage routes standalone interviews through FastAPI", async () => {
+  const originalFetch = globalThis.fetch;
+  let requestedUrl = "";
+  let requestedBody: unknown;
+  globalThis.fetch = (async (input, init) => {
+    requestedUrl = String(input);
+    requestedBody = JSON.parse(String(init?.body));
+    return new Response(
+      JSON.stringify({
+        data: {
+          interview_chat: {
+            persona_id: "P001",
+            session_id: "ses_001",
+            transcript_source: "standalone",
+            model: "provider/cheap",
+            source_run_id: null,
+            reply: "My answer.",
+            cache_hit: false,
+            session_usage: { tokens_in: 10, tokens_out: 3, cost_usd: "0.0001" },
+            system_prompt: "Persona prompt",
+          },
+        },
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } }
+    );
+  }) as typeof fetch;
+
+  try {
+    const payload = {
+      persona_id: "P001",
+      prompt: "What matters?",
+      messages: [{ role: "user" as const, content: "Hello" }],
+      model: "provider/cheap",
+      session_id: null,
+      standalone: true,
+      allow_expensive_models: false,
+    };
+    const result = await sendInterviewChatMessage("study_1", payload);
+
+    assert.equal(
+      requestedUrl,
+      "/api/backend/api/v1/studies/study_1/interview/chat"
+    );
+    assert.deepEqual(requestedBody, payload);
+    assert.equal(result.transcript_source, "standalone");
+    assert.equal(result.reply, "My answer.");
+    assert.equal(result.system_prompt, "Persona prompt");
   } finally {
     globalThis.fetch = originalFetch;
   }

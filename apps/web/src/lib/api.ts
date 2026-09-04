@@ -983,6 +983,8 @@ export type InterviewChatPayload = {
   transcript_source?: "model_a" | "model_b";
   model?: string;
   session_id: string | null;
+  standalone?: boolean;
+  allow_expensive_models?: boolean;
 };
 
 export type InterviewSessionUsage = {
@@ -1048,12 +1050,13 @@ export function getInterviewSessionUsageFromApiError(
 export type InterviewChatResponse = {
   persona_id: string;
   session_id: string;
-  transcript_source: "model_a" | "model_b";
+  transcript_source: "model_a" | "model_b" | "standalone";
   model: string | null;
-  source_run_id: string;
+  source_run_id: string | null;
   reply: string;
   cache_hit: boolean;
   session_usage: InterviewSessionUsage;
+  system_prompt?: string;
 };
 
 export type InterviewTranscriptExportFormat = "csv" | "markdown";
