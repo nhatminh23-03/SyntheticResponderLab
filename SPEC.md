@@ -122,7 +122,7 @@ Wang's design, confirmed on the call. **Three comparisons, not one.**
       for categorical. [14:23] Report effect sizes and CIs, not bare p-values — "not significantly
       different" on n=600 is not evidence of equivalence. Add an equivalence test (TOST) with a
       pre-registered margin so "close enough" is a claim we can actually defend.
-- [ ] **P4.6** **Non-LLM baseline arm — this is the piece that removes the 18,000-query problem.**
+- [x] **P4.6** **Non-LLM baseline arm — this is the piece that removes the 18,000-query problem.**
       See the section below. Implement all five baselines; they are cheap and the comparison is the
       contribution.
 - [ ] **P4.7** Interview validation is qualitative by design [15:19]: LLM extracts themes from real
