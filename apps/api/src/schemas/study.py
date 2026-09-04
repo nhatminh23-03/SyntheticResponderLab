@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from decimal import Decimal
 from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl
@@ -159,3 +160,4 @@ class InterviewChatRequest(BaseModel):
     transcript_source: Literal["model_a", "model_b"] = "model_a"
     model: Optional[str] = None
     session_id: Optional[str] = Field(default=None, max_length=128)
+    estimated_run_cost_usd: Optional[Decimal] = Field(default=None, ge=0)

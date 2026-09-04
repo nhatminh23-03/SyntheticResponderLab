@@ -440,6 +440,23 @@ def test_interview_chat_endpoint_continues_selected_persona(client, monkeypatch)
 
     client.app.state.settings.openrouter_api_key = "test-key"
 
+    over_budget_preflight = client.post(
+        f"/api/v1/studies/{study_id}/interview/chat",
+        json={
+            **first_question,
+            "prompt": "What else would make this purchase impossible?",
+            # This session currently contains only a free cache hit. Its first
+            # paid call must still go through the run preflight.
+            "session_id": repeated_payload["session_id"],
+            "estimated_run_cost_usd": "0.7501",
+        },
+    )
+    assert over_budget_preflight.status_code == 429
+    preflight_error = over_budget_preflight.json()["error"]
+    assert preflight_error["code"] == "quota_exceeded"
+    assert "would cost $0.76" in preflight_error["message"]
+    assert provider_call_count == 1
+
     followup_response = client.post(
         f"/api/v1/studies/{study_id}/interview/chat",
         json={
@@ -492,6 +509,71 @@ def test_interview_chat_endpoint_continues_selected_persona(client, monkeypatch)
         (347, 19, Decimal("0.000184250000000000")),
     ]
 
+    measured_session_spend = Decimal("0.000368500000")
+    client.app.state.settings.llm_budget_usd = measured_session_spend
+    run_hard_stop = client.post(
+        f"/api/v1/studies/{study_id}/interview/chat",
+        json={
+            **first_question,
+            "prompt": "Can you add one more concern?",
+            "session_id": payload["session_id"],
+        },
+    )
+    assert run_hard_stop.status_code == 429
+    assert run_hard_stop.json()["error"]["details"]["scope"] == "run"
+    assert provider_call_count == 2
+
+    client.app.state.settings.llm_budget_usd = measured_session_spend + Decimal("0.0001")
+    measured_overage = client.post(
+        f"/api/v1/studies/{study_id}/interview/chat",
+        json={
+            **first_question,
+            "prompt": "Could one last concern fit in the remaining budget?",
+            "session_id": payload["session_id"],
+        },
+    )
+    assert measured_overage.status_code == 429
+    assert measured_overage.json()["error"]["details"]["measured_cost_usd"] == "0.000184250000"
+    assert provider_call_count == 3
+
+    blocked_after_overage = client.post(
+        f"/api/v1/studies/{study_id}/interview/chat",
+        json={
+            **first_question,
+            "prompt": "This second overage must not reach the provider.",
+            "session_id": payload["session_id"],
+        },
+    )
+    assert blocked_after_overage.status_code == 429
+    assert provider_call_count == 3
+
+    spend_after_overage = measured_session_spend + Decimal("0.000184250000")
+    client.app.state.settings.llm_budget_usd = spend_after_overage / 30
+    class_hard_stop = client.post(
+        f"/api/v1/studies/{study_id}/interview/chat",
+        json={
+            **first_question,
+            "prompt": "Which new issue should the whole class consider?",
+        },
+    )
+    assert class_hard_stop.status_code == 429
+    assert class_hard_stop.json()["error"]["details"]["scope"] == "class"
+    assert provider_call_count == 3
+
+    client.app.state.settings.llm_budget_usd = Decimal("0")
+    kill_switch_stop = client.post(
+        f"/api/v1/studies/{study_id}/interview/chat",
+        json={
+            **first_question,
+            "prompt": "Should this paid request be disabled?",
+        },
+    )
+    assert kill_switch_stop.status_code == 429
+    assert "Budget hard stop" in kill_switch_stop.json()["error"]["message"]
+    assert provider_call_count == 3
+
+    client.app.state.settings.llm_budget_usd = Decimal("0.75")
+
     with session_factory() as session:
         repeated_turns = session.scalars(
             select(InterviewTurn)
@@ -513,7 +595,7 @@ def test_interview_chat_endpoint_continues_selected_persona(client, monkeypatch)
     )
     assert replay_miss_response.status_code == 409
     assert "CACHE_MODE=replay_only" in replay_miss_response.json()["error"]["message"]
-    assert provider_call_count == 2
+    assert provider_call_count == 3
 
 
 def test_save_audience_and_get_workflow(client):

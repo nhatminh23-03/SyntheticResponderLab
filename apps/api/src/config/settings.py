@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from decimal import Decimal
 from functools import lru_cache
 from pathlib import Path
 from typing import Optional
@@ -9,6 +10,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine.url import make_url
 
 from src.services.interview_cache import CACHE_MODE, normalize_cache_mode
+from src.services.llm_budget import RUN_BUDGET_USD, parse_budget_usd
 
 API_ROOT = Path(__file__).resolve().parents[2]
 
@@ -23,6 +25,7 @@ class AppSettings(BaseSettings):
     openrouter_api_key: Optional[str] = Field(default=None, alias="OPENROUTER_API_KEY")
     openrouter_base_url: str = Field(default="https://openrouter.ai/api/v1", alias="OPENROUTER_BASE_URL")
     cache_mode: str = Field(default=CACHE_MODE, alias="CACHE_MODE")
+    llm_budget_usd: Decimal = Field(default=RUN_BUDGET_USD, alias="NEO_LLM_BUDGET_USD")
 
     google_cloud_api_key: Optional[str] = Field(default=None, alias="GOOGLE_CLOUD_API_KEY")
     google_cloud_service_account_json: Optional[str] = Field(default=None, alias="GOOGLE_CLOUD_SERVICE_ACCOUNT_JSON")
@@ -81,6 +84,11 @@ class AppSettings(BaseSettings):
     @classmethod
     def _normalize_cache_mode(cls, value: str) -> str:
         return normalize_cache_mode(value)
+
+    @field_validator("llm_budget_usd", mode="before")
+    @classmethod
+    def _validate_llm_budget(cls, value: object) -> Decimal:
+        return parse_budget_usd(value, name="NEO_LLM_BUDGET_USD")
 
     @field_validator("database_url")
     @classmethod

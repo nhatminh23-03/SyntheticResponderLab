@@ -22,12 +22,19 @@ from sqlalchemy.orm import Session
 from src.config.settings import AppSettings
 from src.persistence.models import InterviewTurn, Job, PersonaPreviewRun, Study, StudySectionState
 from src.services.demo_interview_fixtures import ensure_demo_interview_run
-from src.services.exceptions import ConflictApiError, ValidationApiError
+from src.services.exceptions import ConflictApiError, QuotaExceededApiError, ValidationApiError
 from src.services.ids import make_public_id
 from src.services.interview_cache import (
     InterviewAnswer as OpenRouterChatResult,
     ReplayOnlyCacheMissError,
     resolve_interview_answer,
+)
+from src.services.llm_budget import (
+    enforce_budget_open,
+    enforce_measured_cost,
+    enforce_run_preflight,
+    load_interview_budget_snapshot,
+    lock_class_budget_for_transaction,
 )
 from src.services.usage_limits import (
     METRIC_INTERVIEW_RUN,
@@ -509,17 +516,46 @@ def continue_interview_chat(
         {"role": "user", "content": prompt},
     ]
     user_created_at = utcnow()
+    budget_error: QuotaExceededApiError | None = None
 
     def call_provider() -> OpenRouterChatResult:
+        nonlocal budget_error
+        lock_class_budget_for_transaction(session)
+        budget_snapshot = load_interview_budget_snapshot(
+            session,
+            session_id=session_id,
+            run_budget_usd=settings.llm_budget_usd,
+        )
+        enforce_budget_open(budget_snapshot)
+        if budget_snapshot.run_provider_call_count == 0:
+            estimated_run_cost = payload.get("estimated_run_cost_usd")
+            enforce_run_preflight(
+                estimated_cost_usd=(
+                    settings.llm_budget_usd
+                    if estimated_run_cost is None
+                    else estimated_run_cost
+                ),
+                class_spent_usd=budget_snapshot.class_spent_usd,
+                run_budget_usd=budget_snapshot.run_budget_usd,
+            )
+
         api_key = settings.openrouter_api_key or ""
         if not api_key:
             raise ConflictApiError("OPENROUTER_API_KEY is not configured.")
-        return _call_openrouter_messages(
+        answer = _call_openrouter_messages(
             api_key=api_key,
             model=model,
             messages=full_messages,
             timeout=90,
         )
+        try:
+            enforce_measured_cost(budget_snapshot, cost_usd=answer.cost_usd)
+        except QuotaExceededApiError as exc:
+            # The provider has already charged this call. Persist its measured
+            # cost before returning the hard stop so aggregate spend remains
+            # conservative and cannot be bypassed on the next request.
+            budget_error = exc
+        return answer
 
     try:
         provider_result = resolve_interview_answer(
@@ -562,6 +598,9 @@ def continue_interview_chat(
         ]
     )
     session.commit()
+
+    if budget_error is not None:
+        raise budget_error
 
     return {
         "persona_id": persona_id,

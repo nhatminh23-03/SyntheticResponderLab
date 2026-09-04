@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from decimal import Decimal
+
 import pytest
 from pydantic import ValidationError
 
@@ -77,4 +79,34 @@ def test_settings_reject_unknown_cache_mode():
             ARTIFACTS_ROOT="./artifacts",
             LEGACY_APP_ROOT="../../NeoSmart-Hackathon-App",
             CACHE_MODE="sometimes",
+        )
+
+
+def test_settings_supports_budget_default_override_and_zero_kill_switch(monkeypatch):
+    common = {
+        "APP_ENV": "development",
+        "APP_DEBUG": True,
+        "DATABASE_URL": "sqlite:///./local-dev.db",
+        "ARTIFACTS_ROOT": "./artifacts",
+        "LEGACY_APP_ROOT": "../../NeoSmart-Hackathon-App",
+    }
+    assert AppSettings(**common).llm_budget_usd == Decimal("0.75")
+
+    monkeypatch.setenv("NEO_LLM_BUDGET_USD", "0")
+    assert AppSettings(**common).llm_budget_usd == Decimal("0")
+
+    monkeypatch.setenv("NEO_LLM_BUDGET_USD", "1.25")
+    assert AppSettings(**common).llm_budget_usd == Decimal("1.25")
+
+
+def test_settings_rejects_invalid_budget_override(monkeypatch):
+    monkeypatch.setenv("NEO_LLM_BUDGET_USD", "unlimited")
+
+    with pytest.raises(ValidationError, match="NEO_LLM_BUDGET_USD must be"):
+        AppSettings(
+            APP_ENV="development",
+            APP_DEBUG=True,
+            DATABASE_URL="sqlite:///./local-dev.db",
+            ARTIFACTS_ROOT="./artifacts",
+            LEGACY_APP_ROOT="../../NeoSmart-Hackathon-App",
         )
