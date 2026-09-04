@@ -1,10 +1,12 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import { BadgeChip } from "@/components/ui/badge-chip";
 import { UserMenuSlot } from "@/components/ui/user-menu-slot";
+import { canOpenCompactAppMenu, standaloneAppLinks } from "@/lib/app-navigation";
 import { workflowSections } from "@/lib/workflow-sections";
 import { cn } from "@/lib/utils";
 import { useSectionRegistry } from "@/providers/section-registry-provider";
@@ -16,6 +18,10 @@ export function WorkflowNav() {
   const { activeSectionId, navigationLocked, scrollToSection } = useSectionRegistry();
   const { isReady, theme, toggleTheme } = useTheme();
   const [isCompactMenuOpen, setIsCompactMenuOpen] = useState(false);
+  const compactMenuDisabled = !canOpenCompactAppMenu(
+    navigationLocked,
+    standaloneAppLinks.length
+  );
 
   const navSections = workflowSections.filter(
     (section) =>
@@ -120,6 +126,17 @@ export function WorkflowNav() {
                   </button>
                 );
               })}
+              {standaloneAppLinks.map((link) => (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className="relative shrink-0 rounded-full px-3.5 py-2 font-medium tracking-[0.003em] text-app-muted transition-all duration-200 hover:text-app-text hover:[background:var(--button-secondary-bg-hover)]"
+                >
+                  <span className="block whitespace-nowrap text-[clamp(0.68rem,0.82vw,0.98rem)] leading-none">
+                    {link.label}
+                  </span>
+                </Link>
+              ))}
             </div>
           </nav>
 
@@ -189,14 +206,15 @@ export function WorkflowNav() {
 
           <div className="relative mt-3 rounded-[1.2rem] border px-3 py-3 shadow-[0_12px_28px_rgba(0,0,0,0.12)] [background:var(--glass-panel-bg)] [border-color:var(--button-secondary-border)]">
             <div className="flex items-center gap-3">
+              {/* Standalone destinations must remain reachable while workflow steps are locked. */}
               <button
                 type="button"
                 onClick={() => setIsCompactMenuOpen((current) => !current)}
-                disabled={navigationLocked}
+                disabled={compactMenuDisabled}
                 className={cn(
                   "inline-flex min-w-0 flex-1 items-center justify-between rounded-[1.05rem] border px-3 py-2.5 text-left transition",
                   "[background:var(--nav-active-pill-bg)] [border-color:var(--button-secondary-border)]",
-                  navigationLocked && "cursor-not-allowed opacity-60"
+                  compactMenuDisabled && "cursor-not-allowed opacity-60"
                 )}
                 aria-expanded={isCompactMenuOpen}
                 aria-controls="compact-workflow-menu"
@@ -303,6 +321,28 @@ export function WorkflowNav() {
                         </button>
                       );
                     })}
+                    {standaloneAppLinks.map((link) => (
+                      <Link
+                        key={link.href}
+                        href={link.href}
+                        onClick={() => setIsCompactMenuOpen(false)}
+                        className="flex w-full items-center justify-between gap-3 rounded-[1rem] border px-3.5 py-2.5 text-left transition [background:var(--theme-panel-inline-gradient)] [border-color:var(--button-secondary-border)]"
+                      >
+                        <div className="flex min-w-0 items-center gap-3">
+                          <div className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-app-cyan/30 bg-app-cyan/12 text-app-cyan">
+                            <InterviewGlyph />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="truncate text-[0.92rem] font-medium text-app-text">
+                              {link.label}
+                            </div>
+                            <div className="mt-1 text-[0.66rem] uppercase tracking-[0.18em] text-app-muted">
+                              Standalone section
+                            </div>
+                          </div>
+                        </div>
+                      </Link>
+                    ))}
                   </div>
                 </motion.div>
               ) : null}
@@ -311,6 +351,25 @@ export function WorkflowNav() {
         </div>
       </header>
     </>
+  );
+}
+
+function InterviewGlyph() {
+  return (
+    <svg
+      className="h-3.5 w-3.5"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M7 8h10" />
+      <path d="M7 12h6" />
+      <path d="M5 19l-1 3 4-2h9a3 3 0 0 0 3-3V7a3 3 0 0 0-3-3H7a3 3 0 0 0-3 3v10a3 3 0 0 0 1 2Z" />
+    </svg>
   );
 }
 

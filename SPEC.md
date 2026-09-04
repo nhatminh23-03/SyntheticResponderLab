@@ -51,7 +51,7 @@ cd ~/dev/SyntheticResponderLab && npm --prefix apps/web run build \
 The demo page proved the shape and Wang explicitly wants it kept as **its own section**, not another
 step inside the gated study workflow [32:11]. Promote it, do not re-architect it.
 
-- [ ] **P1.1** Move `/demo/interview` to a real route (`/interview`) and add it to the app nav as a
+- [x] **P1.1** Move `/demo/interview` to a real route (`/interview`) and add it to the app nav as a
       standalone section. Keep the standalone entry — no audience/product/market/survey/experiment
       gate in front of it.
 - [ ] **P1.2** Persona list reads from the backend, not a local CSV path. Add

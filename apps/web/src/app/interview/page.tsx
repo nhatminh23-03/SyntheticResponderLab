@@ -30,7 +30,7 @@ const SUGGESTED = [
   "Who else in your household would have a say?",
 ];
 
-export default function InterviewDemoPage() {
+export default function InterviewPage() {
   const [personas, setPersonas] = useState<DemoPersona[]>([]);
   const [source, setSource] = useState("");
   const [selectedId, setSelectedId] = useState<string>("");
@@ -104,7 +104,7 @@ export default function InterviewDemoPage() {
     <main className="min-h-svh px-4 py-10 sm:px-6 lg:px-12">
       <div className="mx-auto w-full max-w-[88rem]">
         <div className="mb-4 flex flex-wrap items-center gap-2.5 sm:gap-3">
-          <BadgeChip tone="gold">Demo</BadgeChip>
+          <BadgeChip tone="gold">Interview</BadgeChip>
           <BadgeChip>Student interviews a persona</BadgeChip>
           {source ? <BadgeChip>{source}</BadgeChip> : null}
         </div>
