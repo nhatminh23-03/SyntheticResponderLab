@@ -99,7 +99,7 @@ is recorded: a pure replay "wouldn't really be an app." The resolution is a **ca
 - [x] **P3.2** Pre-warm the cache: batch-run the suggested questions across all 30 personas on the
       cheap model, once, and store. Cost of the warm-up is a one-time line item.
 - [x] **P3.3** Per-class spend cap with a hard stop, and a `NEO_LLM_BUDGET_USD` env kill switch.
-- [ ] **P3.4** Measured cost report answering Wang's actual question. **Owed to her, and Anderson
+- [x] **P3.4** Measured cost report answering Wang's actual question. **Owed to her, and Anderson
       said "tomorrow" [27:27].** Deliverable: a table of $/interview and $/full-run at three model
       tiers, measured not estimated. Reference points from the call, both recollections not
       measurements: ~$5 for 20 personas on an expensive model, ~$0.50 for 10 personas × 2 samples on
