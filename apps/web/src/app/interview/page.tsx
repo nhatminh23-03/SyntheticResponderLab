@@ -6,20 +6,8 @@ import { AnimatePresence, motion } from "framer-motion";
 import { BadgeChip } from "@/components/ui/badge-chip";
 import { Button } from "@/components/ui/button";
 import { GlassPanel } from "@/components/ui/glass-panel";
+import { getInterviewPersonas, type InterviewPersona } from "@/lib/api";
 import { cn } from "@/lib/utils";
-
-type DemoPersona = {
-  persona_id: string;
-  age_bucket: string;
-  income_bucket: string;
-  ownership: string;
-  home_type: string;
-  work_mode: string;
-  fit_tier: string;
-  lifestyle_tags: string[];
-  census_profile: string;
-  headline: string;
-};
 
 type Turn = { role: "student" | "persona"; text: string };
 
@@ -31,7 +19,7 @@ const SUGGESTED = [
 ];
 
 export default function InterviewPage() {
-  const [personas, setPersonas] = useState<DemoPersona[]>([]);
+  const [personas, setPersonas] = useState<InterviewPersona[]>([]);
   const [source, setSource] = useState("");
   const [selectedId, setSelectedId] = useState<string>("");
   const [question, setQuestion] = useState(SUGGESTED[0]);
@@ -43,13 +31,8 @@ export default function InterviewPage() {
   const transcriptEnd = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    fetch("/api/demo-interview")
-      .then((response) => response.json())
+    getInterviewPersonas()
       .then((data) => {
-        if (data.error) {
-          setError(data.error);
-          return;
-        }
         setPersonas(data.personas);
         setSource(data.source);
         setSelectedId(data.personas[0]?.persona_id ?? "");

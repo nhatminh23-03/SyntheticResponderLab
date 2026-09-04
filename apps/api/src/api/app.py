@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 from src.api.errors import install_exception_handlers
 from src.api.errors import build_meta_error, new_request_id
 from src.api.health import router as health_router
+from src.api.personas import router as personas_router
 from src.api.studies import router as studies_router
 from src.config.settings import AppSettings, get_settings
 from src.persistence.session import create_session_factory, get_session_factory
@@ -71,5 +72,6 @@ def create_app(settings: Optional[AppSettings] = None) -> FastAPI:
 
     install_exception_handlers(app)
     app.include_router(health_router)
+    app.include_router(personas_router)
     app.include_router(studies_router)
     return app

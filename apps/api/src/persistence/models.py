@@ -152,6 +152,15 @@ class PersonaPreviewPersona(Base):
     preview_run: Mapped[PersonaPreviewRun] = relationship(back_populates="personas")
 
 
+class Persona(Base):
+    __tablename__ = "personas"
+
+    persona_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    row_index: Mapped[int] = mapped_column(Integer, unique=True, nullable=False)
+    profile_json: Mapped[Dict] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
 class Job(Base):
     __tablename__ = "jobs"
 

@@ -54,7 +54,7 @@ step inside the gated study workflow [32:11]. Promote it, do not re-architect it
 - [x] **P1.1** Move `/demo/interview` to a real route (`/interview`) and add it to the app nav as a
       standalone section. Keep the standalone entry — no audience/product/market/survey/experiment
       gate in front of it.
-- [ ] **P1.2** Persona list reads from the backend, not a local CSV path. Add
+- [x] **P1.2** Persona list reads from the backend, not a local CSV path. Add
       `GET /api/v1/personas` serving the 30 fixed personas from the database, seeded from
       `personas-B.csv`. The `DEMO_PERSONA_CSV` env fallback goes away.
 - [ ] **P1.3** Free-text question box (already present) plus the suggested-question chips. Student

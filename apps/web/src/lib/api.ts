@@ -61,6 +61,47 @@ export type CreateStudyResponse = {
   };
 };
 
+export type InterviewPersona = {
+  persona_id: string;
+  age_bucket: string;
+  income_bucket: string;
+  ownership: string;
+  home_type: string;
+  work_mode: string;
+  fit_tier: string;
+  lifestyle_tags: string[];
+  census_profile: string;
+  headline: string;
+};
+
+type InterviewPersonasResponse = {
+  data?: {
+    personas?: InterviewPersona[];
+    source?: string;
+  };
+};
+
+export async function getInterviewPersonas() {
+  const response = await fetch(`${getApiBaseUrl()}/api/v1/personas`, {
+    method: "GET",
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      await readApiErrorMessage(
+        response,
+        `Persona list load failed with status ${response.status}`
+      )
+    );
+  }
+
+  const result = (await response.json()) as InterviewPersonasResponse;
+  return {
+    personas: result.data?.personas ?? [],
+    source: result.data?.source ?? "database",
+  };
+}
+
 export type AudiencePayload = {
   state?: string | null;
   metro?: string | null;
