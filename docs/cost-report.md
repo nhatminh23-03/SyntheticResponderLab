@@ -82,6 +82,34 @@ The calculation definitions are:
 - **Full sweep:** 30 personas x the frozen 32-question instrument = 960 answers per model. The bold
   amount is the cost of running both models in that tier.
 
+## Dr. Lin's recommended open-weight models
+
+Dr. Lin's 2026-09-04 email asked for pre-recorded interviews on an expensive and a cheaper model
+and named DeepSeek V4 Pro and Qwen3.7 Plus, on the grounds that open-weight models reach comparable
+intelligence at roughly 30% of closed-weight cost. Both are live on OpenRouter and were added to the
+catalog on 2026-09-06 at the prices below, read from the provider catalog that day.
+
+These rows are **extrapolated**, on the same basis as the mid and expensive rows above: neither model
+has been called yet, so the two measured P001 token workloads are applied to their published prices.
+
+| Model | Tier | Price per 1M tokens (in / out) | One student turn | Full student session (8 turns) | Full 30 x 32 sweep |
+|---|---|---:|---:|---:|---:|
+| Qwen3.7 Plus | Cheap | $0.32 / $1.28 | $0.00023776 / $0.00031648 | $0.00190208 / $0.00253184 | $0.228250 / $0.303821 |
+| DeepSeek V4 Pro | Mid | $1.0353 / $2.0706 | $0.00058287 / $0.00069676 | $0.00466299 / $0.00557406 | $0.559559 / $0.668887 |
+
+Each pair of values is the 383-in/90-out workload first and the 357-in/158-out workload second.
+
+One point is worth raising with Dr. Lin. He described DeepSeek V4 Pro as the more expensive of the
+two, and it is the dearer of his pair, but on OpenRouter's current prices it costs **less to run than
+the Claude Haiku 4.5 already sitting in this catalog's mid tier**. It is slightly dearer per input
+token ($1.0353 against $1.00) and under half the price per output token ($2.0706 against $5.00), and
+because an interview turn produces far fewer output tokens than it consumes, the blended cost of one
+persona interview is $0.0145 against Haiku's $0.0200. It is roughly a fifth the cost of the
+expensive tier. Taking his pair as the expensive/cheap contrast
+for the pre-recorded interviews therefore compares two inexpensive models rather than spanning the
+catalog's cost range. If the teaching goal is for students to see what model price buys, an
+expensive-tier model belongs on one side of that comparison.
+
 ## One-time cache pre-warm
 
 The pre-warm covers four suggested questions for 30 personas on Gemini 2.5 Flash Lite: 120 cache

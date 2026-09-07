@@ -6,7 +6,7 @@ from decimal import Decimal
 from typing import Final
 
 
-PRICING_AS_OF: Final[str] = "2026-09-04"
+PRICING_AS_OF: Final[str] = "2026-09-06"
 PRICING_SOURCE: Final[str] = "https://openrouter.ai/api/v1/models"
 TIER_ORDER: Final[tuple[str, ...]] = ("cheap", "mid", "expensive")
 MIN_INTERVIEW_PERSONAS: Final[int] = 3
@@ -22,8 +22,12 @@ _TOKENS_PER_MILLION: Final[Decimal] = Decimal("1000000")
 
 # OpenRouter prices in USD per one million text tokens. Keep this list small and
 # deliberate: these are the choices students compare, not the provider's entire
-# catalog. Within and across tiers, entries are ordered from cheapest to most
-# expensive on both prompt and completion prices.
+# catalog. Within and across tiers, entries are ordered cheapest-first by the
+# estimated cost of one persona interview, not by prompt or completion price
+# alone. Those two prices cannot order a multi-vendor list on their own: an
+# open-weight model can undercut a closed one on output while costing more on
+# input, so only the blended per-interview cost -- the number a student actually
+# spends -- gives a single consistent ordering.
 MODEL_TIERS: Final[dict[str, tuple[dict[str, object], ...]]] = {
     "cheap": (
         {
@@ -40,6 +44,13 @@ MODEL_TIERS: Final[dict[str, tuple[dict[str, object], ...]]] = {
             "prompt_price_per_million": 0.15,
             "completion_price_per_million": 0.60,
         },
+        {
+            "id": "qwen/qwen3.7-plus",
+            "name": "Qwen3.7 Plus",
+            "tier": "cheap",
+            "prompt_price_per_million": 0.32,
+            "completion_price_per_million": 1.28,
+        },
     ),
     "mid": (
         {
@@ -48,6 +59,13 @@ MODEL_TIERS: Final[dict[str, tuple[dict[str, object], ...]]] = {
             "tier": "mid",
             "prompt_price_per_million": 0.30,
             "completion_price_per_million": 2.50,
+        },
+        {
+            "id": "deepseek/deepseek-v4-pro",
+            "name": "DeepSeek V4 Pro",
+            "tier": "mid",
+            "prompt_price_per_million": 1.0353,
+            "completion_price_per_million": 2.0706,
         },
         {
             "id": "anthropic/claude-haiku-4.5",

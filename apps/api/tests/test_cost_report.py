@@ -45,14 +45,48 @@ def cost_for_profile(model: dict[str, object], profile_index: int) -> Decimal:
     ) / TOKENS_PER_MILLION
 
 
+# The scenario table in the report is written as a model PAIR per tier. These are
+# those pairs. Naming them explicitly keeps the table honest as the catalog grows:
+# a model added to a tier is not silently folded into the pinned pair numbers, and
+# reordering a tier fails the identity assertion below rather than quietly
+# repricing a published row.
+PAIR_TABLE_MODEL_IDS = {
+    "cheap": ("google/gemini-2.5-flash-lite", "openai/gpt-4o-mini"),
+    "mid": ("google/gemini-2.5-flash", "anthropic/claude-haiku-4.5"),
+    "expensive": ("google/gemini-2.5-pro", "anthropic/claude-sonnet-4.5"),
+}
+
+# Added 2026-09-06 at Dr. Lin's request; priced from the OpenRouter catalog that
+# day and costed against the same two measured token workloads as every other
+# extrapolated row.
+LIN_RECOMMENDED_MODELS = {
+    "qwen/qwen3.7-plus": {
+        "tier": "cheap",
+        "turns": (Decimal("0.00023776"), Decimal("0.00031648")),
+        "sessions": (Decimal("0.00190208"), Decimal("0.00253184")),
+        "sweeps": (Decimal("0.22824960"), Decimal("0.30382080")),
+    },
+    "deepseek/deepseek-v4-pro": {
+        "tier": "mid",
+        "turns": (Decimal("0.0005828739"), Decimal("0.0006967569")),
+        "sessions": (Decimal("0.0046629912"), Decimal("0.0055740552")),
+        "sweeps": (Decimal("0.5595589440"), Decimal("0.6688866240")),
+    },
+}
+
+
 def test_cost_report_calculations_use_measured_profiles_and_catalog_rates():
     assert DEFAULT_INTERVIEW_TURN_LIMIT == 8
     assert 30 * 32 == 960
 
     for tier in TIER_ORDER:
         models = MODEL_TIERS[tier]
+        pair_ids = PAIR_TABLE_MODEL_IDS[tier]
+        pair = tuple(model for model in models if model["id"] in pair_ids)
+        assert tuple(model["id"] for model in pair) == pair_ids
+        assert len(MEASURED_TOKEN_PROFILES) == len(pair)
         turn_costs = tuple(
-            cost_for_profile(model, index) for index, model in enumerate(models)
+            cost_for_profile(model, index) for index, model in enumerate(pair)
         )
         expected = EXPECTED_TIER_COSTS[tier]
 
@@ -87,5 +121,56 @@ def test_cost_report_publishes_the_checked_totals_and_measurement_labels():
         "$0.008916 one-time cold-cache extrapolation",
         "**Measured:**",
         "**Extrapolated:**",
+    ):
+        assert required_text in report
+
+
+def test_lin_recommended_models_are_in_the_catalog_and_priced_in_the_report():
+    catalogued = {
+        model["id"]: model for tier in TIER_ORDER for model in MODEL_TIERS[tier]
+    }
+    report = (
+        Path(__file__).resolve().parents[3] / "docs" / "cost-report.md"
+    ).read_text(encoding="utf-8")
+
+    for model_id, expected in LIN_RECOMMENDED_MODELS.items():
+        model = catalogued[model_id]
+        assert model["tier"] == expected["tier"]
+
+        turn_costs = tuple(
+            cost_for_profile(model, index)
+            for index in range(len(MEASURED_TOKEN_PROFILES))
+        )
+        assert turn_costs == expected["turns"]
+        assert tuple(cost * 8 for cost in turn_costs) == expected["sessions"]
+        assert tuple(cost * 960 for cost in turn_costs) == expected["sweeps"]
+
+    # DeepSeek V4 Pro is the dearer of Dr. Lin's pair, and its relationship to the
+    # mid tier's Claude Haiku 4.5 is split: dearer per input token, under half per
+    # output token, cheaper per actual interview. The report says exactly that, so
+    # pin all three legs here -- an unqualified "cheaper" would be wrong.
+    deepseek = catalogued["deepseek/deepseek-v4-pro"]
+    haiku = catalogued["anthropic/claude-haiku-4.5"]
+    qwen = catalogued["qwen/qwen3.7-plus"]
+    assert deepseek["prompt_price_per_million"] > qwen["prompt_price_per_million"]
+    assert deepseek["prompt_price_per_million"] > haiku["prompt_price_per_million"]
+    assert deepseek["completion_price_per_million"] < haiku["completion_price_per_million"] / 2
+
+    def blended(model):
+        return (
+            Decimal(str(model["prompt_price_per_million"])) * 10_000
+            + Decimal(str(model["completion_price_per_million"])) * 2_000
+        ) / Decimal("1000000")
+
+    assert blended(deepseek) == Decimal("0.0144942")
+    assert blended(haiku) == Decimal("0.0200")
+    assert blended(deepseek) < blended(haiku)
+
+    for required_text in (
+        "$0.228250 / $0.303821",
+        "$0.559559 / $0.668887",
+        "less to run than",
+        "$1.0353 against $1.00",
+        "$2.0706 against $5.00",
     ):
         assert required_text in report

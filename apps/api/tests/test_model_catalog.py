@@ -26,12 +26,25 @@ def test_model_tiers_are_complete_real_prices_and_cheapest_first():
     assert all(model["tier"] in TIER_ORDER for model in models)
     assert all(model["prompt_price_per_million"] > 0 for model in models)
     assert all(model["completion_price_per_million"] > 0 for model in models)
-    assert [model["prompt_price_per_million"] for model in models] == sorted(
-        model["prompt_price_per_million"] for model in models
-    )
-    assert [model["completion_price_per_million"] for model in models] == sorted(
-        model["completion_price_per_million"] for model in models
-    )
+    # Ordering is pinned on the blended cost of one persona interview, which is
+    # what a student actually spends, rather than on prompt and completion price
+    # separately. A multi-vendor catalog cannot be monotonic on both at once:
+    # Qwen3.7 Plus costs more per input token than Gemini 2.5 Flash but far less
+    # per output token, and DeepSeek V4 Pro is dearer than Claude Haiku 4.5 on
+    # input while being less than half its price on output. Asserting strict
+    # increase (no ties) keeps this a real ordering check, not a weaker one:
+    # inserting any model out of cost order still fails here.
+    costs = [
+        (
+            Decimal(str(model["prompt_price_per_million"]))
+            * ESTIMATED_PROMPT_TOKENS_PER_MODEL_PERSONA
+            + Decimal(str(model["completion_price_per_million"]))
+            * ESTIMATED_COMPLETION_TOKENS_PER_MODEL_PERSONA
+        )
+        / Decimal("1000000")
+        for model in models
+    ]
+    assert all(cheaper < dearer for cheaper, dearer in zip(costs, costs[1:]))
 
 
 def test_interview_model_catalog_is_json_ready_and_preserves_tiers():
@@ -53,6 +66,8 @@ def test_interview_model_catalog_is_json_ready_and_preserves_tiers():
     assert [model["tier"] for model in catalog["models"]] == [
         "cheap",
         "cheap",
+        "cheap",
+        "mid",
         "mid",
         "mid",
         "expensive",
