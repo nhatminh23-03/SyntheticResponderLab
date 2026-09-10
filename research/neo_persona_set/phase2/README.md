@@ -37,6 +37,17 @@ output `SyntheticResponderLab-Assets/600_persona/survey_runs/`, temperature 0.2,
 seed `seed_base*10 + repeat`, prompt variant `full` (exact Census record + story). Results are
 written to the shared folder and are not committed.
 
+The `age_bucket` and `income_bucket` labels are derived from `exact_age` and
+`exact_household_income` before the prompt is built, because the phase-1 exporter labels them
+with the bands of the screened pool (a matched draw with a $31,980 income arrives labeled
+"$100k-$150k"). The manifest counts how many rows changed; `--keep-file-buckets` sends the
+file's labels unchanged.
+
+For a second persona set, point `--personas` at its CSV and give it its own `--out-dir` and
+`--run-tag` so its runs never mix with the plain draw, e.g.
+`--personas ../SyntheticResponderLab-Assets/match_600_persona/phase1_interview_matched600.csv
+--out-dir ../SyntheticResponderLab-Assets/match_600_persona/survey_runs --run-tag matched`.
+
 Useful flags: `--prompt-variant census|buckets`, `--provider-order together,fireworks`
 `--no-provider-fallbacks` (pin DeepSeek to US hosts, ~2x price), `--price-in/--price-out`,
 `--reasoning-effort off|low|medium|high`, `--json-mode`, `--no-likert-label-map`,

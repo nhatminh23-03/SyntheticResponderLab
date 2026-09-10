@@ -253,11 +253,59 @@ def _to_int(value: Optional[str]) -> Optional[int]:
         return None
 
 
-def build_persona(row: Dict[str, str], prompt_variant: str) -> RichPersonaProfile:
+AGE_BANDS: List[Tuple[int, int, str]] = [
+    (0, 17, "under 18"),
+    (18, 24, "18-24"),
+    (25, 29, "25-29"),
+    (30, 34, "30-34"),
+    (35, 44, "35-44"),
+    (45, 54, "45-54"),
+    (55, 64, "55-64"),
+    (65, 200, "65+"),
+]
+INCOME_BANDS: List[Tuple[int, int, str]] = [
+    (0, 24_999, "<$25k"),
+    (25_000, 49_999, "$25k-$50k"),
+    (50_000, 74_999, "$50k-$75k"),
+    (75_000, 99_999, "$75k-$100k"),
+    (100_000, 149_999, "$100k-$150k"),
+    (150_000, 199_999, "$150k-$200k"),
+    (200_000, 299_999, "$200k-$300k"),
+    (300_000, 499_999, "$300k-$500k"),
+    (500_000, 10**12, "$500k+"),
+]
+
+
+def band_label(value: Optional[int], bands: List[Tuple[int, int, str]]) -> Optional[str]:
+    if value is None:
+        return None
+    for low, high, label in bands:
+        if low <= value <= high:
+            return label
+    return None
+
+
+# Set by load_personas: how many rows had a bucket label replaced by one derived from the exact value.
+LAST_LOAD_STATS: Dict[str, int] = {"age_bucket_recomputed": 0, "income_bucket_recomputed": 0}
+
+
+def build_persona(row: Dict[str, str], prompt_variant: str, *, recompute_buckets: bool = True) -> RichPersonaProfile:
     if prompt_variant not in PROMPT_VARIANTS:
         raise ValueError(f"prompt_variant must be one of {PROMPT_VARIANTS}, got {prompt_variant!r}")
 
     fields: Dict[str, Any] = {column: _clean(row.get(column)) for column in BUCKET_COLUMNS}
+    if recompute_buckets:
+        # The phase-1 exporter labels buckets with the bands of the screened pool, so a matched draw
+        # that includes incomes under $100k or ages outside 30-65 carries labels that contradict the
+        # exact Census values. Derive both labels from the exact values instead, and count the changes.
+        age_label = band_label(_to_int(row.get("exact_age")), AGE_BANDS)
+        if age_label is not None and age_label != fields.get("age_bucket"):
+            LAST_LOAD_STATS["age_bucket_recomputed"] += 1
+            fields["age_bucket"] = age_label
+        income_label = band_label(_to_int(row.get("exact_household_income")), INCOME_BANDS)
+        if income_label is not None and income_label != fields.get("income_bucket"):
+            LAST_LOAD_STATS["income_bucket_recomputed"] += 1
+            fields["income_bucket"] = income_label
     fields["lifestyle_tags"] = [tag.strip() for tag in (row.get("lifestyle_tags") or "").split(";") if tag.strip()]
     for column in CLASSIFIER_COLUMNS:
         fields[column] = _clean(row.get(column))
@@ -289,7 +337,9 @@ def build_persona(row: Dict[str, str], prompt_variant: str) -> RichPersonaProfil
     return RichPersonaProfile(**fields)
 
 
-def load_personas(path: Path, *, limit: Optional[int], prompt_variant: str) -> List[RichPersonaProfile]:
+def load_personas(
+    path: Path, *, limit: Optional[int], prompt_variant: str, recompute_buckets: bool = True
+) -> List[RichPersonaProfile]:
     with open(path, newline="", encoding="utf-8") as handle:
         reader = csv.DictReader(handle)
         header = list(reader.fieldnames or [])
@@ -299,7 +349,9 @@ def load_personas(path: Path, *, limit: Optional[int], prompt_variant: str) -> L
         rows = list(reader)
     if limit is not None:
         rows = rows[: int(limit)]
-    personas = [build_persona(row, prompt_variant) for row in rows]
+    LAST_LOAD_STATS["age_bucket_recomputed"] = 0
+    LAST_LOAD_STATS["income_bucket_recomputed"] = 0
+    personas = [build_persona(row, prompt_variant, recompute_buckets=recompute_buckets) for row in rows]
     ids = [persona.persona_id for persona in personas]
     duplicates = [pid for pid, count in Counter(ids).items() if count > 1]
     if duplicates:
@@ -1109,7 +1161,17 @@ def run_one(
         "likert_label_map": not args.no_likert_label_map,
         "prompt_builder": "backend.simulation.prompt_builder.build_openrouter_prompt_payload",
         "survey": {"path": str(args.survey), "sha256": sha256_of_file(Path(args.survey)), "title": survey.survey_title, "question_count": len(survey.questions), "question_ids": [q.id for q in survey.questions]},
-        "personas": {"path": str(args.personas), "sha256": sha256_of_file(Path(args.personas)), "rows_used": len(personas), "limit": args.limit, "first_id": personas[0].persona_id, "last_id": personas[-1].persona_id},
+        "personas": {
+            "path": str(args.personas),
+            "sha256": sha256_of_file(Path(args.personas)),
+            "rows_used": len(personas),
+            "limit": args.limit,
+            "first_id": personas[0].persona_id,
+            "last_id": personas[-1].persona_id,
+            "buckets_recomputed_from_exact_values": not getattr(args, "keep_file_buckets", False),
+            "age_bucket_recomputed_rows": LAST_LOAD_STATS.get("age_bucket_recomputed", 0),
+            "income_bucket_recomputed_rows": LAST_LOAD_STATS.get("income_bucket_recomputed", 0),
+        },
         "context": {"business_product": "backend.presets.get_neo_business_product_defaults", "market": "backend.presets.get_neo_market_defaults", "audience_filter": None, "context_sha256": sha256_of_text(json.dumps({"product": product.model_dump(), "market": market.model_dump()}, sort_keys=True, default=str))},
         "generation_debug": None,
         "counts": None,
@@ -1489,6 +1551,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--temperature", type=float, default=0.2)
     parser.add_argument("--seed-base", type=int, default=DEFAULT_SEED_BASE, help="seed = seed_base*10 + repeat")
     parser.add_argument("--prompt-variant", choices=PROMPT_VARIANTS, default="full")
+    parser.add_argument(
+        "--keep-file-buckets",
+        action="store_true",
+        help="send the CSV's age_bucket/income_bucket labels as-is instead of deriving them from exact_age/exact_household_income",
+    )
     parser.add_argument("--json-mode", action="store_true", help="send response_format=json_object (not all providers accept it)")
     parser.add_argument("--reasoning-effort", choices=["off", "low", "medium", "high", "default"], default="off",
                         help="hidden reasoning; both suggested models think for ~3,000 tokens per persona unless this is off")
@@ -1519,7 +1586,14 @@ def main(argv: Optional[List[str]] = None) -> int:
         (args.out_dir / "cross_run_summary.md").write_text(text, encoding="utf-8")
         return 0
 
-    personas = load_personas(args.personas, limit=args.limit, prompt_variant=args.prompt_variant)
+    personas = load_personas(
+        args.personas, limit=args.limit, prompt_variant=args.prompt_variant, recompute_buckets=not args.keep_file_buckets
+    )
+    if LAST_LOAD_STATS["age_bucket_recomputed"] or LAST_LOAD_STATS["income_bucket_recomputed"]:
+        print(
+            f"bucket labels derived from exact values: age_bucket changed on {LAST_LOAD_STATS['age_bucket_recomputed']} rows, "
+            f"income_bucket on {LAST_LOAD_STATS['income_bucket_recomputed']} rows (--keep-file-buckets to disable)"
+        )
     contexts = load_contexts()
     if args.dry_run:
         return dry_run(personas=personas, survey=survey, contexts=contexts, args=args)

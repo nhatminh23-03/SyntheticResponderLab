@@ -88,6 +88,29 @@ def test_prompt_variants_drop_story_and_census(persona_csv: Path) -> None:
     assert set(buckets.model_dump()) == {"persona_id", "age_bucket", "income_bucket", "ownership", "home_type", "work_mode", "lifestyle_tags"}
 
 
+def test_bucket_labels_are_derived_from_exact_values(tmp_path: Path) -> None:
+    """The matched draw carries labels from the screened pool ("$100k-$150k" on a $31,980 income)."""
+    path = tmp_path / "matched.csv"
+    with open(path, "w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=HEADER)
+        writer.writeheader()
+        row = _row("P001", 24, 31980)
+        row["age_bucket"] = "30-34"
+        row["income_bucket"] = "$100k-$150k"
+        writer.writerow(row)
+        row = _row("P002", 67, 214092)
+        row["age_bucket"] = "65"
+        row["income_bucket"] = "$200k-$300k"
+        writer.writerow(row)
+    personas = run_survey.load_personas(path, limit=None, prompt_variant="full")
+    assert (personas[0].age_bucket, personas[0].income_bucket) == ("18-24", "$25k-$50k")
+    assert (personas[1].age_bucket, personas[1].income_bucket) == ("65+", "$200k-$300k")
+    assert run_survey.LAST_LOAD_STATS == {"age_bucket_recomputed": 2, "income_bucket_recomputed": 1}
+    kept = run_survey.load_personas(path, limit=None, prompt_variant="full", recompute_buckets=False)
+    assert (kept[0].age_bucket, kept[0].income_bucket) == ("30-34", "$100k-$150k")
+    assert run_survey.LAST_LOAD_STATS == {"age_bucket_recomputed": 0, "income_bucket_recomputed": 0}
+
+
 def test_limit_and_duplicate_ids(persona_csv: Path, tmp_path: Path) -> None:
     assert len(run_survey.load_personas(persona_csv, limit=2, prompt_variant="full")) == 2
     dup = tmp_path / "dup.csv"
@@ -278,7 +301,7 @@ def _args(tmp_path: Path, persona_csv: Path, **overrides) -> argparse.Namespace:
         max_tokens=4000, temperature=0.2, timeout=5, max_retries=0, concurrency=2, prompt_variant="full",
         provider_order=None, provider_ignore=["DigitalOcean"], no_provider_fallbacks=False, json_mode=False, reasoning_effort="off",
         no_likert_label_map=False, fallback_threshold=0.01, price_in=None, price_out=None, progress_every=1000,
-        repair_rounds=2, max_failed_respondent_share=0.005,
+        repair_rounds=2, max_failed_respondent_share=0.005, keep_file_buckets=False,
     )
     values.update(overrides)
     return argparse.Namespace(**values)
