@@ -116,9 +116,15 @@ Wang's design, confirmed on the call. **Three comparisons, not one.**
       distribution of the real 600*, via iterative proportional fitting (IPF) against the PUMS frame.
       [13:15] This is the arm that answers Anderson's own filter-mismatch finding: the real panel was
       national and unfiltered, only 21% of it passes our screens, and only 6.7% is Californian.
-- [ ] **P4.4** **Arm C** — Yufan's ~300-person convenience sample (students' families and friends).
-      Match its demographics, draw 300, compare. [13:46] **Blocked: we do not have this file.** Ask
-      Wang for it — she does not know whether Yufan ever sent it.
+- [ ] **P4.4** **Arm C** — Yufan's convenience sample (students' families and friends).
+      Match its demographics, draw the same n, compare. [13:46] **Unblocked 2026-09-06** — Dr. Lin
+      supplied `student_CLEAN.csv`, `aytm_CLEAN.csv` and `Question_Mapping.csv`; staged read-only at
+      `~/dev/aytm-real-data/neo_smart_living/student_sample/`, never into a prompt.
+      **The sample is 256 respondents, not the ~300 the team has been saying** (256 rows x 47 cols,
+      parsed). The mapping covers 54 topics: 42 Matched, 8 AYTM-only, 4 student-only, so Arm C runs
+      on the 42 matched questions. Van Westendorp pricing, education, career, relationship and
+      parental status, and state/region are AYTM-only — pricing gets no human-sample validation and
+      the matched draw cannot balance on those fields.
 - [x] **P4.5** Test battery keyed to question type: t-test for continuous, **Wald test**, chi-square
       for categorical. [14:23] Report effect sizes and CIs, not bare p-values — "not significantly
       different" on n=600 is not evidence of equivalence. Add an equivalence test (TOST) with a
