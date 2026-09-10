@@ -104,6 +104,11 @@ is recorded: a pure replay "wouldn't really be an app." The resolution is a **ca
       tiers, measured not estimated. Reference points from the call, both recollections not
       measurements: ~$5 for 20 personas on an expensive model, ~$0.50 for 10 personas × 2 samples on
       a cheap one (Minh, [30:35]).
+- [ ] **P3.5** **Pre-recorded interviews, headless.** Dr. Lin asked for this in writing on
+      2026-09-04: complete interviews on both an expensive and a cheaper model, produced without the
+      web UI, saved so students replay them for free. `scripts/prerecord_interviews.py`, driving the
+      real interviewer agent through the full turn limit, writing measured cost to `interview_turn`
+      and answers to `interview_cache`. Defaults to Dr. Lin's two picks.
 
 ## P4 — Validation (Sept 7-10 with Minh; the R lane)
 
