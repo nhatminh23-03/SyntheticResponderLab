@@ -143,6 +143,20 @@ def run(args: argparse.Namespace, settings: AppSettings) -> int:
             session.flush()
             save_research_brief(session, study, RESEARCH_BRIEF)
             print(f"Saved study: {study.public_id}")
+            # A provider that returns an empty completion is a transient fault, not a
+            # reason to discard the rest of a 480-call batch. One retry per call, then
+            # abandon that persona and carry on. Budget stops stay fatal: a
+            # QuotaExceededApiError must never be retried or swallowed.
+            def call_with_one_retry(fn):
+                try:
+                    return fn()
+                except QuotaExceededApiError:
+                    raise
+                except (ApiError, RuntimeError) as first:
+                    print(f"  retrying after: {first}", file=sys.stderr)
+                    return fn()
+
+            abandoned: list[tuple[str, str, str]] = []
             for model, session_id in runs.items():
                 plan = plans[model]
                 next_estimate = estimates[model] / (len(personas) * plan.turn_limit * 2)
@@ -152,16 +166,30 @@ def run(args: argparse.Namespace, settings: AppSettings) -> int:
                                "persona_count": len(personas), "interviewer_model": model,
                                "interviewee_model": model, "model": model,
                                "allow_expensive_models": True, "messages": history}
-                    for _ in range(plan.turn_limit):
-                        _check_batch_cap(session, list(runs.values()), args.max_usd, next_estimate)
-                        question = generate_interviewer_question(session, settings, study, payload)["question"]
-                        _check_batch_cap(session, list(runs.values()), args.max_usd, next_estimate)
-                        answer = continue_standalone_interview_chat(
-                            session, settings, study, {**payload, "prompt": question},
-                        )["reply"]
-                        history.extend([{"role": "user", "content": question},
-                                        {"role": "assistant", "content": answer}])
-                        _check_batch_cap(session, list(runs.values()), args.max_usd)
+                    try:
+                        for _ in range(plan.turn_limit):
+                            _check_batch_cap(session, list(runs.values()), args.max_usd, next_estimate)
+                            question = call_with_one_retry(lambda: generate_interviewer_question(
+                                session, settings, study, payload)["question"])
+                            _check_batch_cap(session, list(runs.values()), args.max_usd, next_estimate)
+                            answer = call_with_one_retry(lambda q=question: continue_standalone_interview_chat(
+                                session, settings, study, {**payload, "prompt": q},
+                            )["reply"])
+                            history.extend([{"role": "user", "content": question},
+                                            {"role": "assistant", "content": answer}])
+                            _check_batch_cap(session, list(runs.values()), args.max_usd)
+                    except QuotaExceededApiError:
+                        raise
+                    except (ApiError, RuntimeError) as exc:
+                        session.rollback()
+                        abandoned.append((model, persona.persona_id, str(exc)))
+                        print(f"  abandoned {model} / {persona.persona_id} after "
+                              f"{len(history) // 2} turns: {exc}", file=sys.stderr)
+            if abandoned:
+                print(f"\n{len(abandoned)} persona/model pair(s) abandoned:", file=sys.stderr)
+                for model, persona_id, reason in abandoned:
+                    print(f"  {model} {persona_id}: {reason}", file=sys.stderr)
+                return 3
             return 0
         except (ApiError, ValueError, RuntimeError) as exc:
             print(str(exc), file=sys.stderr)
