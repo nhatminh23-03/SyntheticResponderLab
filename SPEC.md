@@ -121,7 +121,7 @@ Wang's design, confirmed on the call. **Three comparisons, not one.**
       distribution of the real 600*, via iterative proportional fitting (IPF) against the PUMS frame.
       [13:15] This is the arm that answers Anderson's own filter-mismatch finding: the real panel was
       national and unfiltered, only 21% of it passes our screens, and only 6.7% is Californian.
-- [ ] **P4.4** **Arm C** — Yufan's convenience sample (students' families and friends).
+- [x] **P4.4** **Arm C** — Yufan's convenience sample (students' families and friends).
       Match its demographics, draw the same n, compare. [13:46] **Unblocked 2026-09-06** — Dr. Lin
       supplied `student_CLEAN.csv`, `aytm_CLEAN.csv` and `Question_Mapping.csv`; staged read-only at
       `~/dev/aytm-real-data/neo_smart_living/student_sample/`, never into a prompt.
