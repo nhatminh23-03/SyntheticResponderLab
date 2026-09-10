@@ -1,5 +1,6 @@
 runner_path <- file.path(repo_root, "analysis", "run_all.R")
 source(runner_path, local = TRUE)
+source(file.path(repo_root, "analysis", "tests", "fixture_arm_c.R"), local = TRUE)
 
 assert_error <- function(expression, pattern) {
   message <- tryCatch(
@@ -16,6 +17,11 @@ default_options <- parse_run_all_arguments(character(), repo_root = repo_root)
 stopifnot(
   default_options[["arm-a-housing"]] == file.path(repo_root, "analysis", "data", "arm_a_housing.parquet"),
   default_options[["arm-b-person"]] == file.path(repo_root, "analysis", "data", "arm_b_person.parquet"),
+  default_options[["arm-c-student"]] == file.path(ARM_C_DATA_DIRECTORY, "student_CLEAN.csv"),
+  default_options[["arm-c-aytm"]] == file.path(ARM_C_DATA_DIRECTORY, "aytm_CLEAN.csv"),
+  default_options[["arm-c-mapping"]] == file.path(ARM_C_DATA_DIRECTORY, "Question_Mapping.csv"),
+  default_options[["arm-c-synthetic"]] == file.path(repo_root, "analysis", "data", "arm_c_synthetic_responses.csv"),
+  default_options[["arm-c-registry"]] == file.path(repo_root, "analysis", "data", "arm_c_question_registry.csv"),
   default_options$real == file.path(repo_root, "analysis", "data", "real_responses.csv"),
   default_options$synthetic == file.path(repo_root, "analysis", "data", "synthetic_responses.csv"),
   default_options$registry == file.path(repo_root, "analysis", "data", "question_registry.csv"),
@@ -170,11 +176,13 @@ registry <- data.frame(
   stringsAsFactors = FALSE
 )
 
+arm_c_inputs <- arm_c_fixture()
 workspace <- tempfile(pattern = "run-all-")
 dir.create(workspace)
 paths <- file.path(workspace, c(
   "arm-a-housing.csv", "arm-a-person.csv", "arm-b-housing.csv", "arm-b-person.csv",
-  "real.csv", "synthetic.csv", "registry.csv"
+  "real.csv", "synthetic.csv", "registry.csv",
+  "student.csv", "aytm.csv", "mapping.csv", "c-synthetic.csv", "c-registry.csv"
 ))
 frames <- list(
   arm_a_housing,
@@ -183,7 +191,9 @@ frames <- list(
   arm_b_person,
   real_data,
   synthetic_data,
-  registry
+  registry,
+  arm_c_inputs$student_data, arm_c_inputs$aytm_data, arm_c_inputs$mapping,
+  arm_c_inputs$synthetic_data, arm_c_inputs$registry
 )
 for (index in seq_along(paths)) {
   utils::write.csv(frames[[index]], paths[[index]], row.names = FALSE, na = "")
@@ -199,6 +209,11 @@ arguments <- c(
   "--real", paths[[5L]],
   "--synthetic", paths[[6L]],
   "--registry", paths[[7L]],
+  "--arm-c-student", paths[[8L]],
+  "--arm-c-aytm", paths[[9L]],
+  "--arm-c-mapping", paths[[10L]],
+  "--arm-c-synthetic", paths[[11L]],
+  "--arm-c-registry", paths[[12L]],
   "--real-id", "real_id",
   "--synthetic-id", "synthetic_id",
   "--strata", "Gender",
@@ -224,8 +239,11 @@ stopifnot(
       "Pearson chi-square test of homogeneity"
     )
   ),
-  all(c("Complete", "Blocked") %in% result$coverage$status),
-  nrow(result$inputs) == 7L,
+  identical(result$coverage$status, rep("Complete", 5L)),
+  identical(result$arm_c$seed, ARM_C_SEED),
+  nrow(result$arm_c$synthetic) == 256L,
+  nrow(result$arm_c$battery$results) == 42L,
+  nrow(result$inputs) == 12L,
   all(nchar(result$inputs$md5) == 32L)
 )
 
@@ -237,11 +255,19 @@ stopifnot(
   identical(html_one, html_two),
   identical(result$arm_a$synthetic, second_result$arm_a$synthetic),
   identical(result$arm_b$synthetic, second_result$arm_b$synthetic),
+  identical(result$arm_c, second_result$arm_c),
   identical(result$baselines$metrics, second_result$baselines$metrics),
   identical(result$battery$results, second_result$battery$results),
   grepl("Arm A — hard-screened draw", html_one, fixed = TRUE),
   grepl("Arm B — distribution-matched draw", html_one, fixed = TRUE),
   grepl("Arm C — convenience-sample match", html_one, fixed = TRUE),
+  grepl("Student PQ1 includes No", html_one, fixed = TRUE),
+  grepl("AYTM screened No out before fielding", html_one, fixed = TRUE),
+  grepl("samples are screened differently", html_one, fixed = TRUE),
+  grepl("AYTM is a national panel", html_one, fixed = TRUE),
+  grepl("Southern-California-based", html_one, fixed = TRUE),
+  grepl("Geography cannot be controlled for because the student survey never asked for it", html_one, fixed = TRUE),
+  !grepl("Blocked", html_one, fixed = TRUE),
   grepl("Non-LLM response baseline arm", html_one, fixed = TRUE),
   grepl("Welch two-sample t-test", html_one, fixed = TRUE),
   grepl("two-sample Wald z-test", html_one, fixed = TRUE),

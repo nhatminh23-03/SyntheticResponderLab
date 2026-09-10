@@ -15,7 +15,7 @@ uses it.
 
 `run_all.R` rebuilds every implemented validation component in memory and writes one self-contained
 HTML report. It does not read prior files from `analysis/output/`. The report includes Arm A, Arm B,
-an explicit blocked record for Arm C, all five held-out non-LLM baselines, every registered question
+Arm C (256 respondents and 42 shared questions), all five held-out non-LLM baselines, every registered question
 test and per-estimand TOST result, fixed-seed provenance, and input checksums. It contains aggregate
 results only and makes no model or provider calls.
 
@@ -26,6 +26,11 @@ For the zero-argument command, place the local, ignored inputs at these paths:
 - `analysis/data/real_responses.csv` — the read-only real panel source (do not copy it into prompts)
 - `analysis/data/synthetic_responses.csv` — the synthetic response comparison sample
 - `analysis/data/question_registry.csv` — the frozen 32-item test registry
+- `~/dev/aytm-real-data/neo_smart_living/student_sample/{student_CLEAN.csv,aytm_CLEAN.csv,Question_Mapping.csv}` — read-only Arm C sources
+- `analysis/data/arm_c_synthetic_responses.csv` — independently produced answers for the
+  fixed `ARM_C_SEED` draw, IDs `arm_c_001` through `arm_c_256`, using audited common coding
+- `analysis/data/arm_c_question_registry.csv` — pre-registered types and equivalence margins for
+  every quantitative matched question; excludes audited multi-select/open-ended items
 
 Then run:
 
@@ -54,8 +59,11 @@ explicitly without making seeds configurable:
   --output analysis/output/validation_report.html
 ```
 
-Arm C is not accepted as an optional substitute: until Yufan's convenience-sample file is received,
-the report keeps that arm visibly blocked and does not fabricate a comparison. P4.7 interview-theme
+Arm C uses the Arm B PUMS inputs and accepts `--arm-c-student`, `--arm-c-aytm`,
+`--arm-c-mapping`, `--arm-c-synthetic`, and `--arm-c-registry` path overrides. Missing inputs fail
+explicitly. The report includes its demographic calibration and margins, all 42 harmonization
+decisions, per-item missingness, tests, TOST results, and screening/geography caveats. AYTM coding
+is used locally; student responses are the reference for Arm C tests. P4.7 interview-theme
 validation is also identified as outside this quantitative report rather than represented by a
 placeholder statistic.
 
@@ -194,3 +202,15 @@ Run the analysis checks from the repository root:
 ```sh
 /usr/local/bin/Rscript analysis/tests/test_all.R
 ```
+
+## Arm C verification
+
+`tests/test_arm_c.R` uses invented 256/600-row fixtures and checks the 42-topic prefix join,
+anchor stripping, common demographic levels, fixed-seed draws, calibration rounding,
+missingness, and emitted caveats. When all three private CSVs are available, it also runs
+local alignment and harmonization assertions with source contents and errors suppressed;
+otherwise it prints an explicit integration skip. `tests/test_run_all.R` rebuilds the full HTML
+twice from invented inputs and requires identical bytes, all three arms, and both Arm C caveats.
+Numeric PUMS incomes must be formatted without scientific notation before bracket parsing.
+Real validation still requires independently produced Arm C answers and a pre-registered registry;
+the test fixtures are not research results.

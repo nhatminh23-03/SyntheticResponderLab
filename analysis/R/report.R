@@ -53,6 +53,7 @@ report_seed_register <- function(baseline_names, question_n) {
     analysis = c(
       "Arm A weighted draw",
       "Arm B balanced draw",
+      "Arm C balanced draw and per-item bootstrap (seed + audit row index - 1)",
       "Non-LLM held-out split",
       paste("Non-LLM prediction:", baseline_names),
       "Categorical effect-size bootstrap"
@@ -60,6 +61,7 @@ report_seed_register <- function(baseline_names, question_n) {
     seed = c(
       as.character(ARM_A_SEED),
       as.character(ARM_B_SEED),
+      as.character(ARM_C_SEED),
       as.character(REPORT_BASELINE_SEED),
       as.character(REPORT_BASELINE_SEED + seq_along(baseline_names)),
       sprintf(
@@ -84,7 +86,8 @@ run_validation_report_analyses <- function(
   synthetic_id_column,
   stratum_columns,
   knn_columns,
-  input_manifest
+  input_manifest,
+  arm_c
 ) {
   registered <- validate_question_registry(registry)
   completed <- report_completed_responses(real_data, expected_rows = ARM_A_DRAW_N)
@@ -122,6 +125,8 @@ run_validation_report_analyses <- function(
   stopifnot(
     arm_a$seed == ARM_A_SEED,
     arm_b$seed == ARM_B_SEED,
+    identical(arm_c$seed, ARM_C_SEED),
+    identical(arm_c$draw_n, ARM_C_DRAW_N),
     baselines$split$seed == REPORT_BASELINE_SEED,
     battery$seed == TEST_BATTERY_SEED,
     identical(baselines$audit$baseline, NON_LLM_BASELINES),
@@ -139,11 +144,11 @@ run_validation_report_analyses <- function(
         "Non-LLM response baselines",
         "Registered quantitative test battery"
       ),
-      status = c("Complete", "Complete", "Blocked", "Complete", "Complete"),
+      status = rep("Complete", 5L),
       result = c(
         sprintf("%d screened respondents", arm_a$draw_n),
         sprintf("%d IPF-matched respondents", arm_b$draw_n),
-        "Yufan Lin's approximately 300-person sample has not been received; no result is fabricated",
+        sprintf("%d convenience-sample respondents; %d shared questions audited", arm_c$draw_n, nrow(arm_c$question_audit)),
         sprintf("%d held-out methods; fit and evaluation N = %d/%d", nrow(baselines$audit), baselines$audit$fit_rows[[1L]], baselines$audit$evaluation_rows[[1L]]),
         sprintf("%d registered questions; all routed tests and TOST equivalence results reported", nrow(battery$results))
       ),
@@ -153,6 +158,7 @@ run_validation_report_analyses <- function(
     inputs = input_manifest,
     arm_a = arm_a,
     arm_b = arm_b,
+    arm_c = arm_c,
     baselines = list(
       audit = baselines$audit,
       metrics = baselines$metrics
@@ -211,6 +217,20 @@ report_html_table <- function(frame, caption = NULL) {
   )
 }
 
+render_arm_c_report <- function(result) {
+  paste(c(
+    paste0('<p class="note">', html_escape(result$limitations), "</p>"),
+    report_html_table(result$frame_audit, "Arm C source-frame audit"),
+    report_html_table(result$convergence, "Arm C IPF convergence"),
+    report_html_table(result$calibration_audit, "Arm C supported calibration counts"),
+    report_html_table(result$margin_audit, "Arm C target, raked, and selected margins"),
+    report_html_table(result$question_audit, "All 42 shared questions and harmonization decisions"),
+    report_html_table(result$battery$audit, "Arm C missingness and estimability"),
+    report_html_table(result$battery$results, "Arm C registered tests"),
+    report_html_table(result$battery$equivalence, "Arm C per-estimand TOST results")
+  ), collapse = "\n")
+}
+
 render_validation_report <- function(result) {
   test_columns <- c(
     "question_id", "question_type", "real_n", "synthetic_n", "test", "effect_size",
@@ -247,8 +267,7 @@ render_validation_report <- function(result) {
     report_html_table(result$coverage),
     paste0(
       '<p class="note"><strong>Scope boundary:</strong> interview theme validation and inter-rater ',
-      'agreement belong to P4.7 and are not fabricated here. Arm C remains visibly blocked on its ',
-      'external input.</p>'
+      'agreement belong to P4.7 and are not fabricated here.</p>'
     ),
     "<h2>Reproducibility register</h2>",
     "<p>The output has no wall-clock timestamp. Identical inputs and the pinned R environment produce the same HTML bytes.</p>",
@@ -270,7 +289,7 @@ render_validation_report <- function(result) {
     report_html_table(result$arm_b$margin_audit),
     "</details>",
     "<h2>Arm C — convenience-sample match</h2>",
-    "<p class=\"note\">Blocked: Yufan Lin's approximately 300-person convenience sample has not been received. No Arm C statistics are imputed, copied from another arm, or presented as observed.</p>",
+    render_arm_c_report(result$arm_c),
     "<h2>Non-LLM response baseline arm</h2>",
     "<p>All five methods are fit on one fixed half of the real panel and evaluated only on the disjoint held-out half.</p>",
     report_html_table(result$baselines$audit, "Held-out leakage audit"),

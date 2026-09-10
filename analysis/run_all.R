@@ -21,6 +21,7 @@ run_all_root <- run_all_repo_root()
 source(file.path(run_all_root, "analysis", "screen_counts.R"), local = environment())
 source(file.path(run_all_root, "analysis", "R", "arm_a.R"), local = environment())
 source(file.path(run_all_root, "analysis", "R", "arm_b.R"), local = environment())
+source(file.path(run_all_root, "analysis", "R", "arm_c.R"), local = environment())
 source(file.path(run_all_root, "analysis", "R", "non_llm_baselines.R"), local = environment())
 source(file.path(run_all_root, "analysis", "R", "test_battery.R"), local = environment())
 source(file.path(run_all_root, "analysis", "R", "report.R"), local = environment())
@@ -30,6 +31,8 @@ run_all_usage <- function() {
     "Usage: Rscript analysis/run_all.R",
     "[--arm-a-housing PATH] [--arm-a-person PATH]",
     "[--arm-b-housing PATH] [--arm-b-person PATH]",
+    "[--arm-c-student PATH] [--arm-c-aytm PATH] [--arm-c-mapping PATH]",
+    "[--arm-c-synthetic PATH] [--arm-c-registry PATH]",
     "[--real PATH] [--synthetic PATH] [--registry PATH]",
     "[--real-id COLUMN] [--synthetic-id COLUMN]",
     "[--strata COLUMN,...] [--knn COLUMN,...] [--output PATH]"
@@ -66,6 +69,7 @@ parse_run_all_arguments <- function(arguments, repo_root = run_all_root) {
 
   allowed <- c(
     "arm-a-housing", "arm-a-person", "arm-b-housing", "arm-b-person", "real",
+    "arm-c-student", "arm-c-aytm", "arm-c-mapping", "arm-c-synthetic", "arm-c-registry",
     "synthetic", "registry", "real-id", "synthetic-id", "strata", "knn", "output"
   )
   unknown <- setdiff(names(parsed), allowed)
@@ -82,6 +86,16 @@ parse_run_all_arguments <- function(arguments, repo_root = run_all_root) {
     file.path(data_directory, "arm_b_housing.parquet")
   parsed[["arm-b-person"]] <- parsed[["arm-b-person"]] %||%
     file.path(data_directory, "arm_b_person.parquet")
+  parsed[["arm-c-student"]] <- parsed[["arm-c-student"]] %||%
+    file.path(ARM_C_DATA_DIRECTORY, "student_CLEAN.csv")
+  parsed[["arm-c-aytm"]] <- parsed[["arm-c-aytm"]] %||%
+    file.path(ARM_C_DATA_DIRECTORY, "aytm_CLEAN.csv")
+  parsed[["arm-c-mapping"]] <- parsed[["arm-c-mapping"]] %||%
+    file.path(ARM_C_DATA_DIRECTORY, "Question_Mapping.csv")
+  parsed[["arm-c-synthetic"]] <- parsed[["arm-c-synthetic"]] %||%
+    file.path(data_directory, "arm_c_synthetic_responses.csv")
+  parsed[["arm-c-registry"]] <- parsed[["arm-c-registry"]] %||%
+    file.path(data_directory, "arm_c_question_registry.csv")
   parsed$real <- parsed$real %||% file.path(data_directory, "real_responses.csv")
   parsed$synthetic <- parsed$synthetic %||% file.path(data_directory, "synthetic_responses.csv")
   parsed$registry <- parsed$registry %||% file.path(data_directory, "question_registry.csv")
@@ -119,7 +133,12 @@ run_all_main <- function(arguments = commandArgs(trailingOnly = TRUE)) {
     arm_b_person = options[["arm-b-person"]],
     real_responses = options$real,
     synthetic_responses = options$synthetic,
-    question_registry = options$registry
+    question_registry = options$registry,
+    arm_c_student = options[["arm-c-student"]],
+    arm_c_aytm = options[["arm-c-aytm"]],
+    arm_c_mapping = options[["arm-c-mapping"]],
+    arm_c_synthetic = options[["arm-c-synthetic"]],
+    arm_c_registry = options[["arm-c-registry"]]
   )
   manifest <- report_input_manifest(input_paths)
 
@@ -147,7 +166,15 @@ run_all_main <- function(arguments = commandArgs(trailingOnly = TRUE)) {
     options[["synthetic-id"]],
     options$strata,
     options$knn,
-    manifest
+    manifest,
+    arm_c = run_arm_c(
+      arm_b_housing, arm_b_person,
+      utils::read.csv(options[["arm-c-student"]], check.names = FALSE, stringsAsFactors = FALSE),
+      utils::read.csv(options[["arm-c-aytm"]], check.names = FALSE, stringsAsFactors = FALSE),
+      utils::read.csv(options[["arm-c-mapping"]], check.names = FALSE, stringsAsFactors = FALSE),
+      utils::read.csv(options[["arm-c-synthetic"]], check.names = FALSE, stringsAsFactors = FALSE),
+      utils::read.csv(options[["arm-c-registry"]], check.names = FALSE, stringsAsFactors = FALSE)
+    )
   )
   write_validation_report(result, options$output)
   cat(sprintf(

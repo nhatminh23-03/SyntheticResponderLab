@@ -89,7 +89,8 @@ arm_c_number <- function(values) {
 }
 
 arm_c_income <- function(values) {
-  cleaned <- gsub(",", "", as.character(values), fixed = TRUE)
+  text <- if (is.numeric(values)) format(values, scientific = FALSE, trim = TRUE) else as.character(values)
+  cleaned <- gsub(",", "", text, fixed = TRUE)
   lower <- suppressWarnings(as.numeric(sub("^[^0-9]*([0-9]+).*$", "\\1", cleaned)))
   lower[grepl("under|less|below", cleaned, ignore.case = TRUE)] <- 0
   missing <- is.na(values) | !nzchar(trimws(as.character(values))) |
@@ -101,9 +102,10 @@ arm_c_income <- function(values) {
 }
 
 arm_c_age <- function(values) {
+  missing <- is.na(values) | !nzchar(trimws(as.character(values)))
   lower <- suppressWarnings(as.numeric(sub("^[^0-9]*([0-9]+).*$", "\\1", as.character(values))))
   result <- arm_b_age_band(lower)
-  if (anyNA(result)) stop("Arm C age bands could not be harmonized to adult six-band ages.")
+  if (any(is.na(result) & !missing)) stop("Arm C age bands could not be harmonized to adult six-band ages.")
   result
 }
 
@@ -123,6 +125,8 @@ arm_c_harmonize <- function(student, aytm, alignment) {
     if (is.na(notes)) notes <- ""
     left <- trimws(as.character(student[[alignment$student_column[[index]]]]))
     right <- trimws(as.character(aytm[[alignment$aytm_column[[index]]]]))
+    left_missing <- is.na(left) | left == ""
+    right_missing <- is.na(right) | right == ""
     demographic <- grepl("age|income|gender|race|employment", key)
     numeric_left <- arm_c_number(left)
     numeric_right <- arm_c_number(right)
@@ -175,6 +179,9 @@ arm_c_harmonize <- function(student, aytm, alignment) {
       }
       audit$treatment[[index]] <- "Normalize case/punctuation; retain shared categories, collapse survey-specific categories to Other / not shared; gender to female/male/other; race to White vs other/multiracial; employment to employed vs not employed/other; PQ1 to yes/no/possibly"
     }
+    # Category collapsing must never turn nonresponse into an observed answer.
+    left[left_missing] <- NA
+    right[right_missing] <- NA
     student_output[[id]] <- left
     aytm_output[[id]] <- right
   }
