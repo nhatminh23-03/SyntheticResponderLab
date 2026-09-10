@@ -1474,7 +1474,11 @@ def _call_openrouter_messages(
         "model": model,
         "messages": messages,
         "temperature": 0.45,
-        "max_tokens": 1200,
+        # ponytail: reasoning tokens count against max_tokens, so a reasoning model
+        # (qwen3.7-plus) burns the whole budget thinking and returns empty content.
+        # Cap the thinking, leave room for the answer. Inert on non-reasoning models.
+        "max_tokens": 2000,
+        "reasoning": {"max_tokens": 400},
     }
 
     for attempt in range(_MAX_RETRIES):

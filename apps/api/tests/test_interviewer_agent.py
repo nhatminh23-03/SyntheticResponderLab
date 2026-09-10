@@ -354,3 +354,36 @@ def test_question_normalization_uses_one_question_and_rejects_empty_output():
     assert normalize_interviewer_question("Why permits?\nWhat else?") == "Why permits?"
     with pytest.raises(RuntimeError, match="empty question"):
         normalize_interviewer_question(" \n ")
+
+
+def test_openrouter_body_caps_reasoning_below_max_tokens(monkeypatch):
+    """A reasoning model spends completion tokens thinking; without a cap it hits
+    max_tokens mid-thought and returns empty content, which reads as a provider fault."""
+    from src.services import interview_service
+
+    sent = {}
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self, parse_float=None):
+            return {
+                "choices": [{"message": {"content": "answer"}}],
+                "usage": {"prompt_tokens": 10, "completion_tokens": 5, "cost": 0.001},
+            }
+
+    def fake_post(url, headers=None, json=None, timeout=None):
+        sent.update(json)
+        return FakeResponse()
+
+    monkeypatch.setattr(interview_service.requests, "post", fake_post)
+    interview_service._call_openrouter_messages(
+        api_key="k",
+        model="qwen/qwen3.7-plus",
+        messages=[{"role": "user", "content": "hi"}],
+    )
+
+    reasoning_cap = sent["reasoning"]["max_tokens"]
+    assert reasoning_cap > 0
+    assert sent["max_tokens"] - reasoning_cap >= 1000, "no room left for the answer"
