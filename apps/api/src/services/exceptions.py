@@ -69,3 +69,13 @@ class DependencyMissingApiError(ApiError):
 class LegacyModuleApiError(ApiError):
     def __init__(self, message: str, details: Optional[dict] = None) -> None:
         super().__init__(500, "legacy_module_error", message, details)
+
+
+class TransientProviderError(RuntimeError):
+    """The provider answered, but the answer was unusable.
+
+    Empty completion text, a missing message, or a body that is not JSON. These
+    are hiccups a retry usually clears, and they are distinct from a
+    misconfiguration (no API key) or a budget stop, both of which must stay
+    fatal. Only raise this where the fault is demonstrably the response itself.
+    """

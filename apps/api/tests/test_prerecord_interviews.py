@@ -10,6 +10,7 @@ from conftest import API_ROOT
 from src.persistence.models import InterviewCacheEntry, InterviewTurn, Persona, Study
 from src.persistence.persona_seed import load_persona_seed_rows
 from src.services import interview_service
+from src.services.exceptions import TransientProviderError
 from src.services.interview_cache import InterviewAnswer
 
 REPO_ROOT = API_ROOT.parents[1]
@@ -211,3 +212,48 @@ def test_free_replay_with_zero_spend_allowance(db_session, recording, monkeypatc
     turns = db_session.scalars(select(InterviewTurn)).all()
     assert sum(t.role == "assistant" for t in turns) == 96
     assert sum(t.cost_usd for t in turns) == paid_before
+
+
+def test_transient_provider_fault_is_retried_then_abandons_only_that_persona(
+    db_session, recording, monkeypatch, capsys,
+):
+    """A hiccup must not discard the batch, and a retry must not be infinite.
+
+    One model, 3 personas, 8 turns, 2 calls per turn = 16 calls per persona.
+    Call 1 fails once and the retry succeeds, so P001 completes in 17 calls.
+    Calls 18 and 19 are P002's first question and its one retry, both failing, so
+    P002 is abandoned. P003 must still be recorded — before this fix, a single
+    empty completion ended every remaining call in the run.
+    """
+    calls = {"n": 0}
+    FAIL_ON = {1, 18, 19}
+
+    def provider(**kwargs):
+        calls["n"] += 1
+        if calls["n"] in FAIL_ON:
+            raise TransientProviderError("OpenRouter chat response included empty assistant text.")
+        return InterviewAnswer(text="A synthetic answer about installation.", model=kwargs["model"],
+                               tokens_in=123, tokens_out=45, cost_usd=Decimal("0.000123"))
+
+    monkeypatch.setattr(interview_service, "_call_openrouter_messages", provider)
+    code = runner.run(runner.build_parser().parse_args(["--models", "qwen/qwen3.7-plus"]), recording)
+
+    # Exit 3, not 0: a partial batch must never read as success.
+    assert code == 3
+    err = capsys.readouterr().err
+    assert "abandoned qwen/qwen3.7-plus / P002" in err
+    assert "abandoned qwen/qwen3.7-plus / P001" not in err
+    assert "abandoned qwen/qwen3.7-plus / P003" not in err
+    # Retried once each, never spun on: exactly two retry attempts across the run,
+    # one for the call that recovered and one for the call that did not. Asserting the
+    # retry count rather than a total call count keeps this failing if the retry ever
+    # becomes a loop, without pinning the arithmetic of a turn plan that may change.
+    assert err.count("retrying after:") == 2
+
+    # P002's abandoned transcript is short, not absent: whatever turns were already
+    # recorded were paid for, so they stay in the ledger. P001 and P003 are complete.
+    counts: dict[str, int] = {}
+    for turn in db_session.scalars(select(InterviewTurn)).all():
+        counts[turn.persona_id] = counts.get(turn.persona_id, 0) + 1
+    assert counts["P001"] == counts["P003"] > 0
+    assert 0 < counts["P002"] < counts["P001"]

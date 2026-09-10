@@ -32,7 +32,11 @@ from scripts.prewarm_cache import DEFAULT_MAX_USD, parse_usd  # noqa: E402
 from src.config.settings import AppSettings, get_settings  # noqa: E402
 from src.persistence.models import InterviewTurn, Persona, Study  # noqa: E402
 from src.persistence.session import create_session_factory  # noqa: E402
-from src.services.exceptions import ApiError, QuotaExceededApiError  # noqa: E402
+from src.services.exceptions import (  # noqa: E402
+    ApiError,
+    QuotaExceededApiError,
+    TransientProviderError,
+)
 from src.services.ids import make_public_id  # noqa: E402
 from src.services.interview_cache import CACHE_FIRST, REPLAY_ONLY  # noqa: E402
 from src.services.interview_service import (  # noqa: E402
@@ -147,12 +151,33 @@ def run(args: argparse.Namespace, settings: AppSettings) -> int:
             # reason to discard the rest of a 480-call batch. One retry per call, then
             # abandon that persona and carry on. Budget stops stay fatal: a
             # QuotaExceededApiError must never be retried or swallowed.
+            def is_transient(exc: BaseException) -> bool:
+                # continue_standalone_interview_chat re-raises any RuntimeError as a
+                # ProviderUnavailableApiError so the HTTP layer can answer 503, and that
+                # wrapper is what reaches this script on the answer path. The `raise ...
+                # from exc` keeps the original on __cause__, so the transient signal
+                # survives the wrap — checking the cause is narrower and safer than
+                # catching every ProviderUnavailableApiError, which also covers a missing
+                # API key that must stay fatal.
+                return isinstance(exc, TransientProviderError) or isinstance(
+                    exc.__cause__, TransientProviderError
+                )
+
             def call_with_one_retry(fn):
+                # Only a TransientProviderError is retried: the provider answered with
+                # something unusable. A missing API key, a budget stop, or a replay-only
+                # cache miss are not hiccups and must fail exactly as they did before —
+                # retrying a replay-only miss would authorize the paid call that mode exists
+                # to forbid.
+                if replay_only:
+                    return fn()
                 try:
                     return fn()
                 except QuotaExceededApiError:
                     raise
                 except (ApiError, RuntimeError) as first:
+                    if not is_transient(first):
+                        raise
                     print(f"  retrying after: {first}", file=sys.stderr)
                     return fn()
 
@@ -181,7 +206,12 @@ def run(args: argparse.Namespace, settings: AppSettings) -> int:
                     except QuotaExceededApiError:
                         raise
                     except (ApiError, RuntimeError) as exc:
-                        session.rollback()
+                        if not is_transient(exc):
+                            raise
+                        # Deliberately no rollback. Turns already written for this persona
+                        # were paid for, and the measured cost ledger must keep them or the
+                        # budget snapshot under-reports real spend. An abandoned persona is
+                        # a short transcript, not a missing one.
                         abandoned.append((model, persona.persona_id, str(exc)))
                         print(f"  abandoned {model} / {persona.persona_id} after "
                               f"{len(history) // 2} turns: {exc}", file=sys.stderr)

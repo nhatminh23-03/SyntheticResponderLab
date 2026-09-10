@@ -28,6 +28,7 @@ from src.services.exceptions import (
     ProviderUnavailableApiError,
     QuotaExceededApiError,
     ValidationApiError,
+    TransientProviderError,
 )
 from src.services.ids import make_public_id
 from src.services.interview_cache import (
@@ -1492,7 +1493,7 @@ def _call_openrouter_messages(
             try:
                 response_payload = resp.json(parse_float=Decimal)
             except (TypeError, ValueError) as exc:
-                raise RuntimeError("OpenRouter chat returned invalid JSON.") from exc
+                raise TransientProviderError("OpenRouter chat returned invalid JSON.") from exc
             return _parse_openrouter_chat_response(response_payload, requested_model=model)
 
     raise RuntimeError("Exhausted retries.")
@@ -1509,9 +1510,9 @@ def _parse_openrouter_chat_response(
     try:
         text = payload["choices"][0]["message"]["content"]
     except (KeyError, IndexError, TypeError) as exc:
-        raise RuntimeError("OpenRouter chat response did not include assistant text.") from exc
+        raise TransientProviderError("OpenRouter chat response did not include assistant text.") from exc
     if not isinstance(text, str) or not text.strip():
-        raise RuntimeError("OpenRouter chat response included empty assistant text.")
+        raise TransientProviderError("OpenRouter chat response included empty assistant text.")
 
     usage = payload.get("usage")
     if not isinstance(usage, dict):
