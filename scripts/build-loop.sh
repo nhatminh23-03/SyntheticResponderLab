@@ -40,7 +40,14 @@ except Exception: print("")' 2>/dev/null)
 }
 
 codex_run() {  # codex_run <prompt-file>
-  codex exec -C "$REPO" -s workspace-write -c approval_policy='"never"' - < "$1" 2>&1 | tee -a "$LOG"
+  local out
+  out=$(codex exec -C "$REPO" -s workspace-write -c approval_policy='"never"' - < "$1" 2>&1)
+  printf '%s\n' "$out" | tee -a "$LOG"
+  # A rate-limited Codex prints its error and exits 0, producing an empty diff. Verify then
+  # passes trivially because nothing changed, and the loop used to tick the box anyway. Treat
+  # the quota message as the hard failure it is.
+  printf '%s' "$out" | grep -qi "hit your usage limit\|rate limit\|quota exceeded" && return 9
+  return 0
 }
 
 # --- task table --------------------------------------------------------------
@@ -109,7 +116,11 @@ Rules:
 - Do not run any command that spends provider credits beyond a single smoke call.
 - When done, run ./scripts/verify.sh and fix what you broke.
 EOF
-  codex_run /tmp/cx-impl.txt
+  codex_run /tmp/cx-impl.txt || { log "!! $id: implementer unavailable (provider quota) — stopping"; exit 5; }
+  if git diff --quiet && git diff --cached --quiet && [ -z "$(git status --porcelain)" ]; then
+    log "!! $id: implementer produced NO changes — a green suite on an unchanged tree is not evidence. Stopping."
+    exit 6
+  fi
 
   ok=0
   for attempt in 1 2 3; do
@@ -145,7 +156,10 @@ scripts/verify.sh gated, Codex refuted its own diff.
 
 Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>" \
     && git tag -f "build/$id" >/dev/null 2>&1 \
-    && log "$id COMMITTED $(git rev-parse --short HEAD)"
+    && log "$id COMMITTED $(git rev-parse --short HEAD)" \
+    && committed=1
+  [ "${committed:-0}" = 1 ] || { log "!! $id produced no commit — NOT ticking SPEC. Stopping."; exit 7; }
+  committed=0
 
   python3 - "$id" <<'PY'
 import re, sys, pathlib
