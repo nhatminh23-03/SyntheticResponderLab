@@ -192,14 +192,17 @@ def test_client_body_retries_transient_and_captures_usage(monkeypatch) -> None:
         return _FakeResponse(200, _ok_payload('{"answers": {"Q1": 3}}'))
 
     monkeypatch.setattr(run_survey.requests, "post", fake_post)
-    client = _client(provider_order=["together", "fireworks"], allow_provider_fallbacks=False)
+    client = _client(provider_order=["together", "fireworks"], provider_ignore=["DigitalOcean"], allow_provider_fallbacks=False, reasoning_effort="off")
     result = client.generate_survey_response_with_openrouter(
         model_name="deepseek/deepseek-v4-pro-0813", prompt_payload={"messages": [{"role": "user", "content": "x"}], "max_tokens": 4000, "temperature": 0.2, "_persona_id": "P001"}, timeout=5
     )
     assert result["ok"] and result["parsed_json"] == {"answers": {"Q1": 3}}
     body = calls[-1]
     assert body["seed"] == 123 and body["usage"] == {"include": True} and body["max_tokens"] == 4000
-    assert body["provider"] == {"order": ["together", "fireworks"], "allow_fallbacks": False}
+    assert body["provider"] == {"order": ["together", "fireworks"], "allow_fallbacks": False, "ignore": ["DigitalOcean"]}
+    assert body["reasoning"] == {"enabled": False}
+    assert "provider" not in _client().build_body("m", {"messages": []})
+    assert "reasoning" not in _client(reasoning_effort="default").build_body("m", {"messages": []})
     assert "_persona_id" not in body
     capture = client.captures["P001"]
     assert capture["attempts"] == 2 and capture["provider"] == "DeepInfra" and capture["usage"]["prompt_tokens"] == 6000
@@ -273,8 +276,9 @@ def _args(tmp_path: Path, persona_csv: Path, **overrides) -> argparse.Namespace:
     values = dict(
         personas=persona_csv, survey=run_survey.DEFAULT_SURVEY, out_dir=tmp_path / "runs", limit=None, run_tag=None,
         max_tokens=4000, temperature=0.2, timeout=5, max_retries=0, concurrency=2, prompt_variant="full",
-        provider_order=None, no_provider_fallbacks=False, json_mode=False, reasoning_effort=None, no_likert_label_map=False,
-        fallback_threshold=0.01, price_in=None, price_out=None, progress_every=1000,
+        provider_order=None, provider_ignore=["DigitalOcean"], no_provider_fallbacks=False, json_mode=False, reasoning_effort="off",
+        no_likert_label_map=False, fallback_threshold=0.01, price_in=None, price_out=None, progress_every=1000,
+        repair_rounds=2, max_failed_respondent_share=0.005,
     )
     values.update(overrides)
     return argparse.Namespace(**values)
@@ -330,8 +334,57 @@ def test_guardrails_flag_fabricated_runs(tmp_path: Path, persona_csv: Path, surv
         args=args, client=BrokenClient(survey), census_lookup={},
     )
     assert manifest["status"] == "failed" and manifest["run_dir"].endswith("_failed")
-    assert any(reason.startswith("request_errors") for reason in manifest["guardrails"]["reasons"])
+    assert any(reason.startswith("failed_respondents=3") for reason in manifest["guardrails"]["reasons"])
     assert manifest["counts"]["fallback_answers"] == 117
+    assert manifest["repair"]["rounds_run"] == 2 and all(entry["improved"] == 0 for entry in manifest["repair"]["log"])
+
+
+class FlakyClient(StubClient):
+    """Returns garbage (wrong question ids) for P002 on the main batch, valid answers on repair."""
+
+    def generate_survey_response_with_openrouter(self, *, model_name, prompt_payload, timeout=0):
+        pid = prompt_payload.get("_persona_id")
+        if pid == "P002" and getattr(self, "current_round", 0) == 0:
+            raw = json.dumps({"answers": {"Q8": 3, "Q9": "Moderately likely"}})
+            self.captures[pid] = {"persona_id": pid, "provider": "DigitalOcean", "parsed_ok": True, "raw_text": raw, "repair_round": 0, "usage": {"prompt_tokens": 10, "completion_tokens": 5}}
+            self.stats["calls"] += 1
+            return {"ok": True, "parsed_json": json.loads(raw), "raw_text": raw, "error": None, "status_code": 200}
+        result = super().generate_survey_response_with_openrouter(model_name=model_name, prompt_payload=prompt_payload, timeout=timeout)
+        self.captures[pid]["repair_round"] = getattr(self, "current_round", 0)
+        return result
+
+
+def test_repair_round_replaces_persona_with_fabricated_answers(tmp_path: Path, persona_csv: Path, survey) -> None:
+    personas = run_survey.load_personas(persona_csv, limit=None, prompt_variant="full")
+    args = _args(tmp_path, persona_csv)
+    args.out_dir.mkdir(parents=True)
+    client = FlakyClient(survey)
+    manifest = run_survey.run_one(
+        model="stub/model", repeat=1, seed=1, personas=personas, survey=survey, contexts=run_survey.load_contexts(),
+        args=args, client=client, census_lookup={},
+    )
+    assert manifest["status"] == "completed", manifest["guardrails"]
+    assert manifest["counts"]["fallback_answers"] == 0 and manifest["counts"]["request_errors"] == 0
+    assert manifest["repair"]["rounds_run"] == 1
+    assert manifest["repair"]["log"][0] == {"round": 1, "personas": 1, "improved": 1, "persona_ids": ["P002"]}
+    assert client.captures["P002"]["repair_round"] == 1
+    with open(Path(manifest["run_dir"]) / "answers_long.csv", newline="", encoding="utf-8") as handle:
+        rows = [row for row in csv.DictReader(handle) if row["persona_id"] == "P002"]
+    assert len(rows) == 39 and all(row["is_fallback"] == "false" for row in rows) and rows[0]["respondent_id"] == "RESP_002"
+    assert manifest["diagnostics"]["fallback_by_question"] == {}
+
+
+def test_dash_and_question_id_normalization() -> None:
+    manager = run_survey.CoercingRunManager(run_survey.run_manager, question_ids=["Q21", "Q22", "Q20"])
+    remapped = manager._extract_answer_map_from_openrouter_result({"ok": True, "parsed_json": {"answers": {"q21": "55-64", " Q22 ": "x", "Q99": 1}}})
+    assert remapped == {"Q21": "55-64", "Q22": "x", "Q99": 1} and manager.ids_remapped == 1  # the engine already trims " Q22 "
+    age = run_survey.schemas.SurveyQuestion(id="Q21", text="Age", question_type="single_choice", options=["45–54", "55–64", "65 or older"])
+    assert manager._coerce_openrouter_answer_value(age, "55-64") == "55–64"
+    assert manager._coerce_openrouter_answer_value(age, "55–64") == "55–64"
+    assert manager._coerce_openrouter_answer_value(age, "twenties") is None
+    multi = run_survey.schemas.SurveyQuestion(id="Q20", text="Channels", question_type="multi_choice", options=["Google / Search ads", "Friend / family referral"])
+    assert manager._coerce_openrouter_answer_value(multi, ["google / search ads", "made up"]) == ["Google / Search ads"]
+    assert manager.dashes_normalized == 1  # the multi-choice case is matched by the engine itself, case-insensitively
 
 
 def test_bucket_matching_for_consistency_checks() -> None:

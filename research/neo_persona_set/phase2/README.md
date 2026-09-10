@@ -63,10 +63,19 @@ Useful flags: `--prompt-variant census|buckets`, `--provider-order together,fire
 - Any path containing `aytm`, `survey-760085`, or the raw-dataset folder name is refused (exit 3),
   and a persona CSV with survey-answer columns is refused. The real 600 never enter a prompt.
 - Terminal provider errors (400/401/402/403/404) stop the run immediately, as in the app.
-- After the run: `request_errors > 0`, `provider_error_count > 0`, fabricated-answer share above
-  1% (default), or a respondent count that does not match the persona count marks the run failed.
 - Retries apply only to timeouts, connection errors, 408/429/5xx, unparseable JSON, and truncated
   output; every retry is counted in the manifest.
+- Repair rounds (`--repair-rounds`, default 2): after the batch, personas that ended up with any
+  fabricated answer are asked again, and the attempt with the fewest fabricated answers is kept.
+  The manifest lists which personas were repaired and how many improved.
+- The host `DigitalOcean` is excluded by default (`--provider-ignore`): in the first 600-persona
+  run it served 5 calls and produced every garbage response (nonsense tokens, invented question
+  ids, invented options). Pass `--provider-ignore ''` to allow every host.
+- After repairs: a run is marked failed if more than 0.5% of personas (`--max-failed-respondent-share`)
+  still have no usable model answer, if fabricated answers exceed 1% (`--fallback-threshold`), or if
+  the respondent count does not match the persona count. Answers that were fabricated are always
+  flagged `is_fallback=true` in the data; exclude them in analysis as the app does.
+- `summary.md` and the manifest break fabricated answers down by question and by serving host.
 
 ## Cost (list prices, 2026-09-09; ~6,200 input and ~900 output tokens per persona)
 

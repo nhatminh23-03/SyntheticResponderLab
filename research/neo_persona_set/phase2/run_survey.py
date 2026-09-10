@@ -384,36 +384,105 @@ class TaggingPromptBuilder:
         return payload
 
 
-class CoercingRunManager:
-    """Delegates to the engine's run_manager; adds label-to-scale mapping for likert answers."""
+_DASH_PATTERN = re.compile(r"[‐‑‒–—―−]")
 
-    def __init__(self, original: Any, *, enabled: bool = True) -> None:
+
+def _unify_dashes(text: str) -> str:
+    return _DASH_PATTERN.sub("-", str(text))
+
+
+class CoercingRunManager:
+    """Delegates to the engine's run_manager and closes three coercion gaps seen in live output.
+
+    * a likert answered with its label ("Very interested") is mapped onto the scale;
+    * a choice echoed with a plain hyphen where the option has an en dash ("55-64" vs "55–64")
+      is matched after unifying dashes on both sides;
+    * question ids that differ only by case ("q21") are remapped onto the survey's ids.
+
+    Every mapping is counted so it is never invisible in the manifest.
+    """
+
+    def __init__(self, original: Any, *, enabled: bool = True, question_ids: Optional[Iterable[str]] = None) -> None:
         self._original = original
         self.enabled = bool(enabled)
         self.likert_labels_mapped = 0
+        self.dashes_normalized = 0
+        self.ids_remapped = 0
+        self._question_ids = {str(q).casefold(): str(q) for q in (question_ids or [])}
         self._lock = threading.Lock()
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self._original, name)
 
-    def _coerce_openrouter_answer_value(self, question: Any, value: Any) -> Any:
-        result = self._original._coerce_openrouter_answer_value(question, value)
-        if result is not None or not self.enabled:
-            return result
-        if question.question_type != "likert" or not isinstance(value, str) or not question.options:
-            return None
-        options = list(question.options)
-        match = self._original._match_survey_option(value, options)
+    def _extract_answer_map_from_openrouter_result(self, result: Dict[str, Any]) -> Dict[str, Any]:
+        answer_map = self._original._extract_answer_map_from_openrouter_result(result)
+        if not self._question_ids or not answer_map:
+            return answer_map
+        remapped: Dict[str, Any] = {}
+        changed = 0
+        for key, value in answer_map.items():
+            canonical = self._question_ids.get(str(key).strip().casefold())
+            if canonical is not None and canonical != key:
+                changed += 1
+                key = canonical
+            remapped.setdefault(key, value)
+        if changed:
+            with self._lock:
+                self.ids_remapped += changed
+        return remapped
+
+    def _match_with_dash_normalization(self, value: str, options: List[str]) -> Optional[str]:
+        normalized_options = [_unify_dashes(option) for option in options]
+        match = self._original._match_survey_option(_unify_dashes(value), normalized_options)
         if match is None:
             return None
-        number = options.index(match) + 1
-        if question.min_value is not None and number < question.min_value:
+        return options[normalized_options.index(match)]
+
+    def _coerce_openrouter_answer_value(self, question: Any, value: Any) -> Any:
+        result = self._original._coerce_openrouter_answer_value(question, value)
+        if result is not None or not self.enabled or value is None:
+            return result
+        options = list(question.options or [])
+        if not options:
             return None
-        if question.max_value is not None and number > question.max_value:
-            return None
-        with self._lock:
-            self.likert_labels_mapped += 1
-        return number
+
+        if question.question_type == "likert" and isinstance(value, str):
+            match = self._original._match_survey_option(value, options) or self._match_with_dash_normalization(value, options)
+            if match is None:
+                return None
+            number = options.index(match) + 1
+            if question.min_value is not None and number < question.min_value:
+                return None
+            if question.max_value is not None and number > question.max_value:
+                return None
+            with self._lock:
+                self.likert_labels_mapped += 1
+            return number
+
+        if question.question_type == "single_choice" and isinstance(value, str):
+            match = self._match_with_dash_normalization(value, options)
+            if match is None:
+                return None
+            with self._lock:
+                self.dashes_normalized += 1
+            return match
+
+        if question.question_type == "multi_choice" and isinstance(value, list):
+            matched: List[str] = []
+            for item in value:
+                text = str(item).strip()
+                if not text:
+                    continue
+                match = self._original._match_survey_option(text, options) or self._match_with_dash_normalization(text, options)
+                if match is not None and match not in matched:
+                    matched.append(match)
+            if not matched:
+                return None
+            with self._lock:
+                self.dashes_normalized += 1
+            return matched
+
+        return None
 
 
 _TRANSIENT_STATUSES = {408, 429}
@@ -433,6 +502,7 @@ class OpenRouterClient:
         base_url: str,
         seed: Optional[int],
         provider_order: Optional[List[str]] = None,
+        provider_ignore: Optional[List[str]] = None,
         allow_provider_fallbacks: bool = True,
         max_retries: int = 3,
         retry_base_seconds: float = 2.0,
@@ -445,7 +515,9 @@ class OpenRouterClient:
         self.base_url = base_url.rstrip("/")
         self.seed = seed
         self.provider_order = list(provider_order) if provider_order else None
+        self.provider_ignore = list(provider_ignore) if provider_ignore else None
         self.allow_provider_fallbacks = bool(allow_provider_fallbacks)
+        self.current_round = 0  # 0 = main batch, n = repair round n; stamped on each capture
         self.max_retries = max(0, int(max_retries))
         self.retry_base_seconds = float(retry_base_seconds)
         self.json_mode = bool(json_mode)
@@ -469,8 +541,14 @@ class OpenRouterClient:
         }
         if self.seed is not None:
             body["seed"] = int(self.seed)
+        provider: Dict[str, Any] = {}
         if self.provider_order:
-            body["provider"] = {"order": self.provider_order, "allow_fallbacks": self.allow_provider_fallbacks}
+            provider["order"] = self.provider_order
+            provider["allow_fallbacks"] = self.allow_provider_fallbacks
+        if self.provider_ignore:
+            provider["ignore"] = self.provider_ignore
+        if provider:
+            body["provider"] = provider
         if self.json_mode:
             body["response_format"] = {"type": "json_object"}
         if self.reasoning_effort and self.reasoning_effort != "default":
@@ -495,6 +573,7 @@ class OpenRouterClient:
             "provider": None,
             "generation_id": None,
             "seed": self.seed,
+            "repair_round": self.current_round,
             "status_code": None,
             "attempts": 0,
             "finish_reason": None,
@@ -879,10 +958,50 @@ def summarize_wide_rows(
     return summary
 
 
-def render_summary_markdown(run_id: str, summary: Dict[str, Any]) -> str:
+def fallback_diagnostics(
+    *, records: List[Any], record_is_fallback: List[bool], personas: List[Any], captures: Dict[str, Dict[str, Any]], question_count: int
+) -> Dict[str, Any]:
+    """Where the fabricated answers came from: by question and by serving provider."""
+    by_question: Counter = Counter()
+    by_persona: Counter = Counter()
+    for record, flag in zip(records, record_is_fallback):
+        if flag:
+            by_question[record.question_id] += 1
+            by_persona[respondent_index(record.respondent_id)] += 1
+    provider_calls: Counter = Counter()
+    provider_fallbacks: Counter = Counter()
+    provider_failed: Counter = Counter()
+    for index, persona in enumerate(personas):
+        capture = captures.get(persona.persona_id) or {}
+        provider = str(capture.get("provider") or "unknown")
+        provider_calls[provider] += 1
+        provider_fallbacks[provider] += by_persona.get(index, 0)
+        if not capture.get("parsed_ok"):
+            provider_failed[provider] += 1
+    by_provider = {
+        provider: {
+            "personas": provider_calls[provider],
+            "failed_personas": provider_failed[provider],
+            "fallback_answers": provider_fallbacks[provider],
+            "fallback_per_persona": round(provider_fallbacks[provider] / provider_calls[provider], 3),
+        }
+        for provider in sorted(provider_calls, key=lambda p: -provider_calls[p])
+    }
+    return {"fallback_by_question": dict(by_question.most_common()), "fallback_by_provider": by_provider}
+
+
+def render_summary_markdown(run_id: str, summary: Dict[str, Any], diagnostics: Optional[Dict[str, Any]] = None) -> str:
     lines = [f"# Summary — {run_id}", ""]
     lines.append(f"- Respondents: {summary.get('respondents')}")
     lines.append(f"- Respondents with any fabricated answer: {summary.get('respondents_with_any_fallback')}")
+    if diagnostics:
+        by_question = diagnostics.get("fallback_by_question") or {}
+        if by_question:
+            lines.append(f"- Fabricated answers by question: {by_question}")
+        by_provider = diagnostics.get("fallback_by_provider") or {}
+        noisy = {p: v for p, v in by_provider.items() if v.get("fallback_answers") or v.get("failed_personas")}
+        if noisy:
+            lines.append(f"- Providers with fabricated answers or failed personas: {noisy}")
     attention = summary.get("Q30_attention_check") or {}
     lines.append(f"- Q30 attention check (expected {attention.get('expected')!r}): pass rate {attention.get('pass_rate')}")
     for key in ("Q21_consistency_with_exact_age", "Q22_consistency_with_exact_household_income"):
@@ -906,12 +1025,20 @@ def render_summary_markdown(run_id: str, summary: Dict[str, Any]) -> str:
 # ---------------------------------------------------------------------------
 
 
-def check_guardrails(*, generation_debug: Dict[str, Any], expected_respondents: int, fallback_threshold: float) -> List[str]:
+def check_guardrails(
+    *, generation_debug: Dict[str, Any], expected_respondents: int, fallback_threshold: float, max_failed_share: float
+) -> List[str]:
+    """Reasons a finished run does not count. Empty means it passes.
+
+    Failed respondents (no usable model answer after retries and repair rounds) are tolerated up to
+    a small share because their answers are flagged is_fallback and excluded downstream; a run whose
+    failures exceed that share, or whose fabricated-answer share exceeds the threshold, is rejected.
+    """
     reasons: List[str] = []
-    if int(generation_debug.get("provider_error_count") or 0) > 0:
-        reasons.append(f"provider_error_count={generation_debug.get('provider_error_count')}")
-    if int(generation_debug.get("request_errors") or 0) > 0:
-        reasons.append(f"request_errors={generation_debug.get('request_errors')}")
+    failed = int(generation_debug.get("request_errors") or 0)
+    failed_share = (failed / expected_respondents) if expected_respondents else 1.0
+    if failed_share > max_failed_share:
+        reasons.append(f"failed_respondents={failed} ({failed_share:.2%}) exceeds {max_failed_share:.2%}")
     answers = int(generation_debug.get("answer_records") or 0)
     fallback = int(generation_debug.get("questions_fallback_to_mock") or 0)
     share = (fallback / answers) if answers else 1.0
@@ -967,7 +1094,9 @@ def run_one(
         "duration_sec": None,
         "script": {"path": str(Path(__file__).resolve().relative_to(REPO_ROOT)), "git_commit": git["commit"], "git_branch": git["branch"], "git_dirty": git["dirty"], "python": sys.version.split()[0]},
         "model": {"requested": model, "served_counts": {}, "provider_counts": {}},
-        "provider_routing": {"order": args.provider_order, "allow_fallbacks": not args.no_provider_fallbacks},
+        "provider_routing": {"order": args.provider_order, "ignore": getattr(args, "provider_ignore", None), "allow_fallbacks": not args.no_provider_fallbacks},
+        "repair_rounds": int(getattr(args, "repair_rounds", 0) or 0),
+        "max_failed_respondent_share": float(getattr(args, "max_failed_respondent_share", 0.0) or 0.0),
         "json_mode": bool(args.json_mode),
         "reasoning_effort": args.reasoning_effort,
         "seed": seed,
@@ -994,13 +1123,14 @@ def run_one(
     write_json(run_dir / "manifest.json", manifest)
 
     builder = TaggingPromptBuilder(prompt_builder, max_tokens=args.max_tokens, temperature=args.temperature)
-    manager = CoercingRunManager(run_manager, enabled=not args.no_likert_label_map)
+    manager = CoercingRunManager(run_manager, enabled=not args.no_likert_label_map, question_ids=[q.id for q in survey.questions])
     if client is None:
         client = OpenRouterClient(
             api_key=env_value("OPENROUTER_API_KEY", "") or "",
             base_url=env_value("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1") or "https://openrouter.ai/api/v1",
             seed=seed,
             provider_order=args.provider_order,
+            provider_ignore=getattr(args, "provider_ignore", None),
             allow_provider_fallbacks=not args.no_provider_fallbacks,
             max_retries=args.max_retries,
             json_mode=args.json_mode,
@@ -1019,23 +1149,88 @@ def run_one(
     records: List[Any] = []
     record_is_fallback: List[bool] = []
     generation_debug: Dict[str, Any] = {}
-    try:
-        records, generation_debug, record_is_fallback = domain._generate_live_response_records_with_debug(
+    repair_log: List[Dict[str, Any]] = []
+    question_count = len(survey.questions)
+
+    def _batch(subset: List[Any], batch_config: Any) -> Tuple[List[Any], Dict[str, Any], List[bool]]:
+        return domain._generate_live_response_records_with_debug(
             schemas=schemas,
             run_manager=manager,
             llm_client=client,
             prompt_builder=builder,
-            config=config,
+            config=batch_config,
             survey_schema=survey,
             audience_filter=None,
-            persona_profiles=personas,
+            persona_profiles=subset,
             business_product_context=product,
             market_context=market,
             prompt_user_template_override=None,
             openrouter_timeout_sec=args.timeout,
             max_concurrency=args.concurrency,
         )
-        reasons = check_guardrails(generation_debug=generation_debug, expected_respondents=len(personas), fallback_threshold=args.fallback_threshold)
+
+    try:
+        records, generation_debug, record_is_fallback = _batch(personas, config)
+
+        # Repair rounds: re-ask only the personas that ended up with any fabricated answer, and keep
+        # the attempt with the fewest. A persona whose repair is not better keeps its first answers
+        # and its first capture, so the audit trail matches the data.
+        for round_no in range(1, int(getattr(args, "repair_rounds", 0) or 0) + 1):
+            bad = [i for i in range(len(personas)) if any(record_is_fallback[i * question_count : (i + 1) * question_count])]
+            if not bad:
+                break
+            subset = [personas[i] for i in bad]
+            print(f"  repair round {round_no}: re-asking {len(subset)} persona(s) with fabricated answers", flush=True)
+            captures = getattr(client, "captures", {})
+            snapshot = {p.persona_id: captures.get(p.persona_id) for p in subset}
+            setattr(client, "current_round", round_no)
+            try:
+                sub_records, _sub_debug, sub_flags = _batch(subset, build_config(run_id=run_id, survey=survey, personas=subset, model=model, notes=f"repair round {round_no}"))
+            except ApiError as exc:
+                repair_log.append({"round": round_no, "personas": len(subset), "improved": 0, "error": f"{type(exc).__name__}: {exc}"})
+                print(f"  repair round {round_no} stopped by provider: {exc}", file=sys.stderr)
+                break
+            finally:
+                setattr(client, "current_round", 0)
+            improved = 0
+            for j, i in enumerate(bad):
+                new_flags = sub_flags[j * question_count : (j + 1) * question_count]
+                old_flags = record_is_fallback[i * question_count : (i + 1) * question_count]
+                if sum(new_flags) < sum(old_flags):
+                    original_respondent_id = records[i * question_count].respondent_id
+                    records[i * question_count : (i + 1) * question_count] = [
+                        r.model_copy(update={"respondent_id": original_respondent_id, "run_id": run_id})
+                        for r in sub_records[j * question_count : (j + 1) * question_count]
+                    ]
+                    record_is_fallback[i * question_count : (i + 1) * question_count] = new_flags
+                    improved += 1
+                elif snapshot.get(personas[i].persona_id) is not None:
+                    captures[personas[i].persona_id] = snapshot[personas[i].persona_id]
+            repair_log.append({"round": round_no, "personas": len(subset), "improved": improved, "persona_ids": [p.persona_id for p in subset][:100]})
+            print(f"  repair round {round_no}: {improved}/{len(subset)} improved", flush=True)
+
+        # Recompute the counters from the final records and captures so repairs are reflected.
+        final_captures = getattr(client, "captures", {})
+        answers_total = len(records)
+        fallback_total = sum(1 for flag in record_is_fallback if flag)
+        failed_captures = [c for c in final_captures.values() if not c.get("parsed_ok")]
+        generation_debug = {
+            **generation_debug,
+            "executions": len(personas),
+            "answer_records": answers_total,
+            "questions_total": answers_total,
+            "questions_fallback_to_mock": fallback_total,
+            "questions_parsed_from_live": answers_total - fallback_total,
+            "request_errors": len(failed_captures),
+            "provider_error_count": sum(1 for c in failed_captures if int(c.get("status_code") or 0) >= 400),
+            "malformed_json_count": sum(1 for c in failed_captures if "json" in str(c.get("error") or "").lower()),
+        }
+        reasons = check_guardrails(
+            generation_debug=generation_debug,
+            expected_respondents=len(personas),
+            fallback_threshold=args.fallback_threshold,
+            max_failed_share=float(getattr(args, "max_failed_respondent_share", 0.0) or 0.0),
+        )
         if not reasons:
             status = "completed"
             exit_code = 0
@@ -1088,8 +1283,14 @@ def run_one(
         "retries_total": int(stats.get("retries", 0)),
         "json_recovered": int(stats.get("json_recovered", 0)),
         "likert_labels_mapped": int(manager.likert_labels_mapped),
+        "dashes_normalized": int(manager.dashes_normalized),
+        "question_ids_remapped": int(manager.ids_remapped),
         "finish_reason_length": int(stats.get("finish_length", 0)),
     }
+    manifest["repair"] = {"rounds_run": len(repair_log), "log": repair_log}
+    manifest["diagnostics"] = fallback_diagnostics(
+        records=records, record_is_fallback=record_is_fallback, personas=personas, captures=captures, question_count=question_count
+    )
     respondents = manifest["counts"]["respondents"] or len(captures) or 1
     manifest["tokens"] = {
         "prompt": prompt_tokens,
@@ -1105,7 +1306,7 @@ def run_one(
     summary: Dict[str, Any] = {}
     if outputs_info["wide_rows"]:
         summary = summarize_wide_rows(wide_rows=outputs_info["wide_rows"], survey=survey, census_lookup=census_lookup or {})
-        (run_dir / "summary.md").write_text(render_summary_markdown(run_id, summary), encoding="utf-8")
+        (run_dir / "summary.md").write_text(render_summary_markdown(run_id, summary, manifest.get("diagnostics")), encoding="utf-8")
         manifest["summary"] = summary
 
     manifest["status"] = status
@@ -1274,7 +1475,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--timeout", type=int, default=240)
     parser.add_argument("--max-retries", type=int, default=3)
     parser.add_argument("--provider-order", type=lambda s: [p.strip() for p in s.split(",") if p.strip()], default=None)
+    parser.add_argument(
+        "--provider-ignore",
+        type=lambda s: [p.strip() for p in s.split(",") if p.strip()],
+        default=["DigitalOcean"],
+        help="OpenRouter hosts never to use; DigitalOcean served every garbage response in the first 600-persona run (pass '' to allow all)",
+    )
     parser.add_argument("--no-provider-fallbacks", action="store_true")
+    parser.add_argument("--repair-rounds", type=int, default=2, help="re-ask personas that ended up with fabricated answers, up to N times")
+    parser.add_argument("--max-failed-respondent-share", type=float, default=0.005, help="share of personas with no usable answer after repairs that still counts as a completed run")
     parser.add_argument("--price-in", type=float, default=None, help="USD per million input tokens (override)")
     parser.add_argument("--price-out", type=float, default=None, help="USD per million output tokens (override)")
     parser.add_argument("--temperature", type=float, default=0.2)
