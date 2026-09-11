@@ -700,3 +700,39 @@ def interviewer_next_question_endpoint(
     study = get_owned_study_or_404(db, study_id, current_user)
     result = generate_interviewer_question(db, settings, study, payload.model_dump())
     return response_envelope(request, {"interviewer_question": result})
+
+
+@router.post("/api/v1/studies/{study_id}/interview/batches")
+def create_standalone_batch(study_id: str, request: Request, payload: dict = Body(...),
+    db: Session = Depends(get_db_session), settings: AppSettings = Depends(get_settings),
+    current_user: AuthUser = Depends(get_current_user)):
+    from src.services.standalone_interview import start_batch
+    study = get_owned_study_or_404(db, study_id, current_user)
+    return response_envelope(request, {"batch": start_batch(db, settings, study, payload)})
+
+
+@router.get("/api/v1/studies/{study_id}/interview/batches/{job_id}")
+def get_standalone_batch(study_id: str, job_id: str, request: Request,
+    db: Session = Depends(get_db_session), settings: AppSettings = Depends(get_settings),
+    current_user: AuthUser = Depends(get_current_user)):
+    from src.services.standalone_interview import batch_status
+    study = get_owned_study_or_404(db, study_id, current_user)
+    return response_envelope(request, {"batch": batch_status(db, settings, study, job_id)})
+
+
+@router.post("/api/v1/studies/{study_id}/interview/batches/{job_id}/advance")
+def advance_standalone_batch(study_id: str, job_id: str, request: Request, payload: dict = Body(...),
+    db: Session = Depends(get_db_session), settings: AppSettings = Depends(get_settings),
+    current_user: AuthUser = Depends(get_current_user)):
+    from src.services.standalone_interview import advance_batch
+    study = get_owned_study_or_404(db, study_id, current_user)
+    return response_envelope(request, {"batch": advance_batch(db, settings, study, job_id, payload)})
+
+
+@router.post("/api/v1/studies/{study_id}/interview/answers/{answer_id}/regenerate")
+def regenerate_interview_answer(study_id: str, answer_id: str, request: Request, payload: dict = Body(...),
+    db: Session = Depends(get_db_session), settings: AppSettings = Depends(get_settings),
+    current_user: AuthUser = Depends(get_current_user)):
+    from src.services.standalone_interview import regenerate_answer
+    study = get_owned_study_or_404(db, study_id, current_user)
+    return response_envelope(request, {"answer": regenerate_answer(db, settings, study, answer_id, payload)})

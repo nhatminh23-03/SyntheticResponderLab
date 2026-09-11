@@ -1056,6 +1056,8 @@ export function getInterviewSessionUsageFromApiError(
 }
 
 export type InterviewChatResponse = {
+  answer_id?: string;
+  version?: number;
   persona_id: string;
   session_id: string;
   transcript_source: "model_a" | "model_b" | "standalone";

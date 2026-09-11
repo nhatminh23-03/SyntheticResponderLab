@@ -34,6 +34,10 @@ test("classroom API allowlist contains only the operations used by the interview
     ["POST", "/api/backend/api/v1/studies/std_123/interview/chat"],
     ["POST", "/api/backend/api/v1/studies/std_123/interview/compare"],
     ["POST", "/api/backend/api/v1/studies/std_123/interview/export"],
+    ["POST", "/api/backend/api/v1/studies/std_123/interview/batches"],
+    ["GET", "/api/backend/api/v1/studies/std_123/interview/batches/batch_123"],
+    ["POST", "/api/backend/api/v1/studies/std_123/interview/batches/batch_123/advance"],
+    ["POST", "/api/backend/api/v1/studies/std_123/interview/answers/ans_123/regenerate"],
   ] as const;
 
   for (const [method, pathname] of allowed) {

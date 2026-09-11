@@ -38,7 +38,9 @@ import {
 import { cn } from "@/lib/utils";
 import { StudyProvider, useStudy } from "@/providers/study-provider";
 
-type Turn = { role: "student" | "persona"; text: string };
+import { interviewOperation, type Batch, type RegeneratedAnswer } from "@/lib/standalone-interview";
+
+type Turn = { role: "student" | "persona"; text: string; answerId?: string; version?: number };
 
 const SUGGESTED = [
   "What is your first reaction to the Tahoe Mini, and what would you use it for?",
@@ -89,6 +91,15 @@ function InterviewPageContent() {
   const [exportingFormat, setExportingFormat] =
     useState<InterviewTranscriptExportFormat | null>(null);
   const [error, setError] = useState("");
+  const [batch, setBatch] = useState<Batch | null>(null);
+  const [batchLoading, setBatchLoading] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
+  const [regenerationCost, setRegenerationCost] = useState<string | null>(null);
+  const activity = useRef(false);
+  const pauseBatch = useRef(false);
+  const generation = useRef(0);
+  const batchRequest = useRef<{ request_id: string; persona_count: number; interviewer_model: string; interviewee_model: string; allow_expensive_models: boolean } | null>(null);
+  const busy = loading || comparisonLoading || batchLoading || regenerating;
   const transcriptEnd = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -121,9 +132,11 @@ function InterviewPageContent() {
     interviewerModelEntry && intervieweeModelEntry
       ? estimateInterviewRunCost(personaCount, interviewerModelEntry, intervieweeModelEntry)
       : null;
-  const modelsLocked = turns.length > 0 || loading;
+  const modelsLocked = turns.length > 0 || busy;
 
   function selectPersona(id: string) {
+    if (activity.current) return;
+    generation.current += 1;
     setSelectedId(id);
     setTurns([]);
     setSessionId(null);
@@ -136,6 +149,7 @@ function InterviewPageContent() {
     setComparisonModelIds(defaultInterviewComparisonModelIds(models));
     setComparedQuestion("");
     setComparisonResults([]);
+    setRegenerationCost(null);
   }
 
   function setExpensiveModelsForRun(enabled: boolean) {
@@ -164,7 +178,8 @@ function InterviewPageContent() {
     const orderedModelIds = orderInterviewComparisonModelIds(models, comparisonModelIds);
     if (
       !asked ||
-      loading ||
+      activity.current ||
+      busy ||
       comparisonLoading ||
       !studyId ||
       !persona ||
@@ -173,6 +188,7 @@ function InterviewPageContent() {
       return;
     }
 
+    activity.current = true;
     setComparisonLoading(true);
     setComparedQuestion(asked);
     setComparisonResults([]);
@@ -186,13 +202,15 @@ function InterviewPageContent() {
     });
     setComparisonResults(results);
     setComparisonLoading(false);
+    activity.current = false;
   }
 
   async function ask() {
     const asked = question.trim();
     if (
       !asked ||
-      loading ||
+      activity.current ||
+      busy ||
       !studyId ||
       !persona ||
       !interviewerModel ||
@@ -201,6 +219,7 @@ function InterviewPageContent() {
       return;
     }
 
+    activity.current = true;
     setLoading(true);
     setError("");
     setTurns((previous) => [...previous, { role: "student", text: asked }]);
@@ -222,14 +241,98 @@ function InterviewPageContent() {
       });
       setSessionId(response.session_id);
       if (response.system_prompt) setSystemPrompt(response.system_prompt);
-      setTurns((previous) => [...previous, { role: "persona", text: response.reply }]);
+      setTurns((previous) => [...previous, { role: "persona", text: response.reply, answerId: response.answer_id, version: response.version ?? 0 }]);
     } catch (err) {
+      setTurns(turns);
+      setQuestion(asked);
       if (err instanceof InterviewChatApiError && err.systemPrompt) {
         setSystemPrompt(err.systemPrompt);
       }
       setError((err as Error).message);
     } finally {
       setLoading(false);
+      activity.current = false;
+    }
+  }
+
+  useEffect(() => {
+    if (!studyId) return;
+    const saved = localStorage.getItem(`interview-batch:${studyId}`);
+    const savedRequest = localStorage.getItem(`interview-batch-request:${studyId}`);
+    if (savedRequest) {
+      try { batchRequest.current = JSON.parse(savedRequest); } catch { /* Ignore invalid local recovery data. */ }
+    }
+    let active = true;
+    if (saved) interviewOperation<{ batch: Batch }>(studyId, `batches/${encodeURIComponent(saved)}`)
+      .then(({ batch: recovered }) => { if (active) setBatch(recovered); })
+      .catch((err: Error) => { if (active) setError(err.message); });
+    return () => { active = false; pauseBatch.current = true; generation.current += 1; };
+  }, [studyId]);
+
+  async function runBatch(resume = false) {
+    if (!studyId || activity.current || !interviewerModel || !intervieweeModel) return;
+    activity.current = true;
+    pauseBatch.current = false;
+    setBatchLoading(true);
+    setError("");
+    try {
+      let current: Batch;
+      if (resume && batch) {
+        current = (await interviewOperation<{ batch: Batch }>(studyId, `batches/${batch.job_id}`)).batch;
+      } else {
+        const request = batchRequest.current ?? {
+          request_id: crypto.randomUUID(), persona_count: personaCount,
+          interviewer_model: interviewerModel, interviewee_model: intervieweeModel,
+          allow_expensive_models: expensiveOptIn,
+        };
+        batchRequest.current = request;
+        localStorage.setItem(`interview-batch-request:${studyId}`, JSON.stringify(request));
+        current = (await interviewOperation<{ batch: Batch }>(studyId, "batches", request)).batch;
+        localStorage.setItem(`interview-batch:${studyId}`, current.job_id);
+        localStorage.removeItem(`interview-batch-request:${studyId}`);
+        batchRequest.current = null;
+      }
+      setBatch(current);
+      do {
+        if (pauseBatch.current || current.status === "completed" || current.status === "budget_stopped") break;
+        current = (await interviewOperation<{ batch: Batch }>(studyId, `batches/${current.job_id}/advance`, { revision: current.revision })).batch;
+        setBatch(current);
+      } while (current.status === "running");
+    } catch (err) {
+      setError(`${(err as Error).message} Saved batch progress can be recovered with Resume batch.`);
+    } finally {
+      setBatchLoading(false);
+      activity.current = false;
+    }
+  }
+
+  async function regenerate(answerId: string, version: number, comparison: boolean) {
+    if (!studyId || activity.current) return;
+    activity.current = true;
+    setRegenerating(true);
+    setError("");
+    const originalGeneration = generation.current;
+    try {
+      const { answer } = await interviewOperation<{ answer: RegeneratedAnswer }>(studyId,
+        `answers/${encodeURIComponent(answerId)}/regenerate`, {
+          version, allow_expensive_models: comparison ? comparisonExpensiveOptIn : expensiveOptIn,
+        });
+      if (originalGeneration !== generation.current) return;
+      if (comparison) {
+        setComparisonResults(previous => previous.map(result => result.answerId === answerId ? {
+          ...result, answer: answer.reply, version: answer.version,
+          postInterviewScore: { fitTier: answer.post_interview_score.fit_tier, emotionalClassification: answer.post_interview_score.emotional_classification },
+        } : result));
+      } else {
+        setTurns(previous => previous.map(turn => turn.answerId === answerId ? { ...turn, text: answer.reply, version: answer.version } : turn));
+      }
+      setRegenerationCost(answer.session_usage.cost_usd);
+      if (answer.budget_stop) setError(answer.budget_stop.message);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setRegenerating(false);
+      activity.current = false;
     }
   }
 
@@ -292,6 +395,8 @@ function InterviewPageContent() {
           models, recorded ahead of time. Replaying one costs nothing.
         </p>
 
+        {regenerationCost ? <p className="mt-3 text-sm" role="status">Measured session cost after regeneration: ${Number(regenerationCost).toFixed(6)}</p> : null}
+        {regenerating ? <p role="status">Regenerating answer…</p> : null}
         <div className="mt-8 grid gap-5 lg:grid-cols-[22rem_minmax(0,1fr)]">
           <GlassPanel className="p-5">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-app-muted">
@@ -303,7 +408,7 @@ function InterviewPageContent() {
                   key={entry.persona_id}
                   type="button"
                   onClick={() => selectPersona(entry.persona_id)}
-                  disabled={loading || comparisonLoading}
+                  disabled={busy}
                   className={cn(
                     "rounded-xl border px-3.5 py-2.5 text-left transition duration-200 disabled:cursor-not-allowed disabled:opacity-60",
                     entry.persona_id === selectedId
@@ -328,7 +433,7 @@ function InterviewPageContent() {
                     Models for this run
                   </p>
                   <p className="mt-2 text-xs leading-5 text-app-muted">
-                    Selections lock after the first question. The interviewer choice is ready for
+                    Selections lock after the first question. The interviewer model conducts
                     AI-led runs; this student-led interview uses the interviewee model now.
                   </p>
                 </div>
@@ -442,6 +547,29 @@ function InterviewPageContent() {
               </div>
             </GlassPanel>
 
+            <GlassPanel className="p-5" aria-label="AI-to-AI batch results">
+              <div className="flex flex-wrap gap-2">
+                <Button disabled={busy || !studyId || !interviewerModel || !intervieweeModel} onClick={() => runBatch()}>
+                  Run AI-to-AI batch ({personaCount} personas)
+                </Button>
+                {batch && (batch.status === "running" || batch.status === "failed") ? (
+                  <Button variant="secondary" disabled={busy} onClick={() => runBatch(true)}>Resume batch</Button>
+                ) : null}
+                {batchLoading ? <Button variant="secondary" onClick={() => { pauseBatch.current = true; }}>Pause after this call</Button> : null}
+              </div>
+              <p className="mt-2 text-xs text-app-muted">Eight adaptive questions per persona using the fixed household set and Tahoe Mini research brief. Cached interviews replay free.</p>
+              {batch ? <div aria-live="polite" className="mt-4 space-y-3">
+                <p>{batch.status === "budget_stopped" ? "Budget stop" : batch.status}: {batch.completed_personas}/{batch.persona_count} personas complete · {batch.revision}/{batch.persona_count * batch.turn_limit * 2} calls resolved</p>
+                <p>Measured cost: ${Number(batch.session_usage.cost_usd).toFixed(6)} · Estimate at start: ${Number(batch.estimated_cost_usd).toFixed(4)}</p>
+                <p className="text-xs text-app-muted">Interviewer: {batch.interviewer_model} · Interviewee: {batch.interviewee_model}</p>
+                {batch.error ? <p role="alert">{batch.error.details?.scope ? `${batch.error.details.scope} cap: ` : ""}{batch.error.message}</p> : null}
+                {batch.transcripts.map(transcript => <details key={transcript.persona_id} className="rounded-xl border border-app-border p-3">
+                  <summary>{transcript.persona_id} · {Math.floor(transcript.messages.length / 2)}/{batch.turn_limit} answers</summary>
+                  {transcript.messages.map((message, index) => <p key={index} className="mt-3 whitespace-pre-wrap text-sm leading-6"><strong>{message.role === "user" ? "Interviewer" : transcript.persona_id}: </strong>{message.content}</p>)}
+                </details>)}
+              </div> : batchLoading ? <p role="status">Starting batch…</p> : null}
+            </GlassPanel>
+
             {persona ? (
               <GlassPanel className="p-5">
                 <div className="flex flex-wrap items-center gap-2">
@@ -478,7 +606,7 @@ function InterviewPageContent() {
                 <BadgeChip tone="cyan">Controlled comparison</BadgeChip>
               </div>
 
-              <fieldset className="mt-5" disabled={comparisonLoading}>
+              <fieldset className="mt-5" disabled={busy}>
                 <legend className="text-xs font-semibold uppercase tracking-[0.14em] text-app-muted">
                   Models to compare ({comparisonModelIds.length} selected)
                 </legend>
@@ -533,7 +661,7 @@ function InterviewPageContent() {
                   onChange={(event) =>
                     setExpensiveComparisonModelsForRun(event.target.checked)
                   }
-                  disabled={comparisonLoading}
+                  disabled={busy}
                   className="mt-0.5 size-4 accent-[var(--color-gold)] disabled:cursor-not-allowed"
                 />
                 Enable expensive models for this comparison. Add one above to compare the price
@@ -554,14 +682,14 @@ function InterviewPageContent() {
                   onKeyDown={(event) => {
                     if (event.key === "Enter") compareModels();
                   }}
-                  disabled={comparisonLoading}
+                  disabled={busy}
                   placeholder="Ask every model the same question…"
                   className="flex-1 rounded-xl border border-app-border bg-transparent px-4 py-3 text-sm text-app-text outline-none transition placeholder:text-app-muted focus:border-app-borderStrong disabled:cursor-not-allowed disabled:opacity-60"
                 />
                 <Button
                   onClick={compareModels}
                   disabled={
-                    loading ||
+                    busy ||
                     comparisonLoading ||
                     !comparisonQuestion.trim() ||
                     !studyId ||
@@ -641,6 +769,7 @@ function InterviewPageContent() {
                               </p>
                             )}
                           </div>
+                          {result.answerId && result.answer ? <Button variant="secondary" disabled={busy} onClick={() => regenerate(result.answerId!, result.version ?? 0, true)}>Regenerate answer (paid)</Button> : null}
                           {result.postInterviewScore ? (
                             <div className="mt-auto border-t border-app-border pt-4">
                               <p className="text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-app-muted">
@@ -678,14 +807,14 @@ function InterviewPageContent() {
                   <Button
                     variant="secondary"
                     onClick={() => exportTranscript("csv")}
-                    disabled={turns.length === 0 || loading || exportingFormat !== null || !studyId}
+                    disabled={turns.length === 0 || busy || exportingFormat !== null || !studyId}
                   >
                     {exportingFormat === "csv" ? "Exporting…" : "Export CSV"}
                   </Button>
                   <Button
                     variant="secondary"
                     onClick={() => exportTranscript("markdown")}
-                    disabled={turns.length === 0 || loading || exportingFormat !== null || !studyId}
+                    disabled={turns.length === 0 || busy || exportingFormat !== null || !studyId}
                   >
                     {exportingFormat === "markdown" ? "Exporting…" : "Export Markdown"}
                   </Button>
@@ -719,6 +848,7 @@ function InterviewPageContent() {
                       >
                         {turn.text}
                       </p>
+                      {turn.answerId && index === turns.length - 1 ? <Button variant="secondary" disabled={busy} onClick={() => regenerate(turn.answerId!, turn.version ?? 0, false)}>Regenerate answer (paid)</Button> : null}
                     </motion.div>
                   ))}
                 </AnimatePresence>
@@ -758,7 +888,7 @@ function InterviewPageContent() {
                 <Button
                   onClick={ask}
                   disabled={
-                    loading ||
+                    busy ||
                     !question.trim() ||
                     !studyId ||
                     !persona ||

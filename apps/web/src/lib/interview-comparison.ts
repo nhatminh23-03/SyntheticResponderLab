@@ -10,6 +10,8 @@ export type InterviewPostScore = {
 };
 
 export type InterviewComparisonResult = {
+  answerId?: string;
+  version?: number;
   modelId: string;
   answer: string | null;
   error: string | null;
@@ -102,6 +104,8 @@ export async function runInterviewComparison(
         interview_comparison?: {
           results?: Array<{
             model_id?: unknown;
+            answer_id?: string;
+            version?: number;
             answer?: unknown;
             error?: unknown;
             post_interview_score?: {
@@ -149,6 +153,7 @@ export async function runInterviewComparison(
         ["positive", "neutral", "negative"].includes(String(emotionalClassification));
       return {
         modelId,
+        ...(result?.answer_id ? { answerId: result.answer_id, version: result.version ?? 0 } : {}),
         answer: answer || null,
         error: answer ? null : error ?? "Model returned an empty answer.",
         postInterviewScore: answer && scoreIsValid

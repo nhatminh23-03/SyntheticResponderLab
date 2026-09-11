@@ -28,10 +28,11 @@ test("suggested questions populate the free-text box submitted by ask", () => {
   );
 });
 
-test("persona selection is locked while an interview reply is in flight", () => {
+test("persona selection is locked during chat, comparison, batch and regeneration", () => {
+  assert.match(interviewPageSource, /const busy = loading \|\| comparisonLoading \|\| batchLoading \|\| regenerating/);
   assert.match(
     interviewPageSource,
-    /personas\.map\(\(entry\) => \([\s\S]*?onClick=\{\(\) => selectPersona\(entry\.persona_id\)\}[\s\S]*?disabled=\{loading \|\| comparisonLoading\}/
+    /personas\.map\(\(entry\) => \([\s\S]*?onClick=\{\(\) => selectPersona\(entry\.persona_id\)\}[\s\S]*?disabled=\{busy\}/
   );
 });
 
