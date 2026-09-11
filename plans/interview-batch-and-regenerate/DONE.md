@@ -72,4 +72,24 @@ Default API check: `cd ../.. && ./apps/api/.venv/bin/python -m pytest apps/api/t
 - [x] (sol) After a batch creation request is rejected, the student can correct the settings and successfully start a batch without clearing browser storage. — check: `cd ../.. && cd apps/web && npm run test:unit`
 - [x] (sol) A returning student can reopen completed or paused batches after closing the tab or starting another batch, with transcripts and measured costs preserved. — check: `cd ../.. && ./apps/api/.venv/bin/python -m pytest apps/api/tests/test_standalone_batch.py -q -k batch_history && cd apps/web && npm run test:unit`
 - [x] (sol) Standalone batches respect the existing per-user daily run limit without counting each advance or duplicate submission as another run. — check: `cd ../.. && ./apps/api/.venv/bin/python -m pytest apps/api/tests/test_standalone_batch.py -q -k daily_run_limit`
-- [ ] (refuter R1) The same guarantee holds on the regenerate path: once a regeneration has failed with an unknown provider outcome, a duplicate request already queued at the same version cannot issue another paid call; only an explicit retry can. — check: `cd ../.. && ./apps/api/.venv/bin/python -m pytest apps/api/tests/test_standalone_batch.py -q -k 'failed_regeneration_requires_explicit_retry'`
+- [x] (refuter R1) The same guarantee holds on the regenerate path: once a regeneration has failed with an unknown provider outcome, a duplicate request already queued at the same version cannot issue another paid call; only an explicit retry can. — check: `cd ../.. && ./apps/api/.venv/bin/python -m pytest apps/api/tests/test_standalone_batch.py -q -k 'failed_regeneration_requires_explicit_retry'`
+
+## Added by Sol refute (each needs a check before it can pass)
+- [x] (sol) Pausing a batch visibly confirms when execution has stopped, prevents further paid calls until Resume, and preserves the current call’s completed result and cost. — check: `cd ../.. && cd apps/web && npm run test:unit`
+- [x] (sol) An operator can trace each regeneration attempt to its answer, student session, model, outcome, and incremental spend, including failures with unknown provider outcomes. — check: `cd ../.. && ./apps/api/.venv/bin/python -m pytest apps/api/tests/test_standalone_batch.py -q -k attempt_audit`
+- [ ] (refuter F2) When a budget stop happens partway through a model comparison, an answer that already completed and was already charged stays visible and stays regeneratable; only the models that never answered show the budget error. — check: `cd ../.. && cd apps/web && npm run test:unit`
+
+## Deliberately accepted, not a defect to fix
+
+Round 3 raised a durability window: if the API process dies between the provider accepting a
+call and the transaction committing, the attempt leaves no durable record, so a resume can pay
+for that step twice. Closing it properly needs a two-phase pending-attempt ledger written before
+every provider call.
+
+Not built, on purpose. One batch step costs about $0.003, the global budget caps still hold, and
+the failure needs the process to die inside a millisecond-wide window. The ledger is more moving
+parts than the money it protects, on an app five or six student teams will use for one class
+session. Leave a `ponytail:` comment at the provider-call site naming the ceiling and this upgrade
+path so the next person does not rediscover it as a surprise.
+
+Revisit if this ever runs unattended at volume, or if spend per step rises by an order of magnitude.
