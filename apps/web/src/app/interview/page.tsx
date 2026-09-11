@@ -280,6 +280,18 @@ function InterviewPageContent() {
           responses reaches these prompts.
         </p>
 
+        <a
+          href="/prerecorded-interviews.html"
+          className="mt-5 inline-flex items-center gap-2 rounded-xl border border-app-border px-4 py-2.5 text-sm font-semibold text-app-text transition hover:border-[var(--color-gold)] hover:text-[var(--color-gold)]"
+        >
+          Browse pre-recorded interviews
+          <span aria-hidden="true">&rarr;</span>
+        </a>
+        <p className="mt-2 max-w-2xl text-xs leading-5 text-app-muted">
+          Complete eight-turn interviews for all 30 personas on both of Dr. Lin&rsquo;s recommended
+          models, recorded ahead of time. Replaying one costs nothing.
+        </p>
+
         <div className="mt-8 grid gap-5 lg:grid-cols-[22rem_minmax(0,1fr)]">
           <GlassPanel className="p-5">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-app-muted">
