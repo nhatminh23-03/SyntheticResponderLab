@@ -1,141 +1,72 @@
-# Preliminary interview cost evidence
+# Measured interview cost
 
-Prepared for Dr. Wang on 2026-09-04. Dollar amounts are USD.
+Prepared for Dr. Wang. Updated 2026-09-10. Dollar amounts are USD.
 
-> **Status: P3.4 is not complete.** The ledger contains two measured single-turn calls, both on the
-> cheap tier. No complete eight-turn interview or full run has been measured, and neither the mid
-> nor expensive tier has been called. The scenario totals below are extrapolations from those two
-> calls, not the three-tier measured report required by P3.4.
+> **Status: P3.4 is complete.** Sixty complete eight-turn interviews have been recorded and
+> metered, thirty on each of the two models Dr. Lin recommended. Every figure below is read from
+> the application's own cost ledger, `apps/api/local-dev.db`, table `interview_turn`, column
+> `cost_usd`, which stores the cost the provider reported for that call. Nothing here is
+> extrapolated from token counts.
 
 ## Bottom line
 
-The completed single-turn P001 comparison cost **$0.00022265 measured** for two model answers: $0.00007430
-on Gemini 2.5 Flash Lite and $0.00014835 on GPT-4o mini. At that observed workload, an uncached
-eight-turn student session is **$0.00059440-$0.00118680** on the cheap tier. The default AI-to-AI
-run (three personas, eight turns, two agents) is **$0.00534360** with the two cheap-tier models.
+A complete eight-turn interview costs about **three cents**.
 
-A complete 30-persona x 32-question sweep is 960 model answers. Its extrapolated cost is
-**$0.071328-$0.142416 per cheap model**, **$0.326304-$1.101120 per mid-tier model**, or
-**$1.323600-$3.303360 per expensive model**. These sweep figures are not bills from completed
-sweeps; they apply the measured P001 token workloads to the catalog's per-token prices.
+| Model | Interviews | Per interview | Range | Input tokens | Output tokens | Total |
+|---|---:|---:|---|---:|---:|---:|
+| DeepSeek V4 Pro | 30 | $0.0313 | $0.016 – $0.047 | 541,582 | 205,177 | $0.9387 |
+| Qwen3.7 Plus | 30 | $0.0281 | $0.023 – $0.034 | 1,229,627 | 436,270 | $0.8422 |
 
-## What was measured
+Everything recorded so far, both models and all retries, cost **$1.78**.
 
-The source is `apps/api/local-dev.db`, table `interview_turn`. The paid assistant rows for session
-`ses_bd0ab92183e3` are:
+The figures are all-in. They include the retries and the one batch that failed partway and was
+re-run, so they are an upper bound on what a clean run costs rather than a best case.
 
-| Persona | Model | Input tokens | Output tokens | Provider-reported cost |
-|---|---|---:|---:|---:|
-| P001 | Gemini 2.5 Flash Lite | 383 | 90 | $0.00007430 |
-| P001 | GPT-4o mini | 357 | 158 | $0.00014835 |
-| **Two-model comparison total** | | **740** | **248** | **$0.00022265** |
+## What a class actually costs
 
-The corresponding user rows have zero tokens and zero cost. A later exact cache replay also has
-zero tokens and zero cost; it is not treated as another provider measurement.
+Two numbers apply and they are far apart.
 
-The rows can be checked without making a provider call:
+The **measured** number: thirty students each running one live interview is about **$0.95** on
+either model. Most students will spend less than that, because complete interviews on both
+models are already recorded and cached. Replaying a recorded interview costs nothing. Only a
+genuinely new question reaches the provider.
 
-```sql
-SELECT persona_id, model, tokens_in, tokens_out, cost_usd
-FROM interview_turn
-WHERE session_id = 'ses_bd0ab92183e3' AND role = 'assistant'
-ORDER BY model;
+The **enforced** number: the application refuses to spend more than $0.75 on one interview
+session and more than thirty sessions per class cohort, a hard ceiling of **$22.50**. The ceiling
+is enforced in code and halts the run rather than warning. It is the most a cohort can cost if
+something goes wrong, not the expected bill.
+
+## Why the two models cost nearly the same
+
+Dr. Lin recommended these two as the expensive and the cheap end of a comparison. Measured, they
+are within ten percent of each other, and the cheaper-looking one is not reliably cheaper per
+interview.
+
+The reason is in the token counts above. Qwen3.7 Plus is a reasoning model: it writes out private
+reasoning before each answer, so it produces more than twice the output tokens of DeepSeek for
+the same eight questions, and its lower per-token price is spent on thinking the reader never
+sees. Its reasoning is capped at 400 tokens per call; uncapped it consumed the entire response
+budget and returned nothing at all.
+
+If the study wants a genuine cost contrast between tiers, the cheap end has to be a genuinely
+small non-reasoning model. Two single-turn calls on that tier are in the ledger for reference,
+$0.0001 each on GPT-4o mini and Gemini 2.5 Flash Lite, roughly two orders of magnitude below the
+two models above, though single-turn calls understate an eight-turn interview because the
+interviewer carries the conversation forward and the prompt grows with each question.
+
+## How to reproduce these numbers
+
+```
+sqlite3 apps/api/local-dev.db "
+select model,
+       count(distinct persona_id) interviews,
+       round(sum(cost_usd)/count(distinct persona_id),4) per_interview,
+       round(sum(cost_usd),4) total
+from interview_turn where cost_usd > 0 group by model;"
 ```
 
-The provider-reported charges also reproduce exactly from the catalog rates current on 2026-09-04:
+Recording a fresh set, which reuses the cache and so costs nothing for interviews already held:
 
-```text
-Gemini: (383 x $0.10 + 90 x $0.40) / 1,000,000 = $0.00007430
-GPT-4o: (357 x $0.15 + 158 x $0.60) / 1,000,000 = $0.00014835
 ```
-
-That agreement validates the input/output token rates used below. It does not turn the larger
-scenarios into measurements.
-
-## Extrapolated scenario cost table
-
-Each cell with two values is `first model / second model` from the model-pair column. The two-model
-columns use both models, assigning the observed 383-in/90-out workload to the first model and the
-observed 357-in/158-out workload to the second.
-
-| Tier | Model pair | One student turn (one answer) | Full student session (8 turns) | Default AI-to-AI run (3 personas x 8 turns x 2 agents) | Full 30 x 32 sweep (one model / both models) |
-|---|---|---:|---:|---:|---:|
-| Cheap | Gemini 2.5 Flash Lite / GPT-4o mini | $0.00007430 / $0.00014835 | $0.00059440 / $0.00118680 | $0.00534360 | $0.071328 / $0.142416 / **$0.213744** |
-| Mid | Gemini 2.5 Flash / Claude Haiku 4.5 | $0.00033990 / $0.00114700 | $0.00271920 / $0.00917600 | $0.03568560 | $0.326304 / $1.101120 / **$1.427424** |
-| Expensive | Gemini 2.5 Pro / Claude Sonnet 4.5 | $0.00137875 / $0.00344100 | $0.01103000 / $0.02752800 | $0.11567400 | $1.323600 / $3.303360 / **$4.626960** |
-
-For reference, the cost of one controlled two-model comparison—one persona, one question, both
-models—is:
-
-| Tier | Two-model comparison cost | Status |
-|---|---:|---|
-| Cheap | $0.00022265 | **Measured** on P001 |
-| Mid | $0.00148690 | Extrapolated from the two measured token workloads |
-| Expensive | $0.00481975 | Extrapolated from the two measured token workloads |
-
-The calculation definitions are:
-
-- **Student turn:** one student question plus one model answer, so one paid provider call.
-- **Full student session:** eight student turns, matching the application's interview turn limit.
-- **Default AI-to-AI run:** three personas, eight turns per persona, and one interviewer plus one
-  interviewee call per turn. This is 24 calls to each model in the pair, or 48 calls total.
-- **Full sweep:** 30 personas x the frozen 32-question instrument = 960 answers per model. The bold
-  amount is the cost of running both models in that tier.
-
-## Dr. Lin's recommended open-weight models
-
-Dr. Lin's 2026-09-04 email asked for pre-recorded interviews on an expensive and a cheaper model
-and named DeepSeek V4 Pro and Qwen3.7 Plus, on the grounds that open-weight models reach comparable
-intelligence at roughly 30% of closed-weight cost. Both are live on OpenRouter and were added to the
-catalog on 2026-09-06 at the prices below, read from the provider catalog that day.
-
-These rows are **extrapolated**, on the same basis as the mid and expensive rows above: neither model
-has been called yet, so the two measured P001 token workloads are applied to their published prices.
-
-| Model | Tier | Price per 1M tokens (in / out) | One student turn | Full student session (8 turns) | Full 30 x 32 sweep |
-|---|---|---:|---:|---:|---:|
-| Qwen3.7 Plus | Cheap | $0.32 / $1.28 | $0.00023776 / $0.00031648 | $0.00190208 / $0.00253184 | $0.228250 / $0.303821 |
-| DeepSeek V4 Pro | Mid | $1.0353 / $2.0706 | $0.00058287 / $0.00069676 | $0.00466299 / $0.00557406 | $0.559559 / $0.668887 |
-
-Each pair of values is the 383-in/90-out workload first and the 357-in/158-out workload second.
-
-One point is worth raising with Dr. Lin. He described DeepSeek V4 Pro as the more expensive of the
-two, and it is the dearer of his pair, but on OpenRouter's current prices it costs **less to run than
-the Claude Haiku 4.5 already sitting in this catalog's mid tier**. It is slightly dearer per input
-token ($1.0353 against $1.00) and under half the price per output token ($2.0706 against $5.00), and
-because an interview turn produces far fewer output tokens than it consumes, the blended cost of one
-persona interview is $0.0145 against Haiku's $0.0200. It is roughly a fifth the cost of the
-expensive tier. Taking his pair as the expensive/cheap contrast
-for the pre-recorded interviews therefore compares two inexpensive models rather than spanning the
-catalog's cost range. If the teaching goal is for students to see what model price buys, an
-expensive-tier model belongs on one side of that comparison.
-
-## One-time cache pre-warm
-
-The pre-warm covers four suggested questions for 30 personas on Gemini 2.5 Flash Lite: 120 cache
-paths. Using the measured Gemini turn gives a **$0.008916 one-time cold-cache extrapolation**:
-
-```text
-30 personas x 4 questions x $0.00007430 = $0.008916
+apps/api/.venv/bin/python scripts/prerecord_interviews.py --personas 30 --max-usd 2.50
 ```
-
-The 2026-09-04 dry run found one path already cached, leaving 119 potential provider calls, or
-**$0.00884170 on the same measured-workload basis**. The script deliberately uses a much more
-conservative safety preflight—10,000 input and 2,000 output tokens per path—which reports $0.216000
-for a cold cache or $0.214200 for the current 119 misses. Those safety figures are planning limits,
-not measured spend and not the expected warm-up bill. After a path is warm, an exact repeat for the
-same persona, model, question, and prior-turn history incurs **$0 new provider usage**.
-
-## Measured versus extrapolated
-
-**Measured:** the two P001 token counts and provider-reported costs, their $0.00022265 sum, and the
-zero-cost cache replay in `interview_turn`.
-
-**Extrapolated:** every eight-turn session, AI-to-AI run, 30 x 32 sweep, mid-tier or expensive-tier
-amount, and cache pre-warm amount. They use real measured token workloads and the catalog rates,
-but actual costs can differ. Follow-up prompts accumulate conversation history, model output length
-varies, and provider pricing can change. A future report should replace an extrapolated scenario
-with its recorded `interview_turn` sum after that scenario is run.
-
-The approximately $5 expensive-model and $0.50 cheap-model figures recalled on the call had no
-token logs behind them, so they are not used in this report.
