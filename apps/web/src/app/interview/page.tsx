@@ -38,6 +38,7 @@ import {
 import { cn } from "@/lib/utils";
 import { StudyProvider, useStudy } from "@/providers/study-provider";
 
+import { batchExport } from "@/lib/interview-batch-export";
 import { InterviewOperationError, interviewOperation, type Batch, type RegeneratedAnswer } from "@/lib/standalone-interview";
 
 type Turn = { role: "student" | "persona"; text: string; answerId?: string; version?: number };
@@ -246,8 +247,14 @@ function InterviewPageContent() {
       if (response.system_prompt) setSystemPrompt(response.system_prompt);
       setTurns((previous) => [...previous, { role: "persona", text: response.reply, answerId: response.answer_id, version: response.version ?? 0 }]);
     } catch (err) {
-      setTurns(turns);
-      setQuestion(asked);
+      const committed = err instanceof InterviewChatApiError ? err.committedAnswer : null;
+      if (committed) {
+        setSessionId(committed.session_id);
+        setTurns(previous => [...previous, { role: "persona", text: committed.reply, answerId: committed.answer_id, version: committed.version ?? 0 }]);
+      } else {
+        setTurns(turns);
+        setQuestion(asked);
+      }
       if (err instanceof InterviewChatApiError && err.systemPrompt) {
         setSystemPrompt(err.systemPrompt);
       }
@@ -607,6 +614,13 @@ function InterviewPageContent() {
                 <p>{batch.status === "budget_stopped" ? "Budget stop" : batch.status === "running" ? (batchLoading ? (pausing ? "Pausing after current call…" : "running") : error ? "Execution unconfirmed — Resume to recover" : "Paused — select Resume batch to continue") : batch.status}: {batch.completed_personas}/{batch.persona_count} personas complete · {batch.transcripts.reduce((total, transcript) => total + transcript.messages.length, 0)}/{batch.persona_count * batch.turn_limit * 2} calls resolved</p>
                 <p>Measured cost: ${Number(batch.session_usage.cost_usd).toFixed(6)} · Estimate at start: ${Number(batch.estimated_cost_usd).toFixed(4)}</p>
                 <p className="text-xs text-app-muted">Interviewer: {batch.interviewer_model} · Interviewee: {batch.interviewee_model}</p>
+                <div className="flex gap-2">{(["csv", "md"] as const).map(format => <Button key={format} variant="secondary" onClick={() => {
+                  const exported = batchExport(batch, format);
+                  const url = URL.createObjectURL(exported.blob);
+                  const link = document.createElement("a");
+                  link.href = url; link.download = exported.filename;
+                  document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url);
+                }}>Download batch {format === "csv" ? "CSV" : "Markdown"}</Button>)}</div>
                 {batch.error ? <p role="alert">{batch.error.details?.scope ? `${batch.error.details.scope} cap: ` : ""}{batch.error.message}</p> : null}
                 {batch.transcripts.map(transcript => <details key={transcript.persona_id} className="rounded-xl border border-app-border p-3">
                   <summary>{transcript.persona_id} · {Math.floor(transcript.messages.length / 2)}/{batch.turn_limit} answers</summary>

@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import ts from "typescript";
+import { batchExport } from "../src/lib/interview-batch-export";
+import { InterviewChatApiError, sendInterviewChatMessage } from "../src/lib/api";
 import { InterviewOperationError } from "../src/lib/standalone-interview";
 import * as modelHelpers from "../src/lib/interview-models";
 import * as comparisonHelpers from "../src/lib/interview-comparison";
@@ -37,7 +39,7 @@ function harness(savedBatches: any[] = [], comparisonFetcher?: Parameters<typeof
       exportsPayload = payload;
       return { blob: new Blob(["transcript"]), filename: "test.md" };
     },
-    InterviewChatApiError: class extends Error {},
+    InterviewChatApiError,
   };
   const react = {
     useState(initial: any) {
@@ -56,6 +58,7 @@ function harness(savedBatches: any[] = [], comparisonFetcher?: Parameters<typeof
     react,
     "framer-motion": { AnimatePresence: "presence", motion: { div: "div" } },
     "@/lib/api": api,
+    "@/lib/interview-batch-export": { batchExport },
     "@/lib/interview-models": modelHelpers,
     "@/lib/interview-comparison": { ...comparisonHelpers, runInterviewComparison: comparisonFetcher
       ? (input: Parameters<typeof comparisonHelpers.runInterviewComparison>[0]) => comparisonHelpers.runInterviewComparison(input, comparisonFetcher)
@@ -96,7 +99,7 @@ function harness(savedBatches: any[] = [], comparisonFetcher?: Parameters<typeof
     return String(node);
   }
   return {
-    calls, chatCalls, memory,
+    calls, chatCalls, memory, api,
     get exportedTranscript() { return exportsPayload; },
     setTransport(fn: typeof transport) { transport = fn; },
     async settle() { await new Promise(resolve => setImmediate(resolve)); render(); },
@@ -317,3 +320,48 @@ test("pause confirms after current call, preserves result and cost, and waits fo
   assert.equal(ui.calls[3].payload.revision, 1);
   assert.match(ui.text(), /completed:/);
 });
+
+
+test("chat budget transport preserves committed follow-up and only offers latest regeneration", async () => {
+  const ui = harness(); await ui.settle();
+  await ui.button("Ask").props.onClick(); await ui.settle();
+  ui.nodes().find(n => n.props.placeholder === "Ask a follow-up…")!.props.onChange({ target: { value: "Why?" } });
+  ui.render();
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({ error: { code: "quota_exceeded", message: "Run budget stop", details: { scope: "run",
+    committed_answer: { session_id: "ses_1", reply: "Paid follow-up", answer_id: "ans_2", version: 0 },
+  } } }), { status: 429 });
+  ui.api.sendInterviewChatMessage = (_id, payload) => sendInterviewChatMessage(_id, payload) as any;
+  try { await ui.button("Ask").props.onClick(); await ui.settle(); }
+  finally { globalThis.fetch = originalFetch; }
+  assert.match(ui.text(), /Original 1[\s\S]*Why\?[\s\S]*Paid follow-up/);
+  assert.match(ui.text(), /Run budget stop/);
+  const controls = ui.nodes().filter(n => n.type === "Button" && n.props.children === "Regenerate answer (paid)");
+  assert.equal(controls.length, 1);
+  ui.setTransport(async () => ({ answer: { answer_id: "ans_2", version: 1, reply: "Fresh" } }));
+  await controls[0].props.onClick();
+  assert.match(ui.calls.at(-1)!.path, /answers\/ans_2\/regenerate/);
+});
+
+for (const status of ["completed", "budget_stopped"] as const) {
+  test(`batch ${status} downloads preserve attribution and partial questions`, async () => {
+    const saved = { ...batch, status, transcripts: [{ persona_id: "neo-001", messages: [
+      { role: "user" as const, content: 'Why, "this"?\nNext line' },
+      { role: "assistant" as const, content: "My answer" },
+      { role: "user" as const, content: "Unanswered question" },
+    ] }] };
+    const ui = harness([saved]); await ui.settle();
+    ui.nodes().find(n => n.props["aria-label"] === "Saved batches")!.props.onChange({ target: { value: saved.job_id } });
+    ui.render();
+    await ui.button("Download batch CSV").props.onClick();
+    await ui.button("Download batch Markdown").props.onClick();
+    const csv = await batchExport(saved, "csv").blob.text();
+    assert.match(csv, /"neo-001","cheap-a","cheap-b","1","Question","Why, ""this""\?\nNext line"/);
+    assert.match(csv, /"2","Question","Unanswered question"/);
+    const md = await batchExport(saved, "md").blob.text();
+    assert.match(md, /neo-001 — Turn 1: Answer/);
+    assert.match(md, /Interviewer: cheap-a · Interviewee: cheap-b/);
+    assert.match(md, /My answer/);
+    assert.match(md, /Unanswered question/);
+  });
+}

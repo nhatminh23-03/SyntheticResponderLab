@@ -1,3 +1,40 @@
+# Current follow-up — dependent answers, budget results, and batch downloads
+
+Implemented after `99afc65`; no new commit created. Recent commits: `99afc65`,
+`f193ca1`, `088c90f`. Preserved the pre-existing DONE edits and untracked
+`archive/build-round4.sh`. Board posts and checkbox updates remain wrapper-owned.
+
+- `apps/api/src/services/standalone_interview.py`: later chat answers block
+  regeneration of both chat and comparison answers before a provider call.
+  Independent comparison siblings remain regeneratable.
+- `apps/api/src/services/interview_service.py`: standalone chat quota errors return
+  the committed answer with its ID/version and session usage.
+- `apps/web/src/lib/api.ts` and `apps/web/src/app/interview/page.tsx`: preserve that
+  answer in transcript order and expose regeneration only on the latest chat turn.
+  Chat budget errors identify the exhausted cap rather than claiming a daily limit.
+- New `apps/web/src/lib/interview-batch-export.ts` and page controls download current
+  or recovered batch transcripts as CSV/Markdown, including partial/unanswered
+  questions and persona/interviewer/interviewee attribution.
+- API regressions are in `apps/api/tests/test_standalone_batch.py`; transport/page
+  and export checks are in `apps/web/tests/interview-batch-controls.test.ts`.
+  Added the missing export check command in DONE without changing its checkboxes.
+
+Verification: full API suite 226 passed (10 deprecation warnings); web suite 79
+passed; TypeScript `--noEmit --incremental false` passed; R suite nine files passed.
+`git diff --check`, protected-file comparison against `91b6e56`, and workflow
+`start_interview_run` AST comparison passed. The first web regression exposed the
+shared daily-limit formatter; the chat-specific budget message now passes.
+
+Dirty files are the seven application/test files above, DONE and this HANDOFF,
+plus the preserved untracked archive script. No paid provider calls, live browser
+smoke test or PostgreSQL integration test ran. Next recommended verification is
+browser download/budget-stop smoke testing and production-dialect concurrency.
+The explicitly accepted process-crash accounting window remains unchanged.
+Do not touch the prerecorded script/tests, cost-report files, budget constants,
+or workflow-driven interview entry point.
+
+---
+
 # Batch and regeneration handoff
 
 ## Current follow-up — comparison budget result preservation

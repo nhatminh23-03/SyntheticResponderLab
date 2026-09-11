@@ -1,5 +1,5 @@
 from decimal import Decimal
-from uuid import uuid4
+from uuid import UUID, uuid4
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
@@ -489,3 +489,41 @@ def test_failed_regeneration_requires_explicit_retry_and_attempt_audit(classroom
     assert records[0].result_json == {'outcome': 'unknown', 'incremental_cost_usd': None}
     assert records[1].status == 'completed'
     assert Decimal(records[1].result_json['incremental_cost_usd']) == Decimal('.001')
+
+
+@pytest.mark.parametrize('surface', ['chat', 'comparison'])
+def test_dependent_followup_blocks_regeneration(classroom, surface):
+    client, study_id, calls = classroom
+    if surface == 'chat':
+        answer = chat(client, study_id).json()['data']['interview_chat']
+    else:
+        comparison = client.post(f'/api/v1/studies/{study_id}/interview/compare', json={
+            'persona_id': load_persona_seed_rows()[0]['persona_id'], 'question': 'What matters?',
+            'model_ids': [MODEL, 'google/gemini-2.5-flash-lite']}).json()['data']['interview_comparison']
+        answer = {**comparison['results'][0], 'session_id': comparison['session_id'],
+                  'reply': comparison['results'][0]['answer']}
+    assert chat(client, study_id, prompt='Why?', session_id=answer['session_id'], messages=[
+        {'role': 'user', 'content': 'What matters?'},
+        {'role': 'assistant', 'content': answer['reply']}]).status_code == 200
+    before = len(calls)
+    assert regen(client, study_id, answer['answer_id']).status_code == 409
+    assert len(calls) == before
+
+
+def test_budget_stop_returns_committed_chat_answer(classroom, db_session, monkeypatch):
+    client, study_id, calls = classroom
+    first = chat(client, study_id).json()['data']['interview_chat']
+    def costly(**kw):
+        return InterviewAnswer(text='Committed overrun answer', model=kw['model'], tokens_in=10,
+                               tokens_out=5, cost_usd=Decimal('1'))
+    monkeypatch.setattr('src.services.interview_service._call_openrouter_messages', costly)
+    response = chat(client, study_id, prompt='Why?', session_id=first['session_id'], messages=[
+        {'role': 'assistant', 'content': first['reply']}])
+    assert response.status_code == 429
+    committed = response.json()['error']['details']['committed_answer']
+    assert committed['reply'] == 'Committed overrun answer'
+    assert committed['version'] == 0
+    job = db_session.scalar(select(Job).where(Job.public_id == committed['answer_id']))
+    assert db_session.get(InterviewTurn, UUID(job.payload_json['turn_id'])).text == committed['reply']
+    assert Decimal(committed['session_usage']['cost_usd']) == Decimal('1.001')
+    assert regen(client, study_id, first['answer_id']).status_code == 409

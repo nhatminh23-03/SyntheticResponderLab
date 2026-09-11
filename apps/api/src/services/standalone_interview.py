@@ -115,7 +115,12 @@ def regenerate_answer(session, settings, study, answer_id, payload):
     turn = session.get(InterviewTurn, UUID(context["turn_id"]))
     if not turn or turn.study_id != study.id:
         raise NotFoundApiError()
-    if not context["comparison"] and session.scalar(select(InterviewTurn.id).where(
+    # Comparison siblings are independent; later chat answers depend on this context.
+    independent_ids = [UUID(answer.payload_json["turn_id"]) for answer in session.scalars(
+        select(Job).where(Job.study_id == study.id, Job.job_type == "interview_answer"))
+        if answer.payload_json.get("comparison")]
+    if session.scalar(select(InterviewTurn.id).where(
+        InterviewTurn.role == "assistant", InterviewTurn.id.not_in(independent_ids),
         InterviewTurn.session_id == turn.session_id, InterviewTurn.study_id == study.id,
         InterviewTurn.created_at > turn.created_at).limit(1)):
         raise ConflictApiError("Only the latest answer can be regenerated once follow-ups exist.")

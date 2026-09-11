@@ -873,13 +873,7 @@ def continue_standalone_interview_chat(
             run_budget_usd=settings.llm_budget_usd,
         )
     )
-    if budget_error is not None:
-        budget_error.details["session_id"] = session_id
-        budget_error.details["session_usage"] = session_usage_payload
-        budget_error.details["system_prompt"] = system_prompt
-        raise budget_error
-
-    return {
+    response = {
         "persona_id": persona_id,
         "session_id": session_id,
         "transcript_source": "standalone",
@@ -892,6 +886,11 @@ def continue_standalone_interview_chat(
         "session_usage": session_usage_payload,
         "system_prompt": system_prompt,
     }
+    if budget_error is not None:
+        budget_error.details.update(session_id=session_id, session_usage=session_usage_payload,
+                                    system_prompt=system_prompt, committed_answer=response)
+        raise budget_error
+    return response
 
 
 def continue_interview_chat(
