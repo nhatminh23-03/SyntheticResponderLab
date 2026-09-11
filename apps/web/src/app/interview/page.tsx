@@ -791,6 +791,15 @@ function InterviewPageContent() {
                     </div>
                   </div>
 
+                  {comparisonResults.find((result) => result.budgetStop) ? (
+                    <p
+                      role="alert"
+                      className="mt-4 rounded-xl border border-app-border px-4 py-3 text-sm leading-6 text-app-text"
+                    >
+                      {comparisonResults.find((result) => result.budgetStop)?.budgetStop}
+                    </p>
+                  ) : null}
+
                   <div className="fine-scrollbar mt-4 grid auto-cols-[minmax(18rem,1fr)] grid-flow-col gap-4 overflow-x-auto pb-2">
                     {comparisonResults.map((result) => {
                       const model = models.find((entry) => entry.id === result.modelId);

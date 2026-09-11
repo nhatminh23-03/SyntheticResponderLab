@@ -365,3 +365,29 @@ for (const status of ["completed", "budget_stopped"] as const) {
     assert.match(md, /Unanswered question/);
   });
 }
+
+// Refuter round 5, F1: model output lands in a spreadsheet cell. A leading = + - @
+// makes that cell a formula, so provider-controlled text would execute on open.
+test("batch CSV export neutralises formula-leading interview text", async () => {
+  const hostile = { ...batch, status: "completed" as const, transcripts: [{ persona_id: "neo-001", messages: [
+    { role: "user" as const, content: "=1+1" },
+    { role: "assistant" as const, content: "@SUM(A1:A9)" },
+    { role: "user" as const, content: "+1234567890" },
+    { role: "assistant" as const, content: "-2+3" },
+    { role: "user" as const, content: "A normal question?" },
+  ] }] };
+  const csv = await batchExport(hostile, "csv").blob.text();
+
+  for (const dangerous of ["=1+1", "@SUM(A1:A9)", "+1234567890", "-2+3"]) {
+    assert.ok(
+      csv.includes(`"'${dangerous}"`),
+      `${dangerous} must be exported as literal text, not a live formula`
+    );
+    assert.ok(
+      !csv.includes(`"${dangerous}"`),
+      `${dangerous} must never appear as a bare cell a spreadsheet would evaluate`
+    );
+  }
+  // Ordinary text is untouched — the guard must not corrupt every transcript.
+  assert.ok(csv.includes('"A normal question?"'));
+});

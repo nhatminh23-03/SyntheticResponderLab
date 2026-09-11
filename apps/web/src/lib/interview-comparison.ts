@@ -16,6 +16,10 @@ export type InterviewComparisonResult = {
   answer: string | null;
   error: string | null;
   postInterviewScore: InterviewPostScore | null;
+  // A budget stop can arrive with every model already answered. The per-card `error`
+  // only shows on a card that has no answer, so the stop would vanish exactly when
+  // the student spent the most. Carried here so the page can show it regardless.
+  budgetStop?: string;
 };
 
 type InterviewComparisonResponse = {
@@ -157,6 +161,7 @@ export async function runInterviewComparison(
       return {
         modelId,
         ...(result?.answer_id ? { answerId: result.answer_id, version: result.version ?? 0 } : {}),
+        ...(failureMessage ? { budgetStop: failureMessage } : {}),
         answer: answer || null,
         error: answer ? null : error ?? failureMessage ?? "Model returned an empty answer.",
         postInterviewScore: answer && scoreIsValid

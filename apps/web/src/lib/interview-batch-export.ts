@@ -5,7 +5,11 @@ export function batchExport(batch: Batch, format: "csv" | "md") {
     transcript.persona_id, batch.interviewer_model, batch.interviewee_model,
     String(Math.floor(index / 2) + 1), message.role === "user" ? "Question" : "Answer", message.content,
   ]));
-  const quote = (value: string) => `"${value.replace(/"/g, '""')}"`;
+  // Model output lands in a spreadsheet cell. A leading = + - @ (or the tab/CR that
+  // Excel strips before deciding) makes the cell a formula, so neutralise it with a
+  // leading apostrophe — the importer shows the original text and never evaluates it.
+  const quote = (value: string) =>
+    `"${(/^[=+\-@\t\r]/.test(value) ? `'${value}` : value).replace(/"/g, '""')}"`;
   const text = format === "csv"
     ? [["Persona", "Interviewer model", "Interviewee model", "Turn", "Role", "Text"], ...rows].map(row => row.map(quote).join(",")).join("\r\n")
     : `# Batch ${batch.job_id}\n\nStatus: ${batch.status}\nMeasured cost: $${batch.session_usage.cost_usd}\n\n` + rows.map(([persona, interviewer, interviewee, turn, role, content]) =>
