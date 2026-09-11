@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import random
+import re
 import time
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
@@ -30,6 +31,7 @@ from src.services.exceptions import (
     ValidationApiError,
     TransientProviderError,
 )
+from src.services.standalone_interview import remember_answer, validate_session, serialized_local
 from src.services.ids import make_public_id
 from src.services.interview_cache import (
     InterviewAnswer as OpenRouterChatResult,
@@ -510,6 +512,7 @@ INSTRUCTIONS:
 - Keep it conversational, three to six sentences, plain prose."""
 
 
+@serialized_local
 def compare_interview_models(
     session: Session,
     settings: AppSettings,
@@ -543,6 +546,7 @@ def compare_interview_models(
         raise ValidationApiError(f"Persona '{persona_id}' was not found.")
 
     session_id = str(payload.get("session_id") or "").strip() or make_public_id("ses")
+    validate_session(session, study, session_id)
     system_prompt = _build_fixed_persona_system_prompt(dict(persona.profile_json))
     messages = [
         {"role": "system", "content": system_prompt},
@@ -619,7 +623,10 @@ def compare_interview_models(
         except ReplayOnlyCacheMissError as exc:
             results.append({"model_id": model_id, "answer": None, "error": str(exc)})
             continue
-        except (ConflictApiError, RuntimeError) as exc:
+        except QuotaExceededApiError as exc:
+            budget_error = exc
+            break
+        except (ApiError, RuntimeError) as exc:
             results.append({"model_id": model_id, "answer": None, "error": str(exc)})
             continue
 
@@ -652,6 +659,11 @@ def compare_interview_models(
             ]
         )
         session.flush()
+        answer_turn = session.scalar(select(InterviewTurn).where(
+            InterviewTurn.study_id == study.id, InterviewTurn.session_id == session_id,
+            InterviewTurn.role == "assistant").order_by(InterviewTurn.created_at.desc()).limit(1))
+        answer_id = remember_answer(session, study, persona_id=persona_id, model=model_id,
+            question=question, prior_turns=messages[:-1], turn=answer_turn, comparison=True)
         post_interview_score = score_persisted_interview_transcript(
             session,
             study_id=study.id,
@@ -662,6 +674,8 @@ def compare_interview_models(
         results.append(
             {
                 "model_id": model_id,
+                "answer_id": answer_id,
+                "version": 0,
                 "answer": provider_result.text,
                 "error": None,
                 "cache_hit": provider_result.cache_hit,
@@ -682,6 +696,7 @@ def compare_interview_models(
     if budget_error is not None:
         budget_error.details["session_id"] = session_id
         budget_error.details["session_usage"] = usage
+        budget_error.details["results"] = results
         raise budget_error
 
     return {
@@ -693,6 +708,7 @@ def compare_interview_models(
     }
 
 
+@serialized_local
 def continue_standalone_interview_chat(
     session: Session,
     settings: AppSettings,
@@ -737,6 +753,7 @@ def continue_standalone_interview_chat(
         raise ValidationApiError(f"Persona '{persona_id}' was not found.")
 
     session_id = str(payload.get("session_id") or "").strip() or make_public_id("ses")
+    validate_session(session, study, session_id)
     system_prompt = _build_fixed_persona_system_prompt(dict(persona.profile_json))
     full_messages = [
         {"role": "system", "content": system_prompt},
@@ -842,6 +859,12 @@ def continue_standalone_interview_chat(
             ),
         ]
     )
+    session.flush()
+    answer_turn = session.scalar(select(InterviewTurn).where(
+        InterviewTurn.study_id == study.id, InterviewTurn.session_id == session_id,
+        InterviewTurn.role == "assistant").order_by(InterviewTurn.created_at.desc()).limit(1))
+    answer_id = remember_answer(session, study, persona_id=persona_id, model=model,
+        question=prompt, prior_turns=full_messages[:-1], turn=answer_turn)
     session.commit()
 
     session_usage_payload = _serialize_session_usage(
@@ -851,23 +874,24 @@ def continue_standalone_interview_chat(
             run_budget_usd=settings.llm_budget_usd,
         )
     )
-    if budget_error is not None:
-        budget_error.details["session_id"] = session_id
-        budget_error.details["session_usage"] = session_usage_payload
-        budget_error.details["system_prompt"] = system_prompt
-        raise budget_error
-
-    return {
+    response = {
         "persona_id": persona_id,
         "session_id": session_id,
         "transcript_source": "standalone",
         "model": provider_result.model,
         "source_run_id": None,
         "reply": provider_result.text,
+        "answer_id": answer_id,
+        "version": 0,
         "cache_hit": provider_result.cache_hit,
         "session_usage": session_usage_payload,
         "system_prompt": system_prompt,
     }
+    if budget_error is not None:
+        budget_error.details.update(session_id=session_id, session_usage=session_usage_payload,
+                                    system_prompt=system_prompt, committed_answer=response)
+        raise budget_error
+    return response
 
 
 def continue_interview_chat(
@@ -1465,6 +1489,7 @@ def _call_openrouter_messages(
     model: str,
     messages: list[dict[str, str]],
     timeout: int = 90,
+    max_attempts: int = _MAX_RETRIES,
 ) -> OpenRouterChatResult:
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -1481,17 +1506,17 @@ def _call_openrouter_messages(
         "reasoning": {"max_tokens": 400},
     }
 
-    for attempt in range(_MAX_RETRIES):
+    for attempt in range(max_attempts):
         try:
             resp = requests.post(_OPENROUTER_URL, headers=headers, json=body, timeout=timeout)
             resp.raise_for_status()
         except Exception as exc:
-            if attempt < _MAX_RETRIES - 1:
+            if attempt < max_attempts - 1:
                 wait = min(65, (2 ** attempt) + random.uniform(0, 1))
                 time.sleep(wait)
             else:
                 raise RuntimeError(
-                    f"OpenRouter chat call failed after {_MAX_RETRIES} attempts: {exc}"
+                    f"OpenRouter chat call failed after {max_attempts} attempts: {exc}"
                 ) from exc
         else:
             try:
@@ -1501,6 +1526,28 @@ def _call_openrouter_messages(
             return _parse_openrouter_chat_response(response_payload, requested_model=model)
 
     raise RuntimeError("Exhausted retries.")
+
+
+_INLINE_REASONING = re.compile(r"<(think|thinking|reasoning)\b[^>]*>.*?</\1\s*>", re.DOTALL | re.IGNORECASE)
+_UNCLOSED_REASONING = re.compile(r"<(think|thinking|reasoning)\b[^>]*>.*\Z", re.DOTALL | re.IGNORECASE)
+
+
+def _strip_inline_reasoning(text: str) -> str:
+    """Drop a chain-of-thought block a provider put inline in `content`.
+
+    `reasoning: {max_tokens: ...}` only bounds the SEPARATE reasoning field. Several
+    OpenRouter providers (qwen3.7-plus among them) instead emit `<think>...</think>`
+    inside the message content, where nothing downstream removes it: the raw block is
+    cached and persisted, and `normalize_interviewer_question` then takes its first
+    line, yielding the literal question `<think>?`. Strip it at the one boundary every
+    chat call passes through, so no single caller can forget.
+
+    An unclosed opener (reasoning truncated by the cap mid-thought) is dropped to the
+    end — keeping it would leak the thinking that the closed case removes.
+    """
+    cleaned = _INLINE_REASONING.sub("", text)
+    cleaned = _UNCLOSED_REASONING.sub("", cleaned)
+    return cleaned.strip()
 
 
 def _parse_openrouter_chat_response(
@@ -1515,7 +1562,10 @@ def _parse_openrouter_chat_response(
         text = payload["choices"][0]["message"]["content"]
     except (KeyError, IndexError, TypeError) as exc:
         raise TransientProviderError("OpenRouter chat response did not include assistant text.") from exc
-    if not isinstance(text, str) or not text.strip():
+    if not isinstance(text, str):
+        raise TransientProviderError("OpenRouter chat response included empty assistant text.")
+    text = _strip_inline_reasoning(text)
+    if not text.strip():
         raise TransientProviderError("OpenRouter chat response included empty assistant text.")
 
     usage = payload.get("usage")

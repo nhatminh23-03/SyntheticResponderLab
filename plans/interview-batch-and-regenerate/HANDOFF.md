@@ -1,0 +1,202 @@
+# Scoped defect fixes — 2026-09-10
+
+Fixed only the two requested spending defects. In `standalone_interview.py`,
+rejected questions retain measured usage, evict the rejected cache entry, and
+surface any pending budget stop. In `interview/page.tsx`, Run uses fresh identity
+and visible settings; a separately labelled recovery action names the retained
+persona count, both models, and expensive-model authorisation before re-submission.
+Regressions are in `test_standalone_batch.py` and
+`interview-batch-controls.test.ts`.
+
+Verification: full API command `./apps/api/.venv/bin/python -m pytest apps/api/tests/ -q`
+passed (234 tests, 10 deprecation warnings); `cd apps/web && npm run test:unit`
+passed (82 tests); TypeScript `--noEmit --incremental false` and
+`git diff --check` passed. Each new regression was run with only its production
+fix reverted and failed on the reported defect; both passed after restoration.
+No live provider, browser, or PostgreSQL checks ran; no further patch is identified.
+
+No commits created. Recent commits: `3dcad8a`, `168cf1d`, `1959517`.
+Preserve pre-existing edits in `interview_service.py`, `test_interview_turns.py`,
+and untracked `plans/interview-batch-and-regenerate/build.sh`. This session adds
+changes only to the four implementation/test files above and this handoff.
+The active BRIEF/DONE remain in this plan directory; checkboxes are untouched.
+Do not touch the prerecord script, budget constants, or cost report and its test;
+all checked unchanged against HEAD. Existing process-crash limitations remain.
+
+---
+
+# Completion-check formatting follow-up
+
+Current implementation is committed at `a62b051`, following `99afc65` and
+`f193ca1`. This follow-up changes only DONE and this handoff; it preserves the
+pre-existing checked batch-download outcome. No commit or board write was made.
+
+The two round-4 regressions and fixes were already present. The completion parser
+reads one line per outcome, so their multiline checklist entries hid the commands.
+Joined each entry onto one line, preserving its wording, command and checkbox.
+The actual done.py parser now finds 44 outcomes and 44 nonempty checks. Both
+round-4 commands were executed from the plan directory and passed.
+
+Verification: API 226 passed (10 deprecation warnings); web 79 passed; TypeScript
+`--noEmit --incremental false` passed; R suite nine files passed; diff whitespace,
+protected-file comparison against `91b6e56`, and workflow entry-point AST comparison
+passed. No live provider, browser or PostgreSQL integration checks ran. The accepted
+process-crash accounting window is unchanged. Next step: wrapper completion review;
+checkboxes and board posts remain wrapper-owned. Preserve all protected paths in
+BRIEF and the existing application implementation.
+
+---
+
+# Current follow-up — dependent answers, budget results, and batch downloads
+
+Implemented after `99afc65`; no new commit created. Recent commits: `99afc65`,
+`f193ca1`, `088c90f`. Preserved the pre-existing DONE edits and untracked
+`archive/build-round4.sh`. Board posts and checkbox updates remain wrapper-owned.
+
+- `apps/api/src/services/standalone_interview.py`: later chat answers block
+  regeneration of both chat and comparison answers before a provider call.
+  Independent comparison siblings remain regeneratable.
+- `apps/api/src/services/interview_service.py`: standalone chat quota errors return
+  the committed answer with its ID/version and session usage.
+- `apps/web/src/lib/api.ts` and `apps/web/src/app/interview/page.tsx`: preserve that
+  answer in transcript order and expose regeneration only on the latest chat turn.
+  Chat budget errors identify the exhausted cap rather than claiming a daily limit.
+- New `apps/web/src/lib/interview-batch-export.ts` and page controls download current
+  or recovered batch transcripts as CSV/Markdown, including partial/unanswered
+  questions and persona/interviewer/interviewee attribution.
+- API regressions are in `apps/api/tests/test_standalone_batch.py`; transport/page
+  and export checks are in `apps/web/tests/interview-batch-controls.test.ts`.
+  Added the missing export check command in DONE without changing its checkboxes.
+
+Verification: full API suite 226 passed (10 deprecation warnings); web suite 79
+passed; TypeScript `--noEmit --incremental false` passed; R suite nine files passed.
+`git diff --check`, protected-file comparison against `91b6e56`, and workflow
+`start_interview_run` AST comparison passed. The first web regression exposed the
+shared daily-limit formatter; the chat-specific budget message now passes.
+
+Dirty files are the seven application/test files above, DONE and this HANDOFF,
+plus the preserved untracked archive script. No paid provider calls, live browser
+smoke test or PostgreSQL integration test ran. Next recommended verification is
+browser download/budget-stop smoke testing and production-dialect concurrency.
+The explicitly accepted process-crash accounting window remains unchanged.
+Do not touch the prerecorded script/tests, cost-report files, budget constants,
+or workflow-driven interview entry point.
+
+---
+
+# Batch and regeneration handoff
+
+## Current follow-up — comparison budget result preservation
+
+Implemented after `f193ca1` without creating a commit. Recent commits are `f193ca1`,
+`088c90f`, and `6259e2a`. Preserve the pre-existing DONE edits (including the explicit
+acceptance of the process-crash window) and untracked `archive/build-round3.sh`.
+The board is wrapper-owned; no board writes were attempted.
+
+- `apps/web/src/lib/interview-comparison.ts` now reads completed answers from quota
+  error details through the same result mapping as successful responses. Answer IDs,
+  versions and scores survive; unanswered models show the budget error.
+- `apps/web/tests/interview-comparison.test.ts` covers the 429 transport and model
+  ordering; `apps/web/tests/interview-batch-controls.test.ts` drives that transport
+  through the page and regenerates the surviving card using its retained ID/version.
+- `apps/api/src/services/standalone_interview.py` has the requested `ponytail:`
+  comments at both provider calls. Per DONE, no crash-recovery ledger was added.
+  The ~$0.003 batch step is an estimate, not a hard ceiling; unreported charges
+  cannot be included in measured budget enforcement.
+
+Verification: API suite 223 passed (10 deprecation warnings); web unit suite 76
+passed; TypeScript `--noEmit --incremental false` passed; R suite nine files passed;
+protected files and the workflow entry point match baseline `91b6e56`;
+`git diff --check` passed. The new page test initially omitted the score from its
+regeneration response fixture; the corrected backend-shaped fixture passes.
+No live paid calls, browser smoke test, PostgreSQL integration or process-kill test
+was run. The last is outside the explicitly accepted scope. Next recommended
+verification remains browser and production-dialect smoke testing; no further patch
+is identified by these checks. Do not touch prerecorded script/tests, budget
+constants, cost-report files, or the workflow entry point.
+
+This follow-up's dirty files are the four application/test files above and this
+handoff, alongside the preserved wrapper-owned DONE/archive changes.
+
+## Current follow-up — regeneration failure and pause checks
+
+Implemented after `6259e2a` in the worktree; no commit created. Recent commits: `6259e2a`, `64d8bd7`, `b254915`. Preserve the pre-existing DONE edits and untracked `archive/build-round2.sh`. The board is wrapper-owned; no board writes were attempted.
+
+- `apps/api/src/services/standalone_interview.py` now commits a consumed answer version on regeneration failure. Queued duplicates receive the stored error; retry requires the new version and `retry: true`. The old transcript and cached answer remain intact. Each accepted attempt has an `interview_regeneration` Job linked to study/owner, answer/turn, session, persona, model and version, with timestamps, outcome and incremental spend. Unknown provider spend is null rather than falsely zero.
+- `apps/web/src/lib/standalone-interview.ts` carries retry details from API errors. `apps/web/src/app/interview/page.tsx` retains them for the next explicit chat or comparison regeneration click. Batch pause displays Pausing while awaiting the current call, then Paused after its result and cost arrive. Network errors display execution as unconfirmed.
+- Regression evidence is in `apps/api/tests/test_standalone_batch.py` and `apps/web/tests/interview-batch-controls.test.ts`. DONE now includes machine commands for the two previously missing checks; checkbox state remains wrapper-owned.
+
+Verification: full API suite 223 passed (10 deprecation warnings); web unit suite 74 passed; TypeScript `--noEmit --incremental false` passed; R suite nine files passed; protected files match `91b6e56`; workflow `start_interview_run` AST matches baseline; `git diff --check` passed. Initial test run exposed two stale assertions (old retry version and per-request error IDs), corrected before the passing full run.
+
+No live paid calls, browser smoke test, or PostgreSQL integration test performed. Next recommended verification is production-dialect concurrency and browser pause/retry smoke testing. Process crashes between provider acceptance and database commit still require provider reconciliation; this patch addresses caught failures and queued duplicates, not crash recovery. Do not touch prerecorded script/tests, budget constants, cost-report files or the workflow entry point. All changed files listed above plus DONE and this HANDOFF remain uncommitted.
+
+## Current follow-up — four remaining failures
+
+Implemented in the worktree after `b254915` (no new commit). Earlier commits are `5a2dcf0` and `39631a2`; baseline is `91b6e56`. Preserve the pre-existing edits to `DONE.md` and untracked `plans/interview-batch-and-regenerate/archive/`. No board writes were attempted; the wrapper owns posts and checkboxes.
+
+- `standalone_interview.py` consumes a revision even when the provider fails. A failed status requires `retry: true` with the new revision. Old queued submissions return saved status; the page sends retry only after Resume. Progress counts persisted messages rather than attempt revisions.
+- Rejected creation requests clear their pending UUID/settings on HTTP 4xx. Network/5xx ambiguity keeps the original UUID for idempotent recovery. Tests cover corrected slider settings and ambiguous recovery.
+- An owned GET batches route and classroom proxy rule expose persisted history. The page's Saved batches selector reopens prior completed or paused transcripts and measured costs, including after a later run. Delayed initial recovery cannot replace a newly selected batch.
+- Creation consumes the existing interview-run daily quota exactly once, after the idempotency check. The shared quota helper takes the existing PostgreSQL advisory lock to serialize counters, including absent rows. Advances and duplicate creation do not consume quota. Concurrent distinct batch creation and cross-study same-user limits have checks.
+
+Changed application files: `apps/api/src/api/studies.py`, `apps/api/src/services/standalone_interview.py`, `apps/api/src/services/usage_limits.py`, `apps/web/src/app/interview/page.tsx`, `apps/web/src/lib/standalone-interview.ts`, and `apps/web/src/lib/classroom-access.ts`. Regression checks are in the existing API standalone-batch and web batch-controls test files. Added runnable commands to the three previously unchecked DONE outcomes; wrapper-owned checkbox state is preserved.
+
+Verification passed:
+
+- `apps/api/.venv/bin/python -m pytest apps/api/tests -q`: 222 passed, 10 deprecation warnings.
+- From `apps/web`: `npm run test:unit`: 73 passed; `./node_modules/.bin/tsc --noEmit --incremental false`: passed.
+- `/usr/local/bin/Rscript analysis/tests/test_all.R`: nine files passed.
+- Protected-file diff against `91b6e56`: unchanged; exact source comparison of workflow `start_interview_run`: unchanged.
+- `git diff --check`: passed.
+
+One web check was initially invoked from the repo root (no package.json); rerunning from `apps/web` passed. No live paid calls, browser smoke test, or running PostgreSQL integration test was performed. SQLite concurrency checks exercise local serialization; production transaction-lock integration remains a next verification step. Provider timeouts can still represent unreported charges, so explicit retry retains its warning. No further functional patch is identified by the local checks. Do not touch prerecorded script/tests, budget constants, cost-report files, or the workflow entry point.
+
+## Round 2 — completion check paths
+
+The implementation is committed in `39631a2`, following pre-build snapshot `91b6e56` and planning commits `61b9424` and `2068be9`. The worktree was clean when round 2 started.
+
+The reported missing Python runner and web directory were caused by check commands resolving relative to `plans/interview-batch-and-regenerate/`. The completion runner explicitly uses the directory containing `DONE.md` as its working directory. Every check now begins with `cd ../..`; the stale machine-specific checkout path in the explanatory text was removed. No application code or wrapper script changed in round 2.
+
+Reverified in this worktree: API suite (218 passed), web unit suite (69 passed), TypeScript type check, and R suite (nine files passed). Protected files, including the whole budget module, match `91b6e56`; the source of workflow-driven `start_interview_run` also matches that commit. No live paid calls or new PostgreSQL/browser integration checks were run; the limitations below still apply.
+
+All 33 corrected check commands were then executed verbatim via subprocesses with the plan directory as their working directory: 33/33 passed. This verifies the command paths without invoking the wrapper or its board operations. `git diff --check` passed.
+
+Only `DONE.md` and this handoff are edited in round 2. Preserve the committed implementation and wrapper `build.sh`. The wrapper owns board posts and completion checkbox updates; no board write was attempted.
+
+## Round 1 implementation record
+
+## Implementation
+
+- `apps/api/src/services/standalone_interview.py`: separate `standalone_batch` jobs, fixed database personas ordered by row index, fixed Tahoe Mini brief, eight adaptive question/answer pairs per persona. Creation is idempotent by request UUID; each advance handles one call with an expected revision. Cache, transcript progress, measured usage, and revision commit together. Status reads expose partial transcripts and failures. Resuming a saved revision does not repeat completed work.
+- `apps/api/src/services/interview_service.py`: standalone chat and comparison save original answer request context in `interview_answer` jobs. Session claims enforce study boundaries. Existing PostgreSQL cache/class locks remain in use. A local lock serializes SQLite classroom operations within one development process.
+- Regeneration reads server-saved persona, requested model, question, and prior messages, and replaces only the selected persisted answer. Accumulated measured usage remains charged. Expected answer versions deduplicate repeated requests. Chat answers with follow-ups cannot be regenerated. Comparison cards refresh their post-interview score.
+- `apps/api/src/services/interview_cache.py`: explicit per-call regeneration skips the read and replaces/inserts the cached answer after provider success. Ordinary `CACHE_OFF`, `cache_first`, and `replay_only` behavior is preserved.
+- `apps/api/src/api/studies.py`: owned create/status/advance batch routes and answer regeneration route. No database migration is needed; these use existing Job/InterviewTurn/cache tables.
+- `apps/web/src/app/interview/page.tsx`, `src/lib/standalone-interview.ts`, API/comparison types, and classroom allowlist: run/pause/resume, saved batch recovery, transcripts, captured estimate and measured cost, paid regeneration buttons, and activity locks. Only the latest chat answer is regenerable. Failed regeneration leaves its old text and retry version intact.
+
+## Verification
+
+Passed:
+
+- `apps/api/.venv/bin/python -m pytest apps/api/tests -q` — 218 passed.
+- `cd apps/web && npm run test:unit` — 69 passed, including actual page handler/render tests with deterministic hooks/transports.
+- `cd apps/web && ./node_modules/.bin/tsc --noEmit --incremental false`.
+- `/usr/local/bin/Rscript analysis/tests/test_all.R` — nine files passed.
+- `git diff --check`.
+- Protected-file diff checks and exact source comparison of `start_interview_run` against HEAD.
+
+New API checks live in `apps/api/tests/test_standalone_batch.py` (27 cases). Page interaction checks live in `apps/web/tests/interview-batch-controls.test.ts`. Existing classroom and activity-lock tests were extended.
+
+No live paid provider calls were made. Browser visual verification could not run: the sandbox rejected listening on `127.0.0.1:3019` with `EPERM`. PostgreSQL concurrency was not integration-tested against a running database; concurrent request tests use SQLite, while production uses the existing transaction advisory locks plus row locks.
+
+Local test setup only: ignored `.venv/` and `node_modules/` directories link to installed dependencies in the original checkout. Ignored `apps/api/.env` contains only minimal test settings, no credentials. CLI tests required those basic settings. Do not commit this machine-local setup.
+
+## Recovery and limits
+
+A batch Job's public ID, payload, status, result transcripts/revision, and error persona/model identify progress. Sum InterviewTurn usage for the job ID to inspect its measured spend. The web page saves the latest batch ID and any pending creation request in localStorage, retrieves status, and explicitly resumes from the persisted revision.
+
+Batch and regeneration provider calls use one HTTP attempt. A provider timeout can still mean the provider charged a call whose usage never reached this application; the UI explicitly warns before a manual retry. Completed calls are persisted and not repeated. There is no provider-side idempotency or reconciliation for a process crash between a remote charge and the database commit; measured totals cannot include usage never received. PostgreSQL is required for cross-process production locking; the SQLite helper is for a single local process.
+
+Next verification: run browser smoke tests and PostgreSQL concurrent-request checks outside this sandbox. No further functional patch is planned from the passing local checks. If stronger accounting across lost provider responses is required, add provider-side idempotency/reconciliation rather than silently retrying ambiguous requests.
+
+Do not touch: prerecorded script/tests, cost report/tests, budget constants, or workflow-driven `start_interview_run`. All remain unchanged.

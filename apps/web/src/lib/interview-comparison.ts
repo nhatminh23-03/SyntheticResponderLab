@@ -10,10 +10,16 @@ export type InterviewPostScore = {
 };
 
 export type InterviewComparisonResult = {
+  answerId?: string;
+  version?: number;
   modelId: string;
   answer: string | null;
   error: string | null;
   postInterviewScore: InterviewPostScore | null;
+  // A budget stop can arrive with every model already answered. The per-card `error`
+  // only shows on a card that has no answer, so the stop would vanish exactly when
+  // the student spent the most. Carried here so the page can show it regardless.
+  budgetStop?: string;
 };
 
 type InterviewComparisonResponse = {
@@ -102,6 +108,8 @@ export async function runInterviewComparison(
         interview_comparison?: {
           results?: Array<{
             model_id?: unknown;
+            answer_id?: string;
+            version?: number;
             answer?: unknown;
             error?: unknown;
             post_interview_score?: {
@@ -115,6 +123,8 @@ export async function runInterviewComparison(
       error?: unknown;
     };
 
+    let rawResults = payload.data?.interview_comparison?.results;
+    let failureMessage: string | null = null;
     if (!response.ok) {
       const apiError = payload.error;
       const message =
@@ -123,15 +133,16 @@ export async function runInterviewComparison(
           : apiError && typeof apiError === "object" && "message" in apiError
             ? String(apiError.message)
             : `Model comparison failed (${response.status}).`;
-      return input.modelIds.map((modelId) => ({
-        modelId,
-        answer: null,
-        error: message,
-        postInterviewScore: null,
-      }));
+      failureMessage = message;
+      // A quota stop can include answers committed before the cap was reached.
+      const details = apiError && typeof apiError === "object" &&
+        "code" in apiError && apiError.code === "quota_exceeded" &&
+        "details" in apiError ? apiError.details : null;
+      rawResults = details && typeof details === "object" &&
+        "results" in details && Array.isArray(details.results)
+        ? details.results : [];
     }
 
-    const rawResults = payload.data?.interview_comparison?.results;
     if (!Array.isArray(rawResults)) {
       throw new Error("Model comparison returned an invalid response.");
     }
@@ -149,8 +160,10 @@ export async function runInterviewComparison(
         ["positive", "neutral", "negative"].includes(String(emotionalClassification));
       return {
         modelId,
+        ...(result?.answer_id ? { answerId: result.answer_id, version: result.version ?? 0 } : {}),
+        ...(failureMessage ? { budgetStop: failureMessage } : {}),
         answer: answer || null,
-        error: answer ? null : error ?? "Model returned an empty answer.",
+        error: answer ? null : error ?? failureMessage ?? "Model returned an empty answer.",
         postInterviewScore: answer && scoreIsValid
           ? {
               fitTier: fitTier as InterviewPostScore["fitTier"],

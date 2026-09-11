@@ -1002,7 +1002,8 @@ export class InterviewChatApiError extends Error {
     message: string,
     sessionId: string | null,
     sessionUsage: InterviewSessionUsage | null,
-    systemPrompt: string | null
+    systemPrompt: string | null,
+    public committedAnswer: InterviewChatResponse | null = null
   ) {
     super(message);
     this.name = "InterviewChatApiError";
@@ -1056,6 +1057,8 @@ export function getInterviewSessionUsageFromApiError(
 }
 
 export type InterviewChatResponse = {
+  answer_id?: string;
+  version?: number;
   persona_id: string;
   session_id: string;
   transcript_source: "model_a" | "model_b" | "standalone";
@@ -2147,8 +2150,15 @@ export async function sendInterviewChatMessage(
     let sessionId: string | null = null;
     let sessionUsage: InterviewSessionUsage | null = null;
     let systemPrompt: string | null = null;
+    let committedAnswer: InterviewChatResponse | null = null;
+    let budgetMessage: string | null = null;
     try {
       const errorPayload = await errorResponse.json();
+      const details = getInterviewErrorDetails(errorPayload);
+      committedAnswer = details?.committed_answer as InterviewChatResponse ?? null;
+      if (errorPayload.error?.code === "quota_exceeded" && details?.scope) {
+        budgetMessage = `Budget stop (${details.scope} cap): ${errorPayload.error.message}`;
+      }
       sessionId = getInterviewSessionIdFromApiError(errorPayload);
       sessionUsage = getInterviewSessionUsageFromApiError(errorPayload);
       systemPrompt = getInterviewSystemPromptFromApiError(errorPayload);
@@ -2156,10 +2166,11 @@ export async function sendInterviewChatMessage(
       // The shared message parser below handles empty and non-JSON responses.
     }
     throw new InterviewChatApiError(
-      await readApiErrorMessage(response, `Interview chat failed with status ${response.status}`),
+      budgetMessage ?? await readApiErrorMessage(response, `Interview chat failed with status ${response.status}`),
       sessionId,
       sessionUsage,
-      systemPrompt
+      systemPrompt,
+      committedAnswer
     );
   }
 

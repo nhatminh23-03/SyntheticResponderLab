@@ -69,6 +69,11 @@ def consume_daily_quota(
     owner_user_id: str,
     metric_key: str,
 ) -> UsageQuotaSnapshot:
+    # Serialize the absent-counter case as well as increments across all callers.
+    import hashlib
+    from src.services.interview_cache import _lock_cache_key_for_transaction
+    _lock_cache_key_for_transaction(session, hashlib.sha256(
+        f"daily-quota:{owner_user_id}:{metric_key}".encode()).hexdigest())
     bucket = utc_today()
     limit = _quota_limit_for_metric(settings, metric_key)
     row = session.scalar(

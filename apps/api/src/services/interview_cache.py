@@ -133,6 +133,7 @@ def resolve_interview_answer(
     question: str,
     prior_turns: Sequence[Mapping[str, Any]],
     call_provider: Callable[[], InterviewAnswer],
+    regenerate: bool = False,
 ) -> InterviewAnswer:
     mode = normalize_cache_mode(cache_mode)
     prior_turn_hash = hash_prior_turns(prior_turns)
@@ -143,10 +144,11 @@ def resolve_interview_answer(
         prior_turn_hash=prior_turn_hash,
     )
 
-    if mode != CACHE_OFF:
+    cached = None
+    if mode != CACHE_OFF or regenerate:
         _lock_cache_key_for_transaction(session, cache_key)
         cached = session.get(InterviewCacheEntry, cache_key)
-        if cached is not None:
+        if cached is not None and not regenerate:
             return InterviewAnswer(
                 text=cached.answer_text,
                 model=cached.response_model,
@@ -155,13 +157,18 @@ def resolve_interview_answer(
                 cost_usd=Decimal("0"),
                 cache_hit=True,
             )
-        if mode == REPLAY_ONLY:
+        if mode == REPLAY_ONLY and not regenerate:
             raise ReplayOnlyCacheMissError(
                 "No cached answer exists for this interview path while CACHE_MODE=replay_only."
             )
 
     answer = call_provider()
-    if mode == CACHE_FIRST:
+    if mode == CACHE_FIRST or regenerate:
+        if cached is not None:
+            cached.answer_text = answer.text
+            cached.response_model = answer.model
+            session.flush()
+            return answer
         session.add(
             InterviewCacheEntry(
                 cache_key=cache_key,

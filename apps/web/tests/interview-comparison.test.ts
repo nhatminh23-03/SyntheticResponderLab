@@ -200,8 +200,41 @@ test("comparison repeats a backend budget error on every requested model", async
   );
 
   assert.deepEqual(results, [
-    { modelId: cheap.id, answer: null, error: "Budget hard stop.", postInterviewScore: null },
-    { modelId: mid.id, answer: null, error: "Budget hard stop.", postInterviewScore: null },
+    { modelId: cheap.id, budgetStop: "Budget hard stop.", answer: null, error: "Budget hard stop.", postInterviewScore: null },
+    { modelId: mid.id, budgetStop: "Budget hard stop.", answer: null, error: "Budget hard stop.", postInterviewScore: null },
+  ]);
+});
+
+
+test("quota stop preserves completed comparison answers, regeneration IDs and scores", async () => {
+  const results = await runInterviewComparison(
+    {
+      studyId: "study-01", personaId: "persona-07", question: "What matters?",
+      modelIds: [mid.id, cheap.id], allowExpensiveModels: false,
+    },
+    async () => ({
+      ok: false, status: 429,
+      json: async () => ({ error: {
+        code: "quota_exceeded", message: "Class budget hard stop.",
+        details: { results: [{
+          model_id: cheap.id, answer_id: "ans_completed", version: 0,
+          answer: "Already paid answer.", error: null,
+          post_interview_score: {
+            fit_tier: "strong", emotional_classification: "positive",
+            label: POST_INTERVIEW_SCORE_LABEL,
+          },
+        }] },
+      } }),
+    })
+  );
+  assert.deepEqual(results, [
+    { modelId: mid.id, budgetStop: "Class budget hard stop.", answer: null, error: "Class budget hard stop.", postInterviewScore: null },
+    {
+      modelId: cheap.id, answerId: "ans_completed", version: 0,
+      budgetStop: "Class budget hard stop.",
+      answer: "Already paid answer.", error: null,
+      postInterviewScore: { fitTier: "strong", emotionalClassification: "positive" },
+    },
   ]);
 });
 
@@ -251,4 +284,38 @@ test("comparison records a batch network failure against every requested model",
       postInterviewScore: null,
     },
   ]);
+});
+
+
+// Refuter round 5, F2: a budget stop that arrives with EVERY model already answered
+// used to vanish — the per-card `error` only renders on a card with no answer, so the
+// student blew the cap at the exact moment the app told them nothing was wrong.
+test("budget stop survives when every requested model already answered", async () => {
+  const results = await runInterviewComparison(
+    {
+      studyId: "study-01", personaId: "persona-07", question: "What matters?",
+      modelIds: [cheap.id, mid.id], allowExpensiveModels: false,
+    },
+    async () => ({
+      ok: false, status: 429,
+      json: async () => ({ error: {
+        code: "quota_exceeded", message: "Class budget hard stop.",
+        details: { results: [
+          { model_id: cheap.id, answer_id: "ans_a", version: 0, answer: "First paid answer.", error: null },
+          { model_id: mid.id, answer_id: "ans_b", version: 0, answer: "Second paid answer.", error: null },
+        ] },
+      } }),
+    })
+  );
+
+  assert.equal(results.length, 2);
+  for (const result of results) {
+    assert.equal(result.error, null, "a completed, charged answer must not read as an error");
+    assert.ok(result.answer, "the paid answer must survive the budget stop");
+    assert.equal(
+      result.budgetStop,
+      "Class budget hard stop.",
+      "the budget stop must still reach the student when nothing else signals it"
+    );
+  }
 });
