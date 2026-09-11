@@ -1,5 +1,17 @@
 # Batch and regeneration handoff
 
+## Current follow-up — regeneration failure and pause checks
+
+Implemented after `6259e2a` in the worktree; no commit created. Recent commits: `6259e2a`, `64d8bd7`, `b254915`. Preserve the pre-existing DONE edits and untracked `archive/build-round2.sh`. The board is wrapper-owned; no board writes were attempted.
+
+- `apps/api/src/services/standalone_interview.py` now commits a consumed answer version on regeneration failure. Queued duplicates receive the stored error; retry requires the new version and `retry: true`. The old transcript and cached answer remain intact. Each accepted attempt has an `interview_regeneration` Job linked to study/owner, answer/turn, session, persona, model and version, with timestamps, outcome and incremental spend. Unknown provider spend is null rather than falsely zero.
+- `apps/web/src/lib/standalone-interview.ts` carries retry details from API errors. `apps/web/src/app/interview/page.tsx` retains them for the next explicit chat or comparison regeneration click. Batch pause displays Pausing while awaiting the current call, then Paused after its result and cost arrive. Network errors display execution as unconfirmed.
+- Regression evidence is in `apps/api/tests/test_standalone_batch.py` and `apps/web/tests/interview-batch-controls.test.ts`. DONE now includes machine commands for the two previously missing checks; checkbox state remains wrapper-owned.
+
+Verification: full API suite 223 passed (10 deprecation warnings); web unit suite 74 passed; TypeScript `--noEmit --incremental false` passed; R suite nine files passed; protected files match `91b6e56`; workflow `start_interview_run` AST matches baseline; `git diff --check` passed. Initial test run exposed two stale assertions (old retry version and per-request error IDs), corrected before the passing full run.
+
+No live paid calls, browser smoke test, or PostgreSQL integration test performed. Next recommended verification is production-dialect concurrency and browser pause/retry smoke testing. Process crashes between provider acceptance and database commit still require provider reconciliation; this patch addresses caught failures and queued duplicates, not crash recovery. Do not touch prerecorded script/tests, budget constants, cost-report files or the workflow entry point. All changed files listed above plus DONE and this HANDOFF remain uncommitted.
+
 ## Current follow-up — four remaining failures
 
 Implemented in the worktree after `b254915` (no new commit). Earlier commits are `5a2dcf0` and `39631a2`; baseline is `91b6e56`. Preserve the pre-existing edits to `DONE.md` and untracked `plans/interview-batch-and-regenerate/archive/`. No board writes were attempted; the wrapper owns posts and checkboxes.

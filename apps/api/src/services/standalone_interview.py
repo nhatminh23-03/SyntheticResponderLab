@@ -104,6 +104,10 @@ def regenerate_answer(session, settings, study, answer_id, payload):
     expected = payload.get("version")
     if type(expected) is not int or expected < 0:
         raise ValidationApiError("A non-negative answer version is required.")
+    if job.status == "failed" and (expected < job.result_json["version"] or
+                                   (expected == job.result_json["version"] and payload.get("retry") is not True)):
+        error = job.error_json
+        raise ApiError(error["status_code"], error["code"], error["message"], error["details"])
     if expected < job.result_json["version"]:
         return job.result_json  # Retried/double-clicked replacement already completed.
     if expected != job.result_json["version"]:
@@ -116,9 +120,16 @@ def regenerate_answer(session, settings, study, answer_id, payload):
         InterviewTurn.created_at > turn.created_at).limit(1)):
         raise ConflictApiError("Only the latest answer can be regenerated once follow-ups exist.")
     budget_error = None
+    provider_started = False
+    attempt = Job(public_id=make_public_id("regen"), study_id=study.id,
+        job_type="interview_regeneration", status="running", queued_at=service.utcnow(),
+        started_at=service.utcnow(), payload_json={"answer_id": answer_id, "version": expected,
+            "turn_id": str(turn.id), "session_id": turn.session_id, "model": context["model"],
+            "persona_id": context["persona_id"], "owner_user_id": str(study.owner_user_id)})
+    session.add(attempt)
 
     def provider():
-        nonlocal budget_error
+        nonlocal budget_error, provider_started
         lock_class_budget_for_transaction(session)
         snapshot = load_interview_budget_snapshot(session, session_id=turn.session_id, run_budget_usd=settings.llm_budget_usd)
         enforce_budget_open(snapshot)
@@ -128,6 +139,7 @@ def regenerate_answer(session, settings, study, answer_id, payload):
                 class_spent_usd=snapshot.class_spent_usd, run_budget_usd=snapshot.run_budget_usd)
         if not settings.openrouter_api_key:
             raise ConflictApiError("OPENROUTER_API_KEY is not configured.")
+        provider_started = True
         result = service._call_openrouter_messages(api_key=settings.openrouter_api_key or "", model=context["model"],
             messages=[*context["prior_turns"], {"role": "user", "content": context["question"]}], timeout=90, max_attempts=1)
         try:
@@ -140,11 +152,24 @@ def regenerate_answer(session, settings, study, answer_id, payload):
         answer = resolve_interview_answer(session, cache_mode=settings.cache_mode, regenerate=True,
             persona_id=context["persona_id"], model=context["model"], question=context["question"],
             prior_turns=context["prior_turns"], call_provider=provider)
-    except RuntimeError as exc:
+    except Exception as exc:
         from src.services.exceptions import ProviderUnavailableApiError
-        raise ProviderUnavailableApiError(
-            f"{exc} The provider outcome may be unknown; retrying can incur another charge. Your previous answer is preserved."
-        ) from exc
+        error = exc if isinstance(exc, ApiError) else ProviderUnavailableApiError(str(exc))
+        message = error.message
+        if provider_started:
+            message += " The provider outcome may be unknown; retrying can incur another charge."
+        message += " Your previous answer is preserved."
+        details = {**error.details, "answer_id": answer_id, "version": expected + 1, "retry_required": True}
+        job.status = "failed"
+        job.result_json = {**job.result_json, "version": expected + 1}
+        job.error_json = {"status_code": error.status_code, "code": error.code, "message": message, "details": details}
+        attempt.status = "failed"
+        attempt.completed_at = service.utcnow()
+        attempt.error_json = job.error_json
+        attempt.result_json = {"outcome": "unknown" if provider_started else "rejected",
+                               "incremental_cost_usd": None if provider_started else "0"}
+        session.commit()
+        raise ApiError(error.status_code, error.code, message, details) from exc
     # Keep all incurred spend while replacing only the selected transcript text.
     turn.text = answer.text
     turn.cost_usd += answer.cost_usd
@@ -157,6 +182,12 @@ def regenerate_answer(session, settings, study, answer_id, payload):
               "post_interview_score": score, "session_usage": usage(session, settings, turn.session_id),
               "budget_stop": {"code": budget_error.code, "message": budget_error.message, "details": budget_error.details} if budget_error else None}
     job.result_json = result
+    job.status = "completed"
+    job.error_json = None
+    attempt.status = "completed"
+    attempt.completed_at = service.utcnow()
+    attempt.result_json = {"outcome": "completed", "incremental_cost_usd": str(answer.cost_usd),
+                           "tokens_in": answer.tokens_in, "tokens_out": answer.tokens_out}
     session.commit()
     return result
 

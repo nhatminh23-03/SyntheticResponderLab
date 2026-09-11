@@ -94,6 +94,8 @@ function InterviewPageContent() {
   const [batch, setBatch] = useState<Batch | null>(null);
   const [batchHistory, setBatchHistory] = useState<Batch[]>([]);
   const [batchLoading, setBatchLoading] = useState(false);
+  const [pausing, setPausing] = useState(false);
+  const regenerationRetries = useRef<Record<string, number>>({});
   const [regenerating, setRegenerating] = useState(false);
   const [regenerationCost, setRegenerationCost] = useState<string | null>(null);
   const activity = useRef(false);
@@ -281,6 +283,7 @@ function InterviewPageContent() {
     if (!studyId || activity.current || !interviewerModel || !intervieweeModel) return;
     activity.current = true;
     pauseBatch.current = false;
+    setPausing(false);
     setBatchLoading(true);
     setError("");
     try {
@@ -336,9 +339,10 @@ function InterviewPageContent() {
     try {
       const { answer } = await interviewOperation<{ answer: RegeneratedAnswer }>(studyId,
         `answers/${encodeURIComponent(answerId)}/regenerate`, {
-          version, allow_expensive_models: comparison ? comparisonExpensiveOptIn : expensiveOptIn,
+          version: regenerationRetries.current[answerId] ?? version, retry: answerId in regenerationRetries.current, allow_expensive_models: comparison ? comparisonExpensiveOptIn : expensiveOptIn,
         });
       if (originalGeneration !== generation.current) return;
+      delete regenerationRetries.current[answerId];
       if (comparison) {
         setComparisonResults(previous => previous.map(result => result.answerId === answerId ? {
           ...result, answer: answer.reply, version: answer.version,
@@ -350,6 +354,11 @@ function InterviewPageContent() {
       setRegenerationCost(answer.session_usage.cost_usd);
       if (answer.budget_stop) setError(answer.budget_stop.message);
     } catch (err) {
+      if (originalGeneration !== generation.current) return;
+      if (err instanceof InterviewOperationError && err.details?.answer_id === answerId &&
+          err.details.retry_required && typeof err.details.version === "number") {
+        regenerationRetries.current[answerId] = err.details.version;
+      }
       setError((err as Error).message);
     } finally {
       setRegenerating(false);
@@ -576,7 +585,7 @@ function InterviewPageContent() {
                 {batch && (batch.status === "running" || batch.status === "failed") ? (
                   <Button variant="secondary" disabled={busy} onClick={() => runBatch(true)}>Resume batch</Button>
                 ) : null}
-                {batchLoading ? <Button variant="secondary" onClick={() => { pauseBatch.current = true; }}>Pause after this call</Button> : null}
+                {batchLoading ? <Button variant="secondary" disabled={pausing} onClick={() => { pauseBatch.current = true; setPausing(true); }}>Pause after this call</Button> : null}
               </div>
               <p className="mt-2 text-xs text-app-muted">Eight adaptive questions per persona using the fixed household set and Tahoe Mini research brief. Cached interviews replay free.</p>
               {batchHistory.length > 0 ? <label className="mt-4 block">Saved batches
@@ -595,7 +604,7 @@ function InterviewPageContent() {
                 </select>
               </label> : null}
               {batch ? <div aria-live="polite" className="mt-4 space-y-3">
-                <p>{batch.status === "budget_stopped" ? "Budget stop" : batch.status}: {batch.completed_personas}/{batch.persona_count} personas complete · {batch.transcripts.reduce((total, transcript) => total + transcript.messages.length, 0)}/{batch.persona_count * batch.turn_limit * 2} calls resolved</p>
+                <p>{batch.status === "budget_stopped" ? "Budget stop" : batch.status === "running" ? (batchLoading ? (pausing ? "Pausing after current call…" : "running") : error ? "Execution unconfirmed — Resume to recover" : "Paused — select Resume batch to continue") : batch.status}: {batch.completed_personas}/{batch.persona_count} personas complete · {batch.transcripts.reduce((total, transcript) => total + transcript.messages.length, 0)}/{batch.persona_count * batch.turn_limit * 2} calls resolved</p>
                 <p>Measured cost: ${Number(batch.session_usage.cost_usd).toFixed(6)} · Estimate at start: ${Number(batch.estimated_cost_usd).toFixed(4)}</p>
                 <p className="text-xs text-app-muted">Interviewer: {batch.interviewer_model} · Interviewee: {batch.interviewee_model}</p>
                 {batch.error ? <p role="alert">{batch.error.details?.scope ? `${batch.error.details.scope} cap: ` : ""}{batch.error.message}</p> : null}

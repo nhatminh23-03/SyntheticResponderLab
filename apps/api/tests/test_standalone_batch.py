@@ -163,8 +163,8 @@ def chat(client, study_id, **extra):
         'standalone': True, 'model': MODEL, **extra})
 
 
-def regen(client, study_id, answer_id, version=0):
-    return client.post(f'/api/v1/studies/{study_id}/interview/answers/{answer_id}/regenerate', json={'version': version})
+def regen(client, study_id, answer_id, version=0, **extra):
+    return client.post(f'/api/v1/studies/{study_id}/interview/answers/{answer_id}/regenerate', json={'version': version, **extra})
 
 
 def test_regenerate_cached_chat_exact_context_updates_cache_and_one_persisted_answer(classroom, db_session):
@@ -199,13 +199,13 @@ def test_regenerate_failure_preserves_cache_and_control_retry(classroom, monkeyp
     original = __import__('src.services.interview_service', fromlist=['x'])._call_openrouter_messages
     def fail(**kw):
         raise ConflictError('provider unavailable')
-    # ApiError renders as an HTTP failure and rolls back the replacement transaction.
+    # Failures preserve the answer but durably consume the attempt version.
     from src.services.exceptions import ConflictApiError as ConflictError
     monkeypatch.setattr('src.services.interview_service._call_openrouter_messages', fail)
     assert regen(client, study_id, answer['answer_id']).status_code == 409
     assert chat(client, study_id).json()['data']['interview_chat']['reply'] == answer['reply']
     monkeypatch.setattr('src.services.interview_service._call_openrouter_messages', original)
-    assert regen(client, study_id, answer['answer_id']).status_code == 200
+    assert regen(client, study_id, answer['answer_id'], version=1, retry=True).status_code == 200
     assert len(calls) == 2
 
 
@@ -221,7 +221,7 @@ def test_regenerate_budget_and_followup_guards(classroom):
     followup = chat(client, study_id, prompt='Why?', session_id=answer['session_id'], messages=[
         {'role': 'user', 'content': 'What matters?'}, {'role': 'assistant', 'content': answer['reply']}])
     assert followup.status_code == 200
-    assert regen(client, study_id, answer['answer_id']).status_code == 409
+    assert regen(client, study_id, answer['answer_id'], version=1, retry=True).status_code == 409
     assert len(calls) == 2
 
 
@@ -435,3 +435,57 @@ def test_concurrent_distinct_batches_share_daily_run_limit(classroom):
         results = list(pool.map(lambda _: start(client, study_id), range(2)))
     assert sorted(r.status_code for r in results) == [200, 429]
     assert calls == []
+
+
+def test_failed_regeneration_requires_explicit_retry_and_attempt_audit(classroom, monkeypatch, db_session):
+    from threading import Event
+    from src.services import interview_service
+    client, study_id, calls = classroom
+    answer = chat(client, study_id).json()['data']['interview_chat']
+    accepted, release, submitted = Event(), Event(), Event()
+    attempts = []
+    original = interview_service._call_openrouter_messages
+    def timeout(**kwargs):
+        attempts.append(kwargs)
+        accepted.set()
+        assert release.wait(5)
+        raise RuntimeError('Accepted by provider, response lost')
+    monkeypatch.setattr(interview_service, '_call_openrouter_messages', timeout)
+    def duplicate():
+        submitted.set()
+        return regen(client, study_id, answer['answer_id'])
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first = pool.submit(regen, client, study_id, answer['answer_id'])
+        assert accepted.wait(5)
+        second = pool.submit(duplicate)
+        assert submitted.wait(5)
+        release.set()
+        failed = first.result()
+        duplicate_result = second.result()
+    assert failed.status_code == duplicate_result.status_code == 503
+    for key in ('code', 'message', 'details'):
+        assert failed.json()['error'][key] == duplicate_result.json()['error'][key]
+    assert failed.json()['error']['details']['version'] == 1
+    assert regen(client, study_id, answer['answer_id'], version=1).status_code == 503
+    assert regen(client, study_id, answer['answer_id'], retry=True).status_code == 503
+    assert len(attempts) == 1
+    assert chat(client, study_id).json()['data']['interview_chat']['reply'] == answer['reply']
+    monkeypatch.setattr(interview_service, '_call_openrouter_messages', original)
+    fresh = regen(client, study_id, answer['answer_id'], version=1, retry=True).json()['data']['answer']
+    assert fresh['version'] == 2
+    assert len(calls) == 2
+    records = db_session.scalars(select(Job).where(Job.job_type == 'interview_regeneration').order_by(Job.queued_at)).all()
+    assert len(records) == 2  # Rejected duplicates never create another attempt.
+    study = db_session.scalar(select(Study).where(Study.public_id == study_id))
+    for record in records:
+        assert record.study_id == study.id
+        assert record.payload_json['answer_id'] == answer['answer_id']
+        assert record.payload_json['session_id'] == answer['session_id']
+        assert record.payload_json['model'] == MODEL
+        assert record.payload_json['owner_user_id'] == str(study.owner_user_id)
+        assert record.payload_json['turn_id']
+        assert record.started_at and record.completed_at
+    assert records[0].status == 'failed'
+    assert records[0].result_json == {'outcome': 'unknown', 'incremental_cost_usd': None}
+    assert records[1].status == 'completed'
+    assert Decimal(records[1].result_json['incremental_cost_usd']) == Decimal('.001')

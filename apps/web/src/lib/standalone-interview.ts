@@ -14,7 +14,7 @@ export type Batch = {
 };
 
 export class InterviewOperationError extends Error {
-  constructor(message: string, public status: number) { super(message); }
+  constructor(message: string, public status: number, public details?: { answer_id?: string; version?: number; retry_required?: boolean }) { super(message); }
 }
 
 export async function interviewOperation<T>(studyId: string, path: string, payload?: object): Promise<T> {
@@ -28,7 +28,7 @@ export async function interviewOperation<T>(studyId: string, path: string, paylo
     if (result.error?.code === "quota_exceeded" && result.error?.details?.batch) {
       return { batch: result.error.details.batch } as T;
     }
-    throw new InterviewOperationError(result.error?.message || `Interview request failed (${response.status}).`, response.status);
+    throw new InterviewOperationError(result.error?.message || `Interview request failed (${response.status}).`, response.status, result.error?.details);
   }
   return result.data as T;
 }

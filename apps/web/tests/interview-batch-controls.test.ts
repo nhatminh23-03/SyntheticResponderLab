@@ -156,12 +156,12 @@ test("page renders a named batch cap with completed transcripts and allows recov
   assert.match(ui.text(), /Retained answer/);
 });
 
-test("chat regeneration preserves failed answer, retries same version, updates history and export, and blocks earlier answers", async () => {
+test("chat regeneration preserves failed answer, retries consumed version, updates history and export, and blocks earlier answers", async () => {
   const ui = harness(); await ui.settle();
   await ui.button("Ask").props.onClick(); await ui.settle();
   let attempt = 0;
   ui.setTransport(async () => {
-    if (attempt++ === 0) throw new Error("Provider unavailable");
+    if (attempt++ === 0) throw new InterviewOperationError("Provider unavailable", 503, { answer_id: "ans_1", version: 1, retry_required: true });
     return { answer: { answer_id: "ans_1", version: 1, reply: "Fresh answer", session_usage: { cost_usd: ".002" } } };
   });
   await ui.button("Regenerate answer (paid)").props.onClick(); await ui.settle();
@@ -170,7 +170,8 @@ test("chat regeneration preserves failed answer, retries same version, updates h
   await ui.button("Regenerate answer (paid)").props.onClick(); await ui.settle();
   assert.match(ui.text(), /Fresh answer/);
   assert.equal(ui.calls[0].payload.version, 0);
-  assert.equal(ui.calls[1].payload.version, 0);
+  assert.equal(ui.calls[1].payload.version, 1);
+  assert.equal(ui.calls[1].payload.retry, true);
   const exportButton = ui.nodes().find(n => n.type === "Button" && JSON.stringify(n.props.children).includes("Markdown"));
   assert.ok(exportButton);
   await exportButton.props.onClick(); await ui.settle();
@@ -264,4 +265,28 @@ test("failed batch stops automatically and only Resume sends an explicit retry",
   assert.match(ui.text(), /retrying can incur another charge/);
   await ui.button("Resume batch").props.onClick(); await ui.settle();
   assert.deepEqual(ui.calls[3].payload, { revision: 1, retry: true });
+});
+
+
+test("pause confirms after current call, preserves result and cost, and waits for Resume", async () => {
+  const ui = harness(); await ui.settle();
+  let complete!: (value: any) => void;
+  const saved = { ...batch, revision: 1, session_usage: { cost_usd: ".001" },
+    transcripts: [{ persona_id: "neo-001", messages: [{ role: "user", content: "Completed current call" }] }] };
+  ui.setTransport(async path => path === "batches" ? { batch } : new Promise(resolve => { complete = resolve; }));
+  const running = ui.button("Run AI-to-AI batch").props.onClick(); await ui.settle();
+  ui.button("Pause after this call").props.onClick(); ui.render();
+  assert.match(ui.text(), /Pausing after current call/);
+  assert.equal(ui.button("Resume batch").props.disabled, true);
+  assert.equal(ui.button("Pause after this call").props.disabled, true);
+  complete({ batch: saved }); await running; await ui.settle();
+  assert.match(ui.text(), /Paused — select Resume batch to continue/);
+  assert.match(ui.text(), /Completed current call/);
+  assert.match(ui.text(), /Measured cost: \$0.001000/);
+  assert.equal(ui.calls.length, 2);
+  await ui.settle(); assert.equal(ui.calls.length, 2);
+  ui.setTransport(async path => ({ batch: path.endsWith("advance") ? { ...saved, status: "completed" } : saved }));
+  await ui.button("Resume batch").props.onClick(); await ui.settle();
+  assert.equal(ui.calls[3].payload.revision, 1);
+  assert.match(ui.text(), /completed:/);
 });
