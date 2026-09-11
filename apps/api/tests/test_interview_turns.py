@@ -117,3 +117,47 @@ def test_interview_turn_migration_creates_expected_schema(tmp_path):
 
     command.downgrade(config, "0003_fixed_personas")
     assert "interview_turn" not in inspect(engine).get_table_names()
+
+
+# Qwen3.7-Plus (and other OpenRouter providers) return their chain of thought inline in
+# `content` as a <think> block instead of in the separate `reasoning` field. Nothing used
+# to remove it, so the raw block was cached and persisted, and
+# normalize_interviewer_question then took its first line — leaving 100 interviewer
+# questions in the dev database as the literal string "<think>?".
+@pytest.mark.parametrize(
+    "content, expected",
+    [
+        ("<think>\nThinking Process:\n1. Analyze.\n</think>\nWhat matters most to you?",
+         "What matters most to you?"),
+        ("<thinking>plan</thinking>Answer body.", "Answer body."),
+        ("<Think>Cased</THINK>  Spaced answer.", "Spaced answer."),
+        # Reasoning truncated by the token cap leaves the opener unclosed. Keeping the
+        # tail would leak exactly what the closed case removes.
+        ("Visible lead.\n<think>cut off mid-thou", "Visible lead."),
+        # Ordinary answers must survive untouched.
+        ("I would weigh the cost against the space.", "I would weigh the cost against the space."),
+    ],
+)
+def test_openrouter_chat_response_strips_inline_reasoning(content, expected):
+    payload = _provider_payload()
+    payload["choices"] = [{"message": {"content": content}}]
+
+    result = _parse_openrouter_chat_response(payload, requested_model="qwen/qwen3.7-plus")
+
+    assert result.text == expected
+    assert "<think" not in result.text.lower()
+
+
+def test_openrouter_chat_response_rejects_an_answer_that_was_only_reasoning():
+    """A response with nothing but reasoning is an empty answer, not a valid one.
+
+    Returning "" here would poison the cache with an unusable entry that every retry
+    replays, which is the stranded-run failure the scoped review found.
+    """
+    from src.services.exceptions import TransientProviderError
+
+    payload = _provider_payload()
+    payload["choices"] = [{"message": {"content": "<think>all of it was reasoning</think>"}}]
+
+    with pytest.raises(TransientProviderError):
+        _parse_openrouter_chat_response(payload, requested_model="qwen/qwen3.7-plus")

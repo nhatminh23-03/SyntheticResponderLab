@@ -1,3 +1,30 @@
+# Scoped defect fixes — 2026-09-10
+
+Fixed only the two requested spending defects. In `standalone_interview.py`,
+rejected questions retain measured usage, evict the rejected cache entry, and
+surface any pending budget stop. In `interview/page.tsx`, Run uses fresh identity
+and visible settings; a separately labelled recovery action names the retained
+persona count, both models, and expensive-model authorisation before re-submission.
+Regressions are in `test_standalone_batch.py` and
+`interview-batch-controls.test.ts`.
+
+Verification: full API command `./apps/api/.venv/bin/python -m pytest apps/api/tests/ -q`
+passed (234 tests, 10 deprecation warnings); `cd apps/web && npm run test:unit`
+passed (82 tests); TypeScript `--noEmit --incremental false` and
+`git diff --check` passed. Each new regression was run with only its production
+fix reverted and failed on the reported defect; both passed after restoration.
+No live provider, browser, or PostgreSQL checks ran; no further patch is identified.
+
+No commits created. Recent commits: `3dcad8a`, `168cf1d`, `1959517`.
+Preserve pre-existing edits in `interview_service.py`, `test_interview_turns.py`,
+and untracked `plans/interview-batch-and-regenerate/build.sh`. This session adds
+changes only to the four implementation/test files above and this handoff.
+The active BRIEF/DONE remain in this plan directory; checkboxes are untouched.
+Do not touch the prerecord script, budget constants, or cost report and its test;
+all checked unchanged against HEAD. Existing process-crash limitations remain.
+
+---
+
 # Completion-check formatting follow-up
 
 Current implementation is committed at `a62b051`, following `99afc65` and

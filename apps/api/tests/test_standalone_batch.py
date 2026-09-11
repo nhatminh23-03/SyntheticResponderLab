@@ -147,6 +147,51 @@ def test_batch_failure_status_resume_and_duplicate_submissions(classroom, monkey
     assert len(calls) == 48
 
 
+
+@pytest.mark.parametrize("cost", [Decimal(".001"), Decimal("1")])
+def test_rejected_question_records_cost_and_recovers(classroom, db_session, monkeypatch, cost):
+    client, study_id, calls = classroom
+    valid_provider = __import__('src.services.interview_service', fromlist=['x'])._call_openrouter_messages
+
+    def rejected(**kw):
+        calls.append(kw)
+        return InterviewAnswer(text="Question:", model=kw["model"], tokens_in=10,
+                               tokens_out=5, cost_usd=cost)
+
+    monkeypatch.setattr('src.services.interview_service._call_openrouter_messages', rejected)
+    batch = start(client, study_id).json()['data']['batch']
+    response = step(client, study_id, batch)
+    if cost == Decimal("1"):
+        assert response.status_code == 429
+        error = response.json()['error']
+        assert error['code'] == 'quota_exceeded'
+        failed = error['details']['batch']
+        assert failed['status'] == 'budget_stopped'
+    else:
+        assert response.status_code == 200
+        failed = response.json()['data']['batch']
+        assert failed['status'] == 'failed'
+    assert Decimal(failed['session_usage']['cost_usd']) == cost
+    db_session.expire_all()
+    assert db_session.scalar(select(func.sum(InterviewTurn.cost_usd)).where(
+        InterviewTurn.session_id == batch['job_id'])) == cost
+    assert failed['transcripts'][0]['messages'] == []
+    assert len(calls) == 1
+    # A duplicate or non-explicit retry cannot authorize another paid attempt.
+    assert step(client, study_id, failed).json()['data']['batch'] == failed
+    monkeypatch.setattr('src.services.interview_service._call_openrouter_messages', valid_provider)
+    retried = step(client, study_id, failed, retry=True).json()['data']['batch']
+    if cost == Decimal("1"):
+        assert retried == failed
+        assert len(calls) == 1
+    else:
+        assert retried['status'] == 'running'
+        assert len(calls) == 2
+        assert retried['transcripts'][0]['messages'] == [
+            {'role': 'user', 'content': 'Why does detail 2 matter?'}]
+        assert Decimal(retried['session_usage']['cost_usd']) == cost + Decimal(".001")
+
+
 def test_batch_keeps_saved_workflow_sections(classroom, db_session):
     client, study_id, _ = classroom
     study = db_session.scalar(select(Study).where(Study.public_id == study_id))

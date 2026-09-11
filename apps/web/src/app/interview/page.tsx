@@ -286,7 +286,7 @@ function InterviewPageContent() {
     return () => { active = false; pauseBatch.current = true; generation.current += 1; };
   }, [studyId]);
 
-  async function runBatch(resume = false) {
+  async function runBatch(resume = false, recoverRequest = false) {
     if (!studyId || activity.current || !interviewerModel || !intervieweeModel) return;
     activity.current = true;
     pauseBatch.current = false;
@@ -298,7 +298,7 @@ function InterviewPageContent() {
       if (resume && batch) {
         current = (await interviewOperation<{ batch: Batch }>(studyId, `batches/${batch.job_id}`)).batch;
       } else {
-        const request = batchRequest.current ?? {
+        const request = (recoverRequest ? batchRequest.current : null) ?? {
           request_id: crypto.randomUUID(), persona_count: personaCount,
           interviewer_model: interviewerModel, interviewee_model: intervieweeModel,
           allow_expensive_models: expensiveOptIn,
@@ -330,7 +330,7 @@ function InterviewPageContent() {
         setBatchHistory(previous => previous.map(item => item.job_id === updated.job_id ? updated : item));
       } while (current.status === "running");
     } catch (err) {
-      setError(`${(err as Error).message} Saved batch progress can be recovered with Resume batch.`);
+      setError(`${(err as Error).message} Use Recover earlier request to re-submit its displayed settings, or Resume batch for saved progress.`);
     } finally {
       setBatchLoading(false);
       activity.current = false;
@@ -589,6 +589,11 @@ function InterviewPageContent() {
                 <Button disabled={busy || !studyId || !interviewerModel || !intervieweeModel} onClick={() => runBatch()}>
                   Run AI-to-AI batch ({personaCount} personas)
                 </Button>
+                {batchRequest.current ? (
+                  <Button variant="secondary" disabled={busy} onClick={() => runBatch(false, true)}>
+                    Recover earlier request: {batchRequest.current.persona_count} personas · interviewer {batchRequest.current.interviewer_model} · interviewee {batchRequest.current.interviewee_model} · expensive models {batchRequest.current.allow_expensive_models ? "enabled" : "disabled"} (re-submit and run)
+                  </Button>
+                ) : null}
                 {batch && (batch.status === "running" || batch.status === "failed") ? (
                   <Button variant="secondary" disabled={busy} onClick={() => runBatch(true)}>Resume batch</Button>
                 ) : null}

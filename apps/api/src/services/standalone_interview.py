@@ -314,11 +314,26 @@ def advance_batch(session, settings, study, job_id, payload):
     try:
         answer = resolve_interview_answer(session, cache_mode=settings.cache_mode, persona_id=persona_id,
             model=model, question=question, prior_turns=prior, call_provider=provider)
-        content = service.normalize_interviewer_question(answer.text) if asking else answer.text
+        # Usage belongs to the paid response even when it cannot enter the transcript.
+        turn = InterviewTurn(study_id=study.id, persona_id=persona_id, session_id=job_id,
+            role="user" if asking else "assistant", text="", model=answer.model, tokens_in=answer.tokens_in,
+            tokens_out=answer.tokens_out, cost_usd=answer.cost_usd, created_at=service.utcnow())
+        session.add(turn)
+        try:
+            content = service.normalize_interviewer_question(answer.text) if asking else answer.text
+        except Exception:
+            from src.persistence.models import InterviewCacheEntry
+            from src.services.interview_cache import build_interview_cache_key, hash_prior_turns
+            cache_key = build_interview_cache_key(persona_id=persona_id, model=model,
+                question=question, prior_turn_hash=hash_prior_turns(prior))
+            cached = session.get(InterviewCacheEntry, cache_key)
+            if cached is not None:
+                session.delete(cached)
+            if budget_error:
+                raise budget_error
+            raise
+        turn.text = content
         transcript.append({"role": "user" if asking else "assistant", "content": content})
-        session.add(InterviewTurn(study_id=study.id, persona_id=persona_id, session_id=job_id,
-            role="user" if asking else "assistant", text=content, model=answer.model, tokens_in=answer.tokens_in,
-            tokens_out=answer.tokens_out, cost_usd=answer.cost_usd, created_at=service.utcnow()))
         if len(transcript) == config["turn_limit"] * 2:
             state["completed_personas"] += 1
         state["revision"] += 1

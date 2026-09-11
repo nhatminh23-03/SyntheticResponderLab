@@ -23,6 +23,7 @@ function harness(savedBatches: any[] = [], comparisonFetcher?: Parameters<typeof
   const models = [
     { id: "cheap-a", name: "A", tier: "cheap", prompt_price_per_million: 0.1, completion_price_per_million: 0.2, estimated_cost_per_persona_usd: .001 },
     { id: "cheap-b", name: "B", tier: "cheap", prompt_price_per_million: 0.2, completion_price_per_million: 0.3, estimated_cost_per_persona_usd: .002 },
+    { id: "expensive-a", name: "Expensive A", tier: "expensive", prompt_price_per_million: 3, completion_price_per_million: 15, estimated_cost_per_persona_usd: .05 },
   ];
   const personas = ["neo-001", "neo-002", "neo-003"].map(persona_id => ({ persona_id, lifestyle_tags: [], census_profile: "Household" }));
   const memory = new Map<string, string>();
@@ -257,8 +258,45 @@ test("ambiguous creation failure retains request identity for recovery", async (
   await ui.button("Run AI-to-AI batch").props.onClick(); await ui.settle();
   assert.ok(ui.memory.has("interview-batch-request:std_1"));
   ui.setTransport(async () => ({ batch: { ...batch, status: "completed" } }));
-  await ui.button("Run AI-to-AI batch").props.onClick(); await ui.settle();
+  assert.match(ui.text(), /Recover earlier request: 3 personas · interviewer cheap-a · interviewee cheap-a · expensive models disabled/);
+  await ui.button("Recover earlier request").props.onClick(); await ui.settle();
   assert.deepEqual(ui.calls[1].payload, ui.calls[0].payload);
+});
+
+
+test("Run after ambiguous creation posts the currently displayed configuration", async () => {
+  const ui = harness(); await ui.settle();
+  const count = () => ui.nodes().find(n => n.props.id === "ai-interview-persona-count")!;
+  const model = (label: string) => ui.nodes().find(n => n.props["aria-label"] === label)!;
+  const optIn = () => ui.nodes().find(n => n.type === "input" && n.props.type === "checkbox")!;
+  optIn().props.onChange({ target: { checked: true } }); ui.render();
+  model("Interviewer model").props.onChange({ target: { value: "expensive-a" } });
+  model("Interviewee model").props.onChange({ target: { value: "expensive-a" } });
+  count().props.onChange({ target: { value: "30" } }); ui.render();
+  // Fetch rejects before reaching the server; the client cannot know that.
+  ui.setTransport(async () => { throw new TypeError("Failed to fetch"); });
+  await ui.button("Run AI-to-AI batch").props.onClick(); await ui.settle();
+  assert.equal(ui.calls[0].payload.allow_expensive_models, true);
+  assert.equal(ui.calls[0].payload.persona_count, 30);
+  assert.equal(ui.calls[0].payload.interviewer_model, "expensive-a");
+  assert.equal(ui.calls[0].payload.interviewee_model, "expensive-a");
+  assert.equal(optIn().props.disabled, false);
+  optIn().props.onChange({ target: { checked: false } });
+  count().props.onChange({ target: { value: "3" } }); ui.render();
+  model("Interviewee model").props.onChange({ target: { value: "cheap-b" } }); ui.render();
+  assert.equal(model("Interviewer model").props.value, "cheap-a");
+  assert.equal(model("Interviewee model").props.value, "cheap-b");
+  assert.equal(count().props.value, 3);
+  assert.equal(optIn().props.checked, false);
+  ui.setTransport(async () => ({ batch: { ...batch, status: "completed" } }));
+  await ui.button("Run AI-to-AI batch").props.onClick(); await ui.settle();
+  assert.equal(ui.calls[1].path, "batches");
+  assert.deepEqual(ui.calls[1].payload, {
+    request_id: ui.calls[1].payload.request_id,
+    persona_count: 3, interviewer_model: "cheap-a", interviewee_model: "cheap-b",
+    allow_expensive_models: false,
+  });
+  assert.notEqual(ui.calls[1].payload.request_id, ui.calls[0].payload.request_id);
 });
 
 test("returning student can reopen completed and paused batches and keep them after another run", async () => {

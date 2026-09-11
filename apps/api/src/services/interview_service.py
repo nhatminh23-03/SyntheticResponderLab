@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import random
+import re
 import time
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
@@ -1527,6 +1528,28 @@ def _call_openrouter_messages(
     raise RuntimeError("Exhausted retries.")
 
 
+_INLINE_REASONING = re.compile(r"<(think|thinking|reasoning)\b[^>]*>.*?</\1\s*>", re.DOTALL | re.IGNORECASE)
+_UNCLOSED_REASONING = re.compile(r"<(think|thinking|reasoning)\b[^>]*>.*\Z", re.DOTALL | re.IGNORECASE)
+
+
+def _strip_inline_reasoning(text: str) -> str:
+    """Drop a chain-of-thought block a provider put inline in `content`.
+
+    `reasoning: {max_tokens: ...}` only bounds the SEPARATE reasoning field. Several
+    OpenRouter providers (qwen3.7-plus among them) instead emit `<think>...</think>`
+    inside the message content, where nothing downstream removes it: the raw block is
+    cached and persisted, and `normalize_interviewer_question` then takes its first
+    line, yielding the literal question `<think>?`. Strip it at the one boundary every
+    chat call passes through, so no single caller can forget.
+
+    An unclosed opener (reasoning truncated by the cap mid-thought) is dropped to the
+    end — keeping it would leak the thinking that the closed case removes.
+    """
+    cleaned = _INLINE_REASONING.sub("", text)
+    cleaned = _UNCLOSED_REASONING.sub("", cleaned)
+    return cleaned.strip()
+
+
 def _parse_openrouter_chat_response(
     payload: Any,
     *,
@@ -1539,7 +1562,10 @@ def _parse_openrouter_chat_response(
         text = payload["choices"][0]["message"]["content"]
     except (KeyError, IndexError, TypeError) as exc:
         raise TransientProviderError("OpenRouter chat response did not include assistant text.") from exc
-    if not isinstance(text, str) or not text.strip():
+    if not isinstance(text, str):
+        raise TransientProviderError("OpenRouter chat response included empty assistant text.")
+    text = _strip_inline_reasoning(text)
+    if not text.strip():
         raise TransientProviderError("OpenRouter chat response included empty assistant text.")
 
     usage = payload.get("usage")
