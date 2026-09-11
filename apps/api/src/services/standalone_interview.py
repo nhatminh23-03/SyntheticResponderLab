@@ -140,6 +140,11 @@ def regenerate_answer(session, settings, study, answer_id, payload):
         if not settings.openrouter_api_key:
             raise ConflictApiError("OPENROUTER_API_KEY is not configured.")
         provider_started = True
+        # ponytail: process death after provider acceptance can lose this attempt before
+        # commit; explicit recovery may pay twice. Classroom scope accepts this window
+        # under the existing budget caps (not a strict ceiling on unreported charges).
+        # Add a durable two-phase pending-attempt ledger before unattended/volume use
+        # or materially higher per-call spend. See the plan's accepted durability risk.
         result = service._call_openrouter_messages(api_key=settings.openrouter_api_key or "", model=context["model"],
             messages=[*context["prior_turns"], {"role": "user", "content": context["question"]}], timeout=90, max_attempts=1)
         try:
@@ -290,6 +295,10 @@ def advance_batch(session, settings, study, job_id, payload):
                                   run_budget_usd=snapshot.run_budget_usd)
         if not settings.openrouter_api_key:
             raise ConflictApiError("OPENROUTER_API_KEY is not configured.")
+        # ponytail: a process crash after acceptance but before commit can replay a paid
+        # step. The accepted classroom estimate is ~$0.003/step, not a hard ceiling;
+        # budget caps cannot account for usage never received. Upgrade to a durable
+        # two-phase pending-attempt ledger for volume or order-of-magnitude cost growth.
         answer = service._call_openrouter_messages(api_key=settings.openrouter_api_key or "", model=model, messages=messages, timeout=90, max_attempts=1)
         try:
             enforce_measured_cost(snapshot, cost_usd=answer.cost_usd)

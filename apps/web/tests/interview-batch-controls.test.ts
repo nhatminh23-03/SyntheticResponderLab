@@ -11,7 +11,7 @@ import { isClassroomInterviewApiRequest } from "../src/lib/classroom-access";
 // Render the actual page with deterministic hooks and transport. This exercises its
 // event handlers and rendered controls without a browser or a paid provider.
 type Element = { type: unknown; props: Record<string, any> };
-function harness(savedBatches: any[] = []) {
+function harness(savedBatches: any[] = [], comparisonFetcher?: Parameters<typeof comparisonHelpers.runInterviewComparison>[1]) {
   const states: any[] = [];
   let cursor = 0;
   const effects: (() => void)[] = [];
@@ -57,7 +57,9 @@ function harness(savedBatches: any[] = []) {
     "framer-motion": { AnimatePresence: "presence", motion: { div: "div" } },
     "@/lib/api": api,
     "@/lib/interview-models": modelHelpers,
-    "@/lib/interview-comparison": { ...comparisonHelpers, runInterviewComparison: async () => [
+    "@/lib/interview-comparison": { ...comparisonHelpers, runInterviewComparison: comparisonFetcher
+      ? (input: Parameters<typeof comparisonHelpers.runInterviewComparison>[0]) => comparisonHelpers.runInterviewComparison(input, comparisonFetcher)
+      : async () => [
       { modelId: "cheap-a", answer: "Card A", answerId: "card_a", version: 0 },
       { modelId: "cheap-b", answer: "Card B", answerId: "card_b", version: 0 },
     ] },
@@ -197,6 +199,31 @@ test("comparison card regeneration replaces only the selected answer and refresh
   assert.match(ui.text(), /Card B/);
   assert.match(ui.text(), /fit tier: strong/);
   assert.match(ui.text(), /emotion: positive/);
+});
+
+test("comparison quota response keeps its completed card visible and regeneratable", async () => {
+  const ui = harness([], async () => ({
+    ok: false, status: 429,
+    json: async () => ({ error: {
+      code: "quota_exceeded", message: "Class budget hard stop.",
+      details: { results: [{ model_id: "cheap-a", answer_id: "paid_card", version: 0,
+        answer: "Completed before stop", error: null }] },
+    } }),
+  }));
+  await ui.settle();
+  await ui.button("Compare").props.onClick(); await ui.settle();
+  assert.match(ui.text(), /Completed before stop/);
+  assert.match(ui.text(), /Class budget hard stop/);
+  assert.equal(ui.nodes().filter(n => n.type === "Button" && n.props.children === "Regenerate answer (paid)").length, 1);
+  ui.setTransport(async (path, payload) => {
+    assert.equal(path, "answers/paid_card/regenerate");
+    assert.equal(payload.version, 0);
+    return { answer: { version: 1, reply: "Fresh card", session_usage: { cost_usd: ".003" },
+      post_interview_score: { fit_tier: "strong", emotional_classification: "positive" } } };
+  });
+  await ui.button("Regenerate answer (paid)").props.onClick(); await ui.settle();
+  assert.match(ui.text(), /Fresh card/);
+  assert.match(ui.text(), /Class budget hard stop/);
 });
 
 test("classroom identity proxy allows batch creation, progress and regeneration without opening workflow runs", () => {

@@ -1,5 +1,37 @@
 # Batch and regeneration handoff
 
+## Current follow-up — comparison budget result preservation
+
+Implemented after `f193ca1` without creating a commit. Recent commits are `f193ca1`,
+`088c90f`, and `6259e2a`. Preserve the pre-existing DONE edits (including the explicit
+acceptance of the process-crash window) and untracked `archive/build-round3.sh`.
+The board is wrapper-owned; no board writes were attempted.
+
+- `apps/web/src/lib/interview-comparison.ts` now reads completed answers from quota
+  error details through the same result mapping as successful responses. Answer IDs,
+  versions and scores survive; unanswered models show the budget error.
+- `apps/web/tests/interview-comparison.test.ts` covers the 429 transport and model
+  ordering; `apps/web/tests/interview-batch-controls.test.ts` drives that transport
+  through the page and regenerates the surviving card using its retained ID/version.
+- `apps/api/src/services/standalone_interview.py` has the requested `ponytail:`
+  comments at both provider calls. Per DONE, no crash-recovery ledger was added.
+  The ~$0.003 batch step is an estimate, not a hard ceiling; unreported charges
+  cannot be included in measured budget enforcement.
+
+Verification: API suite 223 passed (10 deprecation warnings); web unit suite 76
+passed; TypeScript `--noEmit --incremental false` passed; R suite nine files passed;
+protected files and the workflow entry point match baseline `91b6e56`;
+`git diff --check` passed. The new page test initially omitted the score from its
+regeneration response fixture; the corrected backend-shaped fixture passes.
+No live paid calls, browser smoke test, PostgreSQL integration or process-kill test
+was run. The last is outside the explicitly accepted scope. Next recommended
+verification remains browser and production-dialect smoke testing; no further patch
+is identified by these checks. Do not touch prerecorded script/tests, budget
+constants, cost-report files, or the workflow entry point.
+
+This follow-up's dirty files are the four application/test files above and this
+handoff, alongside the preserved wrapper-owned DONE/archive changes.
+
 ## Current follow-up — regeneration failure and pause checks
 
 Implemented after `6259e2a` in the worktree; no commit created. Recent commits: `6259e2a`, `64d8bd7`, `b254915`. Preserve the pre-existing DONE edits and untracked `archive/build-round2.sh`. The board is wrapper-owned; no board writes were attempted.

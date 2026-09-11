@@ -119,6 +119,8 @@ export async function runInterviewComparison(
       error?: unknown;
     };
 
+    let rawResults = payload.data?.interview_comparison?.results;
+    let failureMessage: string | null = null;
     if (!response.ok) {
       const apiError = payload.error;
       const message =
@@ -127,15 +129,16 @@ export async function runInterviewComparison(
           : apiError && typeof apiError === "object" && "message" in apiError
             ? String(apiError.message)
             : `Model comparison failed (${response.status}).`;
-      return input.modelIds.map((modelId) => ({
-        modelId,
-        answer: null,
-        error: message,
-        postInterviewScore: null,
-      }));
+      failureMessage = message;
+      // A quota stop can include answers committed before the cap was reached.
+      const details = apiError && typeof apiError === "object" &&
+        "code" in apiError && apiError.code === "quota_exceeded" &&
+        "details" in apiError ? apiError.details : null;
+      rawResults = details && typeof details === "object" &&
+        "results" in details && Array.isArray(details.results)
+        ? details.results : [];
     }
 
-    const rawResults = payload.data?.interview_comparison?.results;
     if (!Array.isArray(rawResults)) {
       throw new Error("Model comparison returned an invalid response.");
     }
@@ -155,7 +158,7 @@ export async function runInterviewComparison(
         modelId,
         ...(result?.answer_id ? { answerId: result.answer_id, version: result.version ?? 0 } : {}),
         answer: answer || null,
-        error: answer ? null : error ?? "Model returned an empty answer.",
+        error: answer ? null : error ?? failureMessage ?? "Model returned an empty answer.",
         postInterviewScore: answer && scoreIsValid
           ? {
               fitTier: fitTier as InterviewPostScore["fitTier"],

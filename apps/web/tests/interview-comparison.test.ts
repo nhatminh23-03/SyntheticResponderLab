@@ -206,6 +206,38 @@ test("comparison repeats a backend budget error on every requested model", async
 });
 
 
+test("quota stop preserves completed comparison answers, regeneration IDs and scores", async () => {
+  const results = await runInterviewComparison(
+    {
+      studyId: "study-01", personaId: "persona-07", question: "What matters?",
+      modelIds: [mid.id, cheap.id], allowExpensiveModels: false,
+    },
+    async () => ({
+      ok: false, status: 429,
+      json: async () => ({ error: {
+        code: "quota_exceeded", message: "Class budget hard stop.",
+        details: { results: [{
+          model_id: cheap.id, answer_id: "ans_completed", version: 0,
+          answer: "Already paid answer.", error: null,
+          post_interview_score: {
+            fit_tier: "strong", emotional_classification: "positive",
+            label: POST_INTERVIEW_SCORE_LABEL,
+          },
+        }] },
+      } }),
+    })
+  );
+  assert.deepEqual(results, [
+    { modelId: mid.id, answer: null, error: "Class budget hard stop.", postInterviewScore: null },
+    {
+      modelId: cheap.id, answerId: "ans_completed", version: 0,
+      answer: "Already paid answer.", error: null,
+      postInterviewScore: { fitTier: "strong", emotionalClassification: "positive" },
+    },
+  ]);
+});
+
+
 test("comparison records a batch network failure against every requested model", async () => {
   const results = await runInterviewComparison(
     {
