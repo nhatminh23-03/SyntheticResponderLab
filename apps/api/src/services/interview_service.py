@@ -365,6 +365,41 @@ def save_research_brief(
 # Interview insights (theme extraction)
 # ---------------------------------------------------------------------------
 
+def _insights_system_prompt(brief_context: str = "") -> str:
+    return f"""\
+You are a qualitative research analyst. Your task is to extract recurring themes from a corpus of \
+synthetic depth-interview transcripts.{brief_context}
+
+Identify 3–6 distinct themes that appear across multiple interviews. For each theme:
+- Give it a concise label (3–6 words)
+- Count how many interviews mention it (approximate)
+- Write a one-sentence synthesis of the theme
+- Pick the most representative verbatim quote from a specific persona (include persona_id)
+- Label the overall sentiment for this theme: "positive", "neutral", or "negative"
+
+Return ONLY a JSON object:
+{{
+  "themes": [
+    {{
+      "label": "...",
+      "count": <integer>,
+      "synthesis": "...",
+      "representative_quote": "...",
+      "quote_persona_id": "...",
+      "sentiment": "positive" | "neutral" | "negative"
+    }},
+    ...
+  ]
+}}"""
+
+
+def _extract_insight_themes(pairs, brief_context, call):
+    """Shared extraction protocol; callers own authorization, usage and caching."""
+    raw = call(system_prompt=_insights_system_prompt(brief_context),
+               user_prompt=f"INTERVIEW TRANSCRIPTS:\n{_build_transcript_corpus(pairs)}")
+    return json.loads(raw).get("themes") or []
+
+
 def get_interview_insights(
     session: Session,
     settings: AppSettings,
@@ -408,7 +443,6 @@ def get_interview_insights(
         }
 
     # Build transcript corpus for LLM
-    transcript_lines = _build_transcript_corpus(pairs)
     brief_section = _get_section_or_none(session, study, "research_brief")
     brief_context = ""
     if brief_section and brief_section.value_json:
@@ -417,44 +451,9 @@ def get_interview_insights(
         if primary_q:
             brief_context = f"\nRESEARCH QUESTION: {primary_q}\n"
 
-    system_prompt = f"""\
-You are a qualitative research analyst. Your task is to extract recurring themes from a corpus of \
-synthetic depth-interview transcripts.{brief_context}
-
-Identify 3–6 distinct themes that appear across multiple interviews. For each theme:
-- Give it a concise label (3–6 words)
-- Count how many interviews mention it (approximate)
-- Write a one-sentence synthesis of the theme
-- Pick the most representative verbatim quote from a specific persona (include persona_id)
-- Label the overall sentiment for this theme: "positive", "neutral", or "negative"
-
-Return ONLY a JSON object:
-{{
-  "themes": [
-    {{
-      "label": "...",
-      "count": <integer>,
-      "synthesis": "...",
-      "representative_quote": "...",
-      "quote_persona_id": "...",
-      "sentiment": "positive" | "neutral" | "negative"
-    }},
-    ...
-  ]
-}}"""
-
-    user_prompt = f"INTERVIEW TRANSCRIPTS:\n{transcript_lines}"
-
     try:
-        raw = _call_openrouter_json(
-            api_key=api_key,
-            model="openai/gpt-4o-mini",
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
-            timeout=90,
-        )
-        parsed = json.loads(raw)
-        themes = parsed.get("themes") or []
+        themes = _extract_insight_themes(pairs, brief_context, lambda **prompts: _call_openrouter_json(
+            api_key=api_key, model="openai/gpt-4o-mini", timeout=90, **prompts))
     except Exception as exc:
         return {
             "available": False,

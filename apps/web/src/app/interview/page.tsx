@@ -41,6 +41,13 @@ import { StudyProvider, useStudy } from "@/providers/study-provider";
 import { batchExport } from "@/lib/interview-batch-export";
 import { InterviewOperationError, interviewOperation, type Batch, type RegeneratedAnswer } from "@/lib/standalone-interview";
 
+type Themes = {
+  from_run_id: string; revision: string; eligible: boolean; available: boolean; stale: boolean;
+  estimated_cost_usd: string; model: string; message: string; session_usage?: { cost_usd: string };
+  saved: { revision: string; attempt: number; message?: string; budget_stop?: string;
+    themes: { label: string; synthesis: string; representative_quote: string; quote_persona_id: string; sentiment: string }[] | null } | null;
+};
+
 type Turn = { role: "student" | "persona"; text: string; answerId?: string; version?: number };
 
 const SUGGESTED = [
@@ -103,7 +110,14 @@ function InterviewPageContent() {
   const pauseBatch = useRef(false);
   const generation = useRef(0);
   const batchRequest = useRef<{ request_id: string; persona_count: number; interviewer_model: string; interviewee_model: string; allow_expensive_models: boolean } | null>(null);
-  const busy = loading || comparisonLoading || batchLoading || regenerating;
+  const [step, setStep] = useState(0);
+  const [themes, setThemes] = useState<Themes | null>(null);
+  const [themesLoading, setThemesLoading] = useState(false);
+  const themeRequest = useRef(0);
+  const stepTitle = useRef<HTMLHeadingElement | null>(null);
+  function changeStep(next: number) { setStep(next); }
+  useEffect(() => { stepTitle.current?.focus(); }, [step]);
+  const busy = loading || comparisonLoading || batchLoading || regenerating || themesLoading;
   const transcriptEnd = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -288,6 +302,18 @@ function InterviewPageContent() {
 
   async function runBatch(resume = false, recoverRequest = false) {
     if (!studyId || activity.current || !interviewerModel || !intervieweeModel) return;
+    const settings = resume && batch ? batch : recoverRequest ? batchRequest.current : {
+      persona_count: personaCount, interviewer_model: interviewerModel, interviewee_model: intervieweeModel,
+      allow_expensive_models: expensiveOptIn,
+    };
+    if (!settings) return;
+    const interviewer = models.find(model => model.id === settings.interviewer_model);
+    const interviewee = models.find(model => model.id === settings.interviewee_model);
+    if (!interviewer || !interviewee) return;
+    const estimate = estimateInterviewRunCost(settings.persona_count, interviewer, interviewee);
+    if (!window.confirm(`${resume ? "Resume" : recoverRequest ? "Recover" : "Start"} batch: ${settings.persona_count} personas\nInterviewer: ${settings.interviewer_model}\nInterviewee: ${settings.interviewee_model}\nEstimated full-run cost: ${formatInterviewRunCostEstimate(estimate)} (actual cost may differ).${resume && batch?.status === "failed" ? "\nThe previous provider outcome may be unknown. Retrying may add another charge." : ""}\nAuthorize this run?`)) return;
+    themeRequest.current += 1;
+    setThemes(null);
     activity.current = true;
     pauseBatch.current = false;
     setPausing(false);
@@ -335,6 +361,36 @@ function InterviewPageContent() {
       setBatchLoading(false);
       activity.current = false;
     }
+  }
+
+  async function loadThemes(generate = false) {
+    if (!studyId || !batch || activity.current) return;
+    const runId = batch.job_id;
+    const token = ++themeRequest.current;
+    if (generate && (!themes || themes.from_run_id !== runId || !window.confirm(
+      `${themes.saved?.message ?? "Extract themes from this completed batch."}\nModel: ${themes.model}\nEstimated additional cost: $${Number(themes.estimated_cost_usd).toFixed(4)} (actual cost may differ).\nAuthorize this extraction charge?`))) return;
+    activity.current = true;
+    setThemesLoading(true);
+    setError("");
+    try {
+      const response = await interviewOperation<{ insights: Themes }>(studyId, `batches/${runId}/themes`, generate ? {
+        revision: themes!.revision, authorize_charge: true,
+        ...(themes!.saved && !themes!.stale ? { retry_attempt: themes!.saved.attempt } : {}),
+      } : undefined);
+      if (token === themeRequest.current && response.insights.from_run_id === runId) {
+        setThemes(response.insights);
+        if (response.insights.session_usage) {
+          const updated = { ...batch, session_usage: response.insights.session_usage };
+          setBatch(updated);
+          setBatchHistory(previous => previous.map(item => item.job_id === runId ? updated : item));
+        }
+      }
+    } catch (err) {
+      if (token === themeRequest.current) {
+        setThemes(null);
+        setError(`${(err as Error).message} Transcripts are preserved. If a generation request timed out, its billing outcome may be unknown. Check saved themes before explicitly retrying.`);
+      }
+    } finally { setThemesLoading(false); activity.current = false; }
   }
 
   async function regenerate(answerId: string, version: number, comparison: boolean) {
@@ -406,6 +462,7 @@ function InterviewPageContent() {
   return (
     <main className="min-h-svh px-4 py-10 sm:px-6 lg:px-12">
       <div className="mx-auto w-full max-w-[88rem]">
+        <a href="/" className="underline">Back to home</a>
         <div className="mb-4 flex flex-wrap items-center gap-2.5 sm:gap-3">
           <BadgeChip tone="gold">Interview</BadgeChip>
           <BadgeChip>Student interviews a persona</BadgeChip>
@@ -421,21 +478,55 @@ function InterviewPageContent() {
         </p>
 
         <a
+          hidden={step !== 0}
           href="/prerecorded-interviews.html"
           className="mt-5 inline-flex items-center gap-2 rounded-xl border border-app-border px-4 py-2.5 text-sm font-semibold text-app-text transition hover:border-[var(--color-gold)] hover:text-[var(--color-gold)]"
         >
           Browse pre-recorded interviews
           <span aria-hidden="true">&rarr;</span>
         </a>
-        <p className="mt-2 max-w-2xl text-xs leading-5 text-app-muted">
+        <p hidden={step !== 0} className="mt-2 max-w-2xl text-xs leading-5 text-app-muted">
           Complete eight-turn interviews for all 30 personas on both of Dr. Lin&rsquo;s recommended
           models, recorded ahead of time. Replaying one costs nothing.
         </p>
 
+        <nav aria-label="Interview steps" className="my-5 flex flex-wrap gap-3">
+          {["1. Choose", "2. Interview", "3. Themes"].map((label, index) =>
+            <Button key={label} variant="secondary" aria-current={step === index ? "step" : undefined} onClick={() => changeStep(index)}>{label}</Button>)}
+        </nav>
+        <h2 ref={stepTitle} tabIndex={-1} className="text-xl font-semibold">{["Choose personas and models", "Run interviews or try a question", "Compare with your hand-coding"][step]}</h2>
+        <p>{["Choose your models and batch size, then continue to interview.", "Run the batch, or explore the optional comparison and follow-up tools.", "Read and hand-code your batch transcripts first. Then explicitly generate themes to compare."][step]}</p>
+        <div className="my-3 flex gap-3">
+          {step > 0 ? <Button variant="secondary" onClick={() => changeStep(step - 1)}>Back</Button> : null}
+          {step < 2 ? <Button onClick={() => changeStep(step + 1)}>Continue</Button> : null}
+        </div>
+        {error ? <p role="alert">{error}</p> : null}
+        {step === 2 ? <GlassPanel className="p-5">
+          <p>Themes are available for completed batches. Single-question explorations remain in the Interview step.</p>
+          <Button disabled={!batch || busy} onClick={() => loadThemes()}>Check saved themes (free)</Button>
+          {themesLoading ? <p role="status">Loading themes…</p> : null}
+          {themes && themes.from_run_id === batch?.job_id ? <div aria-live="polite">
+            <p>{themes.message}</p>
+            {themes.stale ? <p>These themes belong to an earlier transcript version. Generate again to compare the current version.</p> : null}
+            {themes.saved?.message ? <p role="alert">{themes.saved.message}</p> : null}
+            {themes.saved?.budget_stop ? <p role="alert">{themes.saved.budget_stop}</p> : null}
+            {themes.eligible && (!themes.available || themes.stale) ? <Button disabled={busy} onClick={() => loadThemes(true)}>
+              {themes.saved && !themes.stale ? "Retry extraction" : "Generate themes"} (about ${Number(themes.estimated_cost_usd).toFixed(4)} extra)
+            </Button> : null}
+            {themes.saved?.themes?.map((theme, index) => <article className="my-4" key={index}>
+              <h3 className="font-semibold">{theme.label} · {theme.sentiment}</h3><p>{theme.synthesis}</p>
+              <blockquote>“{theme.representative_quote}”</blockquote>
+              <a className="underline" href={`#transcript-${theme.quote_persona_id}`} onClick={() => {
+                const transcript = document.getElementById(`transcript-${theme.quote_persona_id}`);
+                transcript?.setAttribute("open", "");
+              }}>{theme.quote_persona_id} — locate interviewee quote</a>
+            </article>)}
+          </div> : null}
+        </GlassPanel> : null}
         {regenerationCost ? <p className="mt-3 text-sm" role="status">Measured session cost after regeneration: ${Number(regenerationCost).toFixed(6)}</p> : null}
         {regenerating ? <p role="status">Regenerating answer…</p> : null}
-        <div className="mt-8 grid gap-5 lg:grid-cols-[22rem_minmax(0,1fr)]">
-          <GlassPanel className="p-5">
+        <div className={cn("mt-8 grid gap-5", step === 0 && "lg:grid-cols-[22rem_minmax(0,1fr)]")}>
+          <GlassPanel hidden={step !== 0} style={{ display: step !== 0 ? "none" : undefined }} className="p-5">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-app-muted">
               Personas ({personas.length})
             </p>
@@ -463,7 +554,7 @@ function InterviewPageContent() {
           </GlassPanel>
 
           <div className="flex flex-col gap-5">
-            <GlassPanel className="p-5">
+            <GlassPanel hidden={step !== 0} style={{ display: step !== 0 ? "none" : undefined }} className="p-5">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.18em] text-app-muted">
@@ -584,7 +675,7 @@ function InterviewPageContent() {
               </div>
             </GlassPanel>
 
-            <GlassPanel className="p-5" aria-label="AI-to-AI batch results">
+            <GlassPanel hidden={step === 0} style={{ display: step === 0 ? "none" : undefined }} className="p-5" aria-label="AI-to-AI batch results">
               <div className="flex flex-wrap gap-2">
                 <Button disabled={busy || !studyId || !interviewerModel || !intervieweeModel} onClick={() => runBatch()}>
                   Run AI-to-AI batch ({personaCount} personas)
@@ -605,6 +696,7 @@ function InterviewPageContent() {
                   onChange={event => {
                     const selected = batchHistory.find(item => item.job_id === event.target.value);
                     if (selected && studyId) {
+                      themeRequest.current += 1; setThemes(null);
                       setBatch(selected);
                       localStorage.setItem(`interview-batch:${studyId}`, selected.job_id);
                     }
@@ -627,7 +719,7 @@ function InterviewPageContent() {
                   document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url);
                 }}>Download batch {format === "csv" ? "CSV" : "Markdown"}</Button>)}</div>
                 {batch.error ? <p role="alert">{batch.error.details?.scope ? `${batch.error.details.scope} cap: ` : ""}{batch.error.message}</p> : null}
-                {batch.transcripts.map(transcript => <details key={transcript.persona_id} className="rounded-xl border border-app-border p-3">
+                {batch.transcripts.map(transcript => <details id={`transcript-${transcript.persona_id}`} key={transcript.persona_id} className="rounded-xl border border-app-border p-3">
                   <summary>{transcript.persona_id} · {Math.floor(transcript.messages.length / 2)}/{batch.turn_limit} answers</summary>
                   {transcript.messages.map((message, index) => <p key={index} className="mt-3 whitespace-pre-wrap text-sm leading-6"><strong>{message.role === "user" ? "Interviewer" : transcript.persona_id}: </strong>{message.content}</p>)}
                 </details>)}
@@ -635,7 +727,7 @@ function InterviewPageContent() {
             </GlassPanel>
 
             {persona ? (
-              <GlassPanel className="p-5">
+              <GlassPanel hidden={step !== 1} style={{ display: step !== 1 ? "none" : undefined }} className="p-5">
                 <div className="flex flex-wrap items-center gap-2">
                   <BadgeChip tone="gold">{persona.persona_id}</BadgeChip>
                   <BadgeChip>{persona.age_bucket}</BadgeChip>
@@ -652,7 +744,8 @@ function InterviewPageContent() {
               </GlassPanel>
             ) : null}
 
-            <GlassPanel className="p-5">
+            <details hidden={step !== 1}><summary>Optional: compare model answers</summary>
+            <GlassPanel hidden={step !== 1} style={{ display: step !== 1 ? "none" : undefined }} className="p-5">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.18em] text-app-muted">
@@ -866,7 +959,9 @@ function InterviewPageContent() {
               ) : null}
             </GlassPanel>
 
-            <GlassPanel className="flex min-h-[22rem] flex-col p-5">
+            </details>
+
+            <GlassPanel hidden={step !== 1} style={{ display: step !== 1 ? "none" : undefined }} className="flex min-h-[22rem] flex-col p-5">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.18em] text-app-muted">
@@ -975,7 +1070,7 @@ function InterviewPageContent() {
             </GlassPanel>
 
             {systemPrompt ? (
-              <GlassPanel className="p-5">
+              <GlassPanel hidden={step !== 1} style={{ display: step !== 1 ? "none" : undefined }} className="p-5">
                 <button
                   type="button"
                   onClick={() => setShowPrompt((value) => !value)}

@@ -14,6 +14,8 @@ import { isClassroomInterviewApiRequest } from "../src/lib/classroom-access";
 // event handlers and rendered controls without a browser or a paid provider.
 type Element = { type: unknown; props: Record<string, any> };
 function harness(savedBatches: any[] = [], comparisonFetcher?: Parameters<typeof comparisonHelpers.runInterviewComparison>[1]) {
+  let confirmResult = true;
+  const confirmations: string[] = [];
   const states: any[] = [];
   let cursor = 0;
   const effects: (() => void)[] = [];
@@ -82,7 +84,7 @@ function harness(savedBatches: any[] = [], comparisonFetcher?: Parameters<typeof
   const exported: any = {};
   const storage = { getItem: (key: string) => memory.get(key) ?? null, setItem: (key: string, value: string) => memory.set(key, value), removeItem: (key: string) => memory.delete(key) };
   const dom = { createElement: () => ({ click() {}, remove() {} }), body: { appendChild() {} } };
-  new Function("require", "exports", "localStorage", "document", compiled)((name: string) => mocks[name] ?? require(name), exported, storage, dom);
+  new Function("require", "exports", "localStorage", "document", "window", compiled)((name: string) => mocks[name] ?? require(name), exported, storage, dom, { confirm: (message: string) => { confirmations.push(message); return confirmResult; } });
   const component = exported.default().props.children.type;
   let tree: Element;
   function render() { cursor = 0; tree = component(); first = false; return tree; }
@@ -100,7 +102,8 @@ function harness(savedBatches: any[] = [], comparisonFetcher?: Parameters<typeof
     return String(node);
   }
   return {
-    calls, chatCalls, memory, api,
+    calls, chatCalls, memory, api, confirmations,
+    dismissConfirmation() { confirmResult = false; },
     get exportedTranscript() { return exportsPayload; },
     setTransport(fn: typeof transport) { transport = fn; },
     async settle() { await new Promise(resolve => setImmediate(resolve)); render(); },
@@ -428,4 +431,91 @@ test("batch CSV export neutralises formula-leading interview text", async () => 
   }
   // Ordinary text is untouched — the guard must not corrupt every transcript.
   assert.ok(csv.includes('"A normal question?"'));
+});
+
+test("classroom themes proxy permits GET and POST, rejects unsafe paths", () => {
+  const path = "/api/backend/api/v1/studies/std_1/interview/batches/batch_1/themes";
+  assert.equal(isClassroomInterviewApiRequest(path, "GET"), true);
+  assert.equal(isClassroomInterviewApiRequest(path, "POST"), true);
+  assert.equal(isClassroomInterviewApiRequest(path, "DELETE"), false);
+  assert.equal(isClassroomInterviewApiRequest(path.replace("batch_1", "%2f"), "POST"), false);
+});
+
+test("classroom batch confirmation names exact settings and cancellation spends nothing", async () => {
+  const ui = harness(); await ui.settle();
+  ui.dismissConfirmation();
+  await ui.button("Run AI-to-AI batch").props.onClick();
+  assert.equal(ui.calls.length, 0);
+  assert.match(ui.confirmations[0], /3 personas/);
+  assert.match(ui.confirmations[0], /Interviewer: cheap-a/);
+  assert.match(ui.confirmations[0], /Interviewee: cheap-a/);
+  assert.match(ui.confirmations[0], /\$0\.006/);
+});
+
+test("classroom steps preserve settings and expose back navigation", async () => {
+  const ui = harness(); await ui.settle();
+  assert.equal(ui.nodes().filter(n => n.type === "GlassPanel" && !n.props.hidden).length, 2);
+  ui.nodes().find(n => n.props.id === "ai-interview-persona-count")!.props.onChange({ target: { value: "7" } });
+  ui.button("Continue").props.onClick(); ui.render();
+  assert.ok(ui.nodes().some(n => n.props["aria-current"] === "step"));
+  ui.button("Back").props.onClick(); ui.render();
+  assert.equal(ui.nodes().find(n => n.props.id === "ai-interview-persona-count")!.props.value, 7);
+  assert.equal(ui.calls.length, 0);
+});
+
+const themeView = {
+  from_run_id: "batch_1", revision: "rev1", eligible: true, available: false, stale: false,
+  estimated_cost_usd: ".002", model: "openai/gpt-4o-mini", message: "Ready", saved: null,
+};
+
+test("classroom themes require separate charge confirmation and navigation never generates", async () => {
+  const ui = harness([{ ...batch, status: "completed" }]); await ui.settle();
+  ui.nodes().find(n => n.props["aria-label"] === "Saved batches")!.props.onChange({ target: { value: "batch_1" } });
+  ui.button("3. Themes").props.onClick(); ui.render();
+  assert.equal(ui.calls.length, 0);
+  ui.setTransport(async (_path, payload) => ({ insights: payload ? {
+    ...themeView, available: true, saved: { revision: "rev1", attempt: 1, themes: [{
+      label: "Space", synthesis: "Needs space", representative_quote: "More space", quote_persona_id: "neo-001", sentiment: "positive",
+    }] },
+  } : themeView }));
+  await ui.button("Check saved themes").props.onClick(); ui.render();
+  assert.equal(ui.calls[0].payload, undefined);
+  await ui.button("Generate themes").props.onClick(); ui.render();
+  assert.equal(ui.calls[1].payload.authorize_charge, true);
+  assert.equal(ui.calls[1].payload.revision, "rev1");
+  assert.match(ui.confirmations[0], /additional cost: \$0.0020/);
+  assert.match(ui.text(), /More space/);
+  ui.button("Back").props.onClick(); ui.render();
+  ui.button("3. Themes").props.onClick(); ui.render();
+  assert.equal(ui.calls.length, 2);
+  assert.match(ui.text(), /More space/);
+});
+
+test("classroom switching saved runs rejects late themes", async () => {
+  const ui = harness([{ ...batch, status: "completed" }, { ...batch, job_id: "batch_2", status: "completed" }]); await ui.settle();
+  const select = () => ui.nodes().find(n => n.props["aria-label"] === "Saved batches")!;
+  select().props.onChange({ target: { value: "batch_1" } });
+  ui.button("3. Themes").props.onClick(); ui.render();
+  let resolve!: (response: any) => void;
+  ui.setTransport(async () => new Promise(done => { resolve = done; }));
+  const pending = ui.button("Check saved themes").props.onClick();
+  await ui.settle();
+  assert.equal(select().props.disabled, true);
+  select().props.onChange({ target: { value: "batch_2" } });
+  resolve({ insights: { ...themeView, message: "Earlier run themes" } });
+  await pending; ui.render();
+  assert.doesNotMatch(ui.text(), /Earlier run themes/);
+});
+
+test("classroom dismissing theme charge preserves transcripts without a POST", async () => {
+  const ui = harness([{ ...batch, status: "completed" }]); await ui.settle();
+  ui.nodes().find(n => n.props["aria-label"] === "Saved batches")!.props.onChange({ target: { value: "batch_1" } });
+  ui.button("3. Themes").props.onClick(); ui.render();
+  ui.setTransport(async () => ({ insights: themeView }));
+  await ui.button("Check saved themes").props.onClick(); ui.render();
+  ui.dismissConfirmation();
+  await ui.button("Generate themes").props.onClick(); ui.render();
+  assert.equal(ui.calls.length, 1);
+  assert.equal(ui.calls[0].payload, undefined);
+  assert.match(ui.text(), /Download batch/);
 });

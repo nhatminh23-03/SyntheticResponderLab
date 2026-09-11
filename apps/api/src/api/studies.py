@@ -745,3 +745,21 @@ def regenerate_interview_answer(study_id: str, answer_id: str, request: Request,
     from src.services.standalone_interview import regenerate_answer
     study = get_owned_study_or_404(db, study_id, current_user)
     return response_envelope(request, {"answer": regenerate_answer(db, settings, study, answer_id, payload)})
+
+
+@router.get("/api/v1/studies/{study_id}/interview/batches/{job_id}/themes")
+def get_standalone_themes(study_id: str, job_id: str, request: Request,
+    db: Session = Depends(get_db_session), settings: AppSettings = Depends(get_settings),
+    current_user: AuthUser = Depends(get_current_user)):
+    from src.services.standalone_themes import standalone_themes
+    study = get_owned_study_or_404(db, study_id, current_user)
+    return response_envelope(request, {"insights": standalone_themes(db, settings, study, job_id)})
+
+
+@router.post("/api/v1/studies/{study_id}/interview/batches/{job_id}/themes")
+def generate_standalone_themes(study_id: str, job_id: str, request: Request, payload: dict = Body(...),
+    db: Session = Depends(get_db_session), settings: AppSettings = Depends(get_settings),
+    current_user: AuthUser = Depends(get_current_user)):
+    from src.services.standalone_themes import standalone_themes
+    study = get_owned_study_or_404(db, study_id, current_user)
+    return response_envelope(request, {"insights": standalone_themes(db, settings, study, job_id, payload)})
