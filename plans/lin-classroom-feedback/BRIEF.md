@@ -1,7 +1,6 @@
 # Brief — fold Dr. Lin's 2026-09-10 app feedback into the student interview section
 
-Source: AYTM call 2026-09-10, Dr. Yufan Lin present. Full notes with timestamp anchors:
-`~/ai-harness/vault/shared/meetings/2026-09-10-aytm-wang-lin-yaza-minh.md`
+Source: AYTM call 2026-09-10, Dr. Yufan Lin present. Timestamps below refer to that recording.
 
 Lin owns the class that will test this app at the end of September. His feedback is about
 **what a student experiences**, not about the research pipeline. Four things he asked for,
