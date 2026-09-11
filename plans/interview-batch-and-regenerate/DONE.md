@@ -106,3 +106,27 @@ model comparison, and the batch runner — so the family closes rather than one 
 
 ## Added by Sol refute (each needs a check before it can pass)
 - [x] (sol) A student can download a completed or partially completed batch as CSV or Markdown for submission, with each question and answer attributed to its persona and selected models. — check: `cd ../.. && cd apps/web && npm run test:unit`
+
+## Added after the scoped reviews (the files every full-range round dropped for size)
+
+Three scoped passes ran over the 15 unreviewed files. Tests came back GO. The money path and
+the student-facing surface each came back with a blocker, both about spending money the student
+did not authorise.
+
+- [ ] (scoped A, F1) A provider answer that the question normaliser rejects does not strand the run:
+      its measured cost is still recorded against the session, any budget stop it carried still
+      surfaces, and an explicit retry gets a fresh question instead of replaying the same rejected
+      cached entry forever. — check: `cd ../.. && ./apps/api/.venv/bin/python -m pytest apps/api/tests/test_standalone_batch.py -q -k 'rejected_question_records_cost_and_recovers'`
+- [ ] (scoped B, F1) A run always spends according to what the student is looking at. After a batch
+      request fails ambiguously, pressing Run again cannot silently reuse the earlier models, persona
+      count, or expensive-model authorisation — recovering an ambiguous request is a separate,
+      explicitly identified action from starting a new run with the current settings. — check: `cd ../.. && cd apps/web && npm run test:unit`
+- [ ] (root cause behind scoped A) Reasoning text never reaches a student. When a provider returns its
+      chain of thought inline in the message content as a `<think>` block instead of in the separate
+      reasoning field, it is stripped at the parse boundary, so neither a displayed answer nor a
+      generated interviewer question can ever be reasoning text or the literal string `<think>?`. — check: `cd ../.. && ./apps/api/.venv/bin/python -m pytest apps/api/tests/ -q -k 'strips_inline_reasoning'`
+
+The third one is the leak already visible in the pre-recorded interviews, and it is what makes the
+first one reachable in practice: `<think>` arrives, `normalize_interviewer_question` takes the first
+line, and the run is left holding `<think>?`. Fixing it in this branch rather than separately, because
+`interview_service.py` is already part of this diff and a separate branch would only collide.
