@@ -1,5 +1,26 @@
 # Batch and regeneration handoff
 
+## Current follow-up — four remaining failures
+
+Implemented in the worktree after `b254915` (no new commit). Earlier commits are `5a2dcf0` and `39631a2`; baseline is `91b6e56`. Preserve the pre-existing edits to `DONE.md` and untracked `plans/interview-batch-and-regenerate/archive/`. No board writes were attempted; the wrapper owns posts and checkboxes.
+
+- `standalone_interview.py` consumes a revision even when the provider fails. A failed status requires `retry: true` with the new revision. Old queued submissions return saved status; the page sends retry only after Resume. Progress counts persisted messages rather than attempt revisions.
+- Rejected creation requests clear their pending UUID/settings on HTTP 4xx. Network/5xx ambiguity keeps the original UUID for idempotent recovery. Tests cover corrected slider settings and ambiguous recovery.
+- An owned GET batches route and classroom proxy rule expose persisted history. The page's Saved batches selector reopens prior completed or paused transcripts and measured costs, including after a later run. Delayed initial recovery cannot replace a newly selected batch.
+- Creation consumes the existing interview-run daily quota exactly once, after the idempotency check. The shared quota helper takes the existing PostgreSQL advisory lock to serialize counters, including absent rows. Advances and duplicate creation do not consume quota. Concurrent distinct batch creation and cross-study same-user limits have checks.
+
+Changed application files: `apps/api/src/api/studies.py`, `apps/api/src/services/standalone_interview.py`, `apps/api/src/services/usage_limits.py`, `apps/web/src/app/interview/page.tsx`, `apps/web/src/lib/standalone-interview.ts`, and `apps/web/src/lib/classroom-access.ts`. Regression checks are in the existing API standalone-batch and web batch-controls test files. Added runnable commands to the three previously unchecked DONE outcomes; wrapper-owned checkbox state is preserved.
+
+Verification passed:
+
+- `apps/api/.venv/bin/python -m pytest apps/api/tests -q`: 222 passed, 10 deprecation warnings.
+- From `apps/web`: `npm run test:unit`: 73 passed; `./node_modules/.bin/tsc --noEmit --incremental false`: passed.
+- `/usr/local/bin/Rscript analysis/tests/test_all.R`: nine files passed.
+- Protected-file diff against `91b6e56`: unchanged; exact source comparison of workflow `start_interview_run`: unchanged.
+- `git diff --check`: passed.
+
+One web check was initially invoked from the repo root (no package.json); rerunning from `apps/web` passed. No live paid calls, browser smoke test, or running PostgreSQL integration test was performed. SQLite concurrency checks exercise local serialization; production transaction-lock integration remains a next verification step. Provider timeouts can still represent unreported charges, so explicit retry retains its warning. No further functional patch is identified by the local checks. Do not touch prerecorded script/tests, budget constants, cost-report files, or the workflow entry point.
+
 ## Round 2 — completion check paths
 
 The implementation is committed in `39631a2`, following pre-build snapshot `91b6e56` and planning commits `61b9424` and `2068be9`. The worktree was clean when round 2 started.

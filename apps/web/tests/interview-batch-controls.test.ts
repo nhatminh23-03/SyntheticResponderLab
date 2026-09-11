@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import ts from "typescript";
+import { InterviewOperationError } from "../src/lib/standalone-interview";
 import * as modelHelpers from "../src/lib/interview-models";
 import * as comparisonHelpers from "../src/lib/interview-comparison";
 import { isClassroomInterviewApiRequest } from "../src/lib/classroom-access";
@@ -10,7 +11,7 @@ import { isClassroomInterviewApiRequest } from "../src/lib/classroom-access";
 // Render the actual page with deterministic hooks and transport. This exercises its
 // event handlers and rendered controls without a browser or a paid provider.
 type Element = { type: unknown; props: Record<string, any> };
-function harness() {
+function harness(savedBatches: any[] = []) {
   const states: any[] = [];
   let cursor = 0;
   const effects: (() => void)[] = [];
@@ -60,7 +61,8 @@ function harness() {
       { modelId: "cheap-a", answer: "Card A", answerId: "card_a", version: 0 },
       { modelId: "cheap-b", answer: "Card B", answerId: "card_b", version: 0 },
     ] },
-    "@/lib/standalone-interview": { interviewOperation: async (_id: string, path: string, payload: any) => {
+    "@/lib/standalone-interview": { InterviewOperationError, interviewOperation: async (_id: string, path: string, payload: any) => {
+      if (path === "batches" && !payload) return { batches: savedBatches };
       calls.push({ path, payload }); return transport(path, payload);
     } },
     "@/lib/utils": { cn: (...args: unknown[]) => args.filter(Boolean).join(" ") },
@@ -197,8 +199,69 @@ test("comparison card regeneration replaces only the selected answer and refresh
 });
 
 test("classroom identity proxy allows batch creation, progress and regeneration without opening workflow runs", () => {
-  for (const [method, suffix] of [["POST", "batches"], ["GET", "batches/batch_1"], ["POST", "batches/batch_1/advance"], ["POST", "answers/ans_1/regenerate"]]) {
+  for (const [method, suffix] of [["GET", "batches"], ["POST", "batches"], ["GET", "batches/batch_1"], ["POST", "batches/batch_1/advance"], ["POST", "answers/ans_1/regenerate"]]) {
     assert.equal(isClassroomInterviewApiRequest(`/api/backend/api/v1/studies/std_1/interview/${suffix}`, method), true);
   }
   assert.equal(isClassroomInterviewApiRequest("/api/backend/api/v1/studies/std_1/interview/runs", "POST"), false);
+});
+
+
+test("rejected batch creation lets corrected settings start without clearing storage", async () => {
+  const ui = harness(); await ui.settle();
+  ui.setTransport(async () => { throw new InterviewOperationError("Invalid settings", 400); });
+  await ui.button("Run AI-to-AI batch").props.onClick(); await ui.settle();
+  assert.equal(ui.memory.has("interview-batch-request:std_1"), false);
+  ui.nodes().find(n => n.props.id === "ai-interview-persona-count")!.props.onChange({ target: { value: "5" } });
+  ui.render();
+  ui.setTransport(async () => ({ batch: { ...batch, status: "completed", persona_count: 5 } }));
+  await ui.button("Run AI-to-AI batch").props.onClick(); await ui.settle();
+  assert.equal(ui.calls[1].payload.persona_count, 5);
+  assert.notEqual(ui.calls[1].payload.request_id, ui.calls[0].payload.request_id);
+  assert.match(ui.text(), /completed: 0\/5/);
+});
+
+test("ambiguous creation failure retains request identity for recovery", async () => {
+  const ui = harness(); await ui.settle();
+  ui.setTransport(async () => { throw new Error("Network lost"); });
+  await ui.button("Run AI-to-AI batch").props.onClick(); await ui.settle();
+  assert.ok(ui.memory.has("interview-batch-request:std_1"));
+  ui.setTransport(async () => ({ batch: { ...batch, status: "completed" } }));
+  await ui.button("Run AI-to-AI batch").props.onClick(); await ui.settle();
+  assert.deepEqual(ui.calls[1].payload, ui.calls[0].payload);
+});
+
+test("returning student can reopen completed and paused batches and keep them after another run", async () => {
+  const completed = { ...batch, status: "completed", session_usage: { cost_usd: ".048" },
+    transcripts: [{ persona_id: "neo-001", messages: [{ role: "assistant", content: "Older saved answer" }] }] };
+  const paused = { ...batch, job_id: "batch_2", revision: 1 };
+  const ui = harness([paused, completed]); await ui.settle();
+  const select = () => ui.nodes().find(n => n.props["aria-label"] === "Saved batches")!;
+  select().props.onChange({ target: { value: "batch_1" } }); ui.render();
+  assert.match(ui.text(), /Older saved answer/);
+  assert.match(ui.text(), /Measured cost: \$0.048000/);
+  select().props.onChange({ target: { value: "batch_2" } }); ui.render();
+  assert.equal(ui.button("Resume batch").props.disabled, false);
+  ui.setTransport(async () => ({ batch: { ...batch, job_id: "batch_3", status: "completed" } }));
+  await ui.button("Run AI-to-AI batch").props.onClick(); await ui.settle();
+  select().props.onChange({ target: { value: "batch_1" } }); ui.render();
+  assert.match(ui.text(), /Older saved answer/);
+});
+
+
+test("failed batch stops automatically and only Resume sends an explicit retry", async () => {
+  const ui = harness(); await ui.settle();
+  const failed = { ...batch, status: "failed", revision: 1,
+    error: { code: "provider_unavailable", message: "Response lost; retrying can incur another charge." } };
+  ui.setTransport(async (path, payload) => {
+    if (path === "batches") return { batch };
+    if (path === "batches/batch_1") return { batch: failed };
+    if (payload.retry) return { batch: { ...failed, status: "completed", revision: 2 } };
+    return { batch: failed };
+  });
+  await ui.button("Run AI-to-AI batch").props.onClick(); await ui.settle();
+  assert.equal(ui.calls.length, 2);
+  assert.equal(ui.calls[1].payload.retry, false);
+  assert.match(ui.text(), /retrying can incur another charge/);
+  await ui.button("Resume batch").props.onClick(); await ui.settle();
+  assert.deepEqual(ui.calls[3].payload, { revision: 1, retry: true });
 });

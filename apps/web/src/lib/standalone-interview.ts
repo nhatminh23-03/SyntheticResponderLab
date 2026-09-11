@@ -13,6 +13,10 @@ export type Batch = {
   error: { code: string; message: string; details?: { scope?: string } } | null;
 };
 
+export class InterviewOperationError extends Error {
+  constructor(message: string, public status: number) { super(message); }
+}
+
 export async function interviewOperation<T>(studyId: string, path: string, payload?: object): Promise<T> {
   const response = await fetch(`/api/backend/api/v1/studies/${encodeURIComponent(studyId)}/interview/${path}`, {
     method: payload ? "POST" : "GET",
@@ -24,7 +28,7 @@ export async function interviewOperation<T>(studyId: string, path: string, paylo
     if (result.error?.code === "quota_exceeded" && result.error?.details?.batch) {
       return { batch: result.error.details.batch } as T;
     }
-    throw new Error(result.error?.message || `Interview request failed (${response.status}).`);
+    throw new InterviewOperationError(result.error?.message || `Interview request failed (${response.status}).`, response.status);
   }
   return result.data as T;
 }

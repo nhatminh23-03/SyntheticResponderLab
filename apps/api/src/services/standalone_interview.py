@@ -167,6 +167,13 @@ def batch_status(session, settings, study, job_id):
             "error": job.error_json, "session_usage": usage(session, settings, job.public_id)}
 
 
+def list_batches(session, settings, study):
+    jobs = session.scalars(select(Job).where(
+        Job.study_id == study.id, Job.job_type == "standalone_batch"
+    ).order_by(Job.queued_at.desc())).all()
+    return [batch_status(session, settings, study, job.public_id) for job in jobs]
+
+
 @serialized_local
 def start_batch(session, settings, study, payload):
     from src.services.interview_service import utcnow
@@ -198,6 +205,10 @@ def start_batch(session, settings, study, payload):
         if existing.payload_json != config:
             raise ConflictApiError("This batch request ID was already used with different settings.")
         return batch_status(session, settings, study, public_id)
+    if study.owner_user_id:
+        from src.services.usage_limits import consume_daily_quota, METRIC_INTERVIEW_RUN
+        consume_daily_quota(session, settings, owner_user_id=study.owner_user_id,
+                            metric_key=METRIC_INTERVIEW_RUN)
     job = Job(public_id=public_id, study_id=study.id, job_type="standalone_batch", status="running",
               payload_json=config, result_json={"revision": 0, "transcripts": [], "completed_personas": 0},
               queued_at=utcnow(), started_at=utcnow())
@@ -215,6 +226,8 @@ def advance_batch(session, settings, study, job_id, payload):
     if type(payload.get("revision")) is not int:
         raise ValidationApiError("An integer batch revision is required.")
     if payload["revision"] != state["revision"] or job.status in {"completed", "budget_stopped"}:
+        return batch_status(session, settings, study, job_id)
+    if job.status == "failed" and payload.get("retry") is not True:
         return batch_status(session, settings, study, job_id)
     config = job.payload_json
     index = state["completed_personas"]
@@ -270,6 +283,8 @@ def advance_batch(session, settings, study, job_id, payload):
         if budget_error:
             raise budget_error
     except Exception as exc:
+        # Consume even a failed attempt: already queued requests cannot authorize a retry.
+        state["revision"] = payload["revision"] + 1
         job.status = "budget_stopped" if isinstance(exc, QuotaExceededApiError) else "failed"
         job.error_json = {"code": exc.code if isinstance(exc, ApiError) else "provider_unavailable",
                           "message": str(exc) + (" The provider outcome may be unknown; retrying can incur another charge." if not isinstance(exc, ApiError) else ""), "details": exc.details if isinstance(exc, ApiError) else {},

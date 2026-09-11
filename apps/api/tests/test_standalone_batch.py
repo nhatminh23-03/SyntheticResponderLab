@@ -35,9 +35,9 @@ def start(client, study_id, **overrides):
         'interviewee_model': MODEL, **overrides})
 
 
-def step(client, study_id, batch):
+def step(client, study_id, batch, **extra):
     return client.post(f'/api/v1/studies/{study_id}/interview/batches/{batch["job_id"]}/advance',
-                       json={'revision': batch['revision']})
+                       json={'revision': batch['revision'], **extra})
 
 
 def finish(client, study_id, batch):
@@ -137,12 +137,12 @@ def test_batch_failure_status_resume_and_duplicate_submissions(classroom, monkey
     assert failed['status'] == 'failed'
     assert failed['error']['persona_id'] == failed['persona_ids'][0]
     assert failed['error']['model'] == MODEL
-    assert failed['error']['revision'] == 1
+    assert failed['error']['revision'] == 2
     assert Decimal(failed['session_usage']['cost_usd']) == Decimal('.001')
     retrieved = client.get(f'/api/v1/studies/{study_id}/interview/batches/{batch["job_id"]}').json()['data']['batch']
     assert retrieved == failed
     monkeypatch.setattr('src.services.interview_service._call_openrouter_messages', original)
-    resumed = finish(client, study_id, step(client, study_id, failed).json()['data']['batch'])
+    resumed = finish(client, study_id, step(client, study_id, failed, retry=True).json()['data']['batch'])
     assert resumed['status'] == 'completed'
     assert len(calls) == 48
 
@@ -355,3 +355,83 @@ def test_duplicate_chat_and_comparison_do_not_repeat_paid_calls(classroom, activ
         responses = list(pool.map(lambda _: submit(), range(2)))
     assert all(r.status_code == 200 for r in responses)
     assert len(calls) == (1 if activity == 'chat' else 2)
+
+
+def test_failed_advance_requires_explicit_retry(classroom, monkeypatch):
+    from threading import Event
+    from src.services import interview_service
+    client, study_id, calls = classroom
+    batch = start(client, study_id).json()['data']['batch']
+    accepted, release, duplicate_submitted = Event(), Event(), Event()
+    attempts = []
+    original = interview_service._call_openrouter_messages
+    def timeout(**kwargs):
+        attempts.append(kwargs)
+        accepted.set()
+        assert release.wait(5)
+        raise RuntimeError('Accepted by provider, response lost')
+    monkeypatch.setattr(interview_service, '_call_openrouter_messages', timeout)
+    def duplicate():
+        duplicate_submitted.set()
+        return step(client, study_id, batch)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first = pool.submit(step, client, study_id, batch)
+        assert accepted.wait(5)
+        second = pool.submit(duplicate)
+        assert duplicate_submitted.wait(5)
+        release.set()
+        failed = first.result().json()['data']['batch']
+        assert second.result().json()['data']['batch'] == failed
+    assert len(attempts) == 1
+    assert failed['revision'] == batch['revision'] + 1
+    assert step(client, study_id, failed).json()['data']['batch'] == failed
+    assert step(client, study_id, batch, retry=True).json()['data']['batch'] == failed
+    assert len(attempts) == 1
+    monkeypatch.setattr(interview_service, '_call_openrouter_messages', original)
+    resumed = step(client, study_id, failed, retry=True).json()['data']['batch']
+    assert resumed['status'] == 'running'
+    assert len(calls) == 1
+
+
+def test_batch_daily_run_limit_counts_creation_once(classroom, db_session):
+    from src.persistence.models import UserUsageCounter
+    from src.services.usage_limits import METRIC_INTERVIEW_RUN
+    client, study_id, calls = classroom
+    client.app.state.settings.daily_provider_run_limit = 1
+    request_id = str(uuid4())
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(lambda _: start(client, study_id, request_id=request_id), range(2)))
+    assert all(r.status_code == 200 for r in results)
+    batch = results[0].json()['data']['batch']
+    assert results[1].json()['data']['batch']['job_id'] == batch['job_id']
+    finish(client, study_id, batch)
+    assert start(client, study_id, request_id=request_id).status_code == 200
+    other_study = client.post('/api/v1/studies', json={}).json()['data']['study']['study_id']
+    rejected = start(client, other_study)
+    assert rejected.status_code == 429
+    assert rejected.json()['error']['details']['metric_key'] == METRIC_INTERVIEW_RUN
+    counter = db_session.scalar(select(UserUsageCounter).where(UserUsageCounter.metric_key == METRIC_INTERVIEW_RUN))
+    assert counter.count == 1
+    assert len(calls) == 48
+
+
+def test_batch_history_preserves_completed_and_paused_owned_runs(classroom):
+    client, study_id, _ = classroom
+    completed = finish(client, study_id, start(client, study_id).json()['data']['batch'])
+    paused = step(client, study_id, start(client, study_id).json()['data']['batch']).json()['data']['batch']
+    history = client.get(f'/api/v1/studies/{study_id}/interview/batches').json()['data']['batches']
+    assert history == [paused, completed]
+    assert completed['transcripts'] and completed['session_usage']['cost_usd'] != '0'
+    other = client.post('/api/v1/studies', json={}).json()['data']['study']['study_id']
+    assert client.get(f'/api/v1/studies/{other}/interview/batches').json()['data']['batches'] == []
+    bob = {'x-authenticated-user-id': 'classroom:bob', 'x-authenticated-auth-mode': 'classroom-no-login'}
+    assert client.get(f'/api/v1/studies/{study_id}/interview/batches', headers=bob).status_code == 403
+
+
+def test_concurrent_distinct_batches_share_daily_run_limit(classroom):
+    client, study_id, calls = classroom
+    client.app.state.settings.daily_provider_run_limit = 1
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(lambda _: start(client, study_id), range(2)))
+    assert sorted(r.status_code for r in results) == [200, 429]
+    assert calls == []

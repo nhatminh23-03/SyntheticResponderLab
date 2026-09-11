@@ -711,6 +711,15 @@ def create_standalone_batch(study_id: str, request: Request, payload: dict = Bod
     return response_envelope(request, {"batch": start_batch(db, settings, study, payload)})
 
 
+@router.get("/api/v1/studies/{study_id}/interview/batches")
+def list_standalone_batches(study_id: str, request: Request,
+    db: Session = Depends(get_db_session), settings: AppSettings = Depends(get_settings),
+    current_user: AuthUser = Depends(get_current_user)):
+    from src.services.standalone_interview import list_batches
+    study = get_owned_study_or_404(db, study_id, current_user)
+    return response_envelope(request, {"batches": list_batches(db, settings, study)})
+
+
 @router.get("/api/v1/studies/{study_id}/interview/batches/{job_id}")
 def get_standalone_batch(study_id: str, job_id: str, request: Request,
     db: Session = Depends(get_db_session), settings: AppSettings = Depends(get_settings),

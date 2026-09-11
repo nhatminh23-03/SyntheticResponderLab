@@ -64,3 +64,11 @@ Default API check: `cd ../.. && ./apps/api/.venv/bin/python -m pytest apps/api/t
 - [x] (sol) New batch and regenerate routes enforce study ownership and prevent supplied session identifiers from charging or modifying another student’s session. — check: `cd ../.. && ./apps/api/.venv/bin/python -m pytest apps/api/tests/test_standalone_batch.py -q -k 'ownership or classroom_identity'`
 - [x] (sol) Standalone batches preserve saved workflow sections and remain separate from the main workflow’s latest interview run and insights. — check: `cd ../.. && ./apps/api/.venv/bin/python -m pytest apps/api/tests/test_standalone_batch.py -q -k 'saved_workflow or without_preview'`
 - [x] (sol) An operator can identify a failed batch’s run, persona, model, completed progress, and recorded spend from persisted status or logs. — check: `cd ../.. && ./apps/api/.venv/bin/python -m pytest apps/api/tests/test_standalone_batch.py -q -k failure_status`
+
+## Added after refuter round 1 (blocker F1)
+- [ ] (refuter F1) Once a batch step has failed, a duplicate request that was already queued carrying the same revision cannot issue another paid provider call; only an explicit retry initiated by the student can. — check: `cd ../.. && ./apps/api/.venv/bin/python -m pytest apps/api/tests/test_standalone_batch.py -q -k 'failed_advance_requires_explicit_retry'`
+
+## Added by Sol refute (each needs a check before it can pass)
+- [ ] (sol) After a batch creation request is rejected, the student can correct the settings and successfully start a batch without clearing browser storage. — check: `cd ../.. && cd apps/web && npm run test:unit`
+- [ ] (sol) A returning student can reopen completed or paused batches after closing the tab or starting another batch, with transcripts and measured costs preserved. — check: `cd ../.. && ./apps/api/.venv/bin/python -m pytest apps/api/tests/test_standalone_batch.py -q -k batch_history && cd apps/web && npm run test:unit`
+- [ ] (sol) Standalone batches respect the existing per-user daily run limit without counting each advance or duplicate submission as another run. — check: `cd ../.. && ./apps/api/.venv/bin/python -m pytest apps/api/tests/test_standalone_batch.py -q -k daily_run_limit`

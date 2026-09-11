@@ -38,7 +38,7 @@ import {
 import { cn } from "@/lib/utils";
 import { StudyProvider, useStudy } from "@/providers/study-provider";
 
-import { interviewOperation, type Batch, type RegeneratedAnswer } from "@/lib/standalone-interview";
+import { InterviewOperationError, interviewOperation, type Batch, type RegeneratedAnswer } from "@/lib/standalone-interview";
 
 type Turn = { role: "student" | "persona"; text: string; answerId?: string; version?: number };
 
@@ -92,6 +92,7 @@ function InterviewPageContent() {
     useState<InterviewTranscriptExportFormat | null>(null);
   const [error, setError] = useState("");
   const [batch, setBatch] = useState<Batch | null>(null);
+  const [batchHistory, setBatchHistory] = useState<Batch[]>([]);
   const [batchLoading, setBatchLoading] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
   const [regenerationCost, setRegenerationCost] = useState<string | null>(null);
@@ -263,8 +264,15 @@ function InterviewPageContent() {
       try { batchRequest.current = JSON.parse(savedRequest); } catch { /* Ignore invalid local recovery data. */ }
     }
     let active = true;
+    interviewOperation<{ batches: Batch[] }>(studyId, "batches")
+      .then(({ batches }) => {
+        if (active) setBatchHistory(previous => [
+          ...previous, ...batches.filter(item => !previous.some(saved => saved.job_id === item.job_id)),
+        ]);
+      })
+      .catch((err: Error) => { if (active) setError(err.message); });
     if (saved) interviewOperation<{ batch: Batch }>(studyId, `batches/${encodeURIComponent(saved)}`)
-      .then(({ batch: recovered }) => { if (active) setBatch(recovered); })
+      .then(({ batch: recovered }) => { if (active) setBatch(previous => previous ?? recovered); })
       .catch((err: Error) => { if (active) setError(err.message); });
     return () => { active = false; pauseBatch.current = true; generation.current += 1; };
   }, [studyId]);
@@ -287,16 +295,29 @@ function InterviewPageContent() {
         };
         batchRequest.current = request;
         localStorage.setItem(`interview-batch-request:${studyId}`, JSON.stringify(request));
-        current = (await interviewOperation<{ batch: Batch }>(studyId, "batches", request)).batch;
+        try {
+          current = (await interviewOperation<{ batch: Batch }>(studyId, "batches", request)).batch;
+        } catch (err) {
+          // A definite rejection is safe to discard; an ambiguous network result keeps its ID.
+          if (err instanceof InterviewOperationError && err.status >= 400 && err.status < 500) {
+            batchRequest.current = null;
+            localStorage.removeItem(`interview-batch-request:${studyId}`);
+          }
+          throw err;
+        }
         localStorage.setItem(`interview-batch:${studyId}`, current.job_id);
         localStorage.removeItem(`interview-batch-request:${studyId}`);
         batchRequest.current = null;
       }
       setBatch(current);
+      const started = current;
+      setBatchHistory(previous => [started, ...previous.filter(item => item.job_id !== started.job_id)]);
       do {
         if (pauseBatch.current || current.status === "completed" || current.status === "budget_stopped") break;
-        current = (await interviewOperation<{ batch: Batch }>(studyId, `batches/${current.job_id}/advance`, { revision: current.revision })).batch;
+        current = (await interviewOperation<{ batch: Batch }>(studyId, `batches/${current.job_id}/advance`, { revision: current.revision, retry: resume && current.status === "failed" })).batch;
         setBatch(current);
+        const updated = current;
+        setBatchHistory(previous => previous.map(item => item.job_id === updated.job_id ? updated : item));
       } while (current.status === "running");
     } catch (err) {
       setError(`${(err as Error).message} Saved batch progress can be recovered with Resume batch.`);
@@ -558,8 +579,23 @@ function InterviewPageContent() {
                 {batchLoading ? <Button variant="secondary" onClick={() => { pauseBatch.current = true; }}>Pause after this call</Button> : null}
               </div>
               <p className="mt-2 text-xs text-app-muted">Eight adaptive questions per persona using the fixed household set and Tahoe Mini research brief. Cached interviews replay free.</p>
+              {batchHistory.length > 0 ? <label className="mt-4 block">Saved batches
+                <select aria-label="Saved batches" disabled={busy} value={batch?.job_id ?? ""}
+                  onChange={event => {
+                    const selected = batchHistory.find(item => item.job_id === event.target.value);
+                    if (selected && studyId) {
+                      setBatch(selected);
+                      localStorage.setItem(`interview-batch:${studyId}`, selected.job_id);
+                    }
+                  }}>
+                  <option value="" disabled>Select a saved batch</option>
+                  {batchHistory.map(item => <option key={item.job_id} value={item.job_id}>
+                    {item.job_id} · {item.status} · {item.completed_personas}/{item.persona_count} personas · ${Number(item.session_usage.cost_usd).toFixed(6)}
+                  </option>)}
+                </select>
+              </label> : null}
               {batch ? <div aria-live="polite" className="mt-4 space-y-3">
-                <p>{batch.status === "budget_stopped" ? "Budget stop" : batch.status}: {batch.completed_personas}/{batch.persona_count} personas complete · {batch.revision}/{batch.persona_count * batch.turn_limit * 2} calls resolved</p>
+                <p>{batch.status === "budget_stopped" ? "Budget stop" : batch.status}: {batch.completed_personas}/{batch.persona_count} personas complete · {batch.transcripts.reduce((total, transcript) => total + transcript.messages.length, 0)}/{batch.persona_count * batch.turn_limit * 2} calls resolved</p>
                 <p>Measured cost: ${Number(batch.session_usage.cost_usd).toFixed(6)} · Estimate at start: ${Number(batch.estimated_cost_usd).toFixed(4)}</p>
                 <p className="text-xs text-app-muted">Interviewer: {batch.interviewer_model} · Interviewee: {batch.interviewee_model}</p>
                 {batch.error ? <p role="alert">{batch.error.details?.scope ? `${batch.error.details.scope} cap: ` : ""}{batch.error.message}</p> : null}

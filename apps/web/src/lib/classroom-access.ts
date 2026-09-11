@@ -20,7 +20,7 @@ const CLASSROOM_INTERVIEW_API_RULES = [
     pattern:
       /^\/api\/backend\/api\/v1\/studies\/[A-Za-z0-9_-]+\/interview\/(?:chat|compare|export|batches)\/?$/,
   },
-  { method: "GET", pattern: /^\/api\/backend\/api\/v1\/studies\/[A-Za-z0-9_-]+\/interview\/batches\/[A-Za-z0-9_-]+\/?$/ },
+  { method: "GET", pattern: /^\/api\/backend\/api\/v1\/studies\/[A-Za-z0-9_-]+\/interview\/batches(?:\/[A-Za-z0-9_-]+)?\/?$/ },
   { method: "POST", pattern: /^\/api\/backend\/api\/v1\/studies\/[A-Za-z0-9_-]+\/interview\/(?:batches\/[A-Za-z0-9_-]+\/advance|answers\/[A-Za-z0-9_-]+\/regenerate)\/?$/ },
 ] as const;
 
