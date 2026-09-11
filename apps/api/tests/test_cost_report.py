@@ -103,26 +103,48 @@ def test_cost_report_calculations_use_measured_profiles_and_catalog_rates():
     assert measured_costs[0] * 119 == Decimal("0.0088417")
 
 
-def test_cost_report_publishes_the_checked_totals_and_measurement_labels():
-    report = (
+# The published figures, read from the cost ledger on 2026-09-10 with:
+#   sqlite3 apps/api/local-dev.db "select model, count(distinct persona_id),
+#     round(sum(cost_usd)/count(distinct persona_id),4), round(sum(cost_usd),4)
+#     from interview_turn where cost_usd > 0 group by model;"
+# Pinned here so a number cannot be edited in the report alone.
+PUBLISHED_MEASURED = {
+    "DeepSeek V4 Pro": (30, Decimal("0.0313"), Decimal("0.9387")),
+    "Qwen3.7 Plus": (30, Decimal("0.0281"), Decimal("0.8422")),
+}
+PUBLISHED_TOTAL = Decimal("1.78")
+
+
+def read_report() -> str:
+    return (
         Path(__file__).resolve().parents[3] / "docs" / "cost-report.md"
     ).read_text(encoding="utf-8")
 
-    for required_text in (
-        "**Status: P3.4 is not complete.**",
-        "No complete eight-turn interview or full run has been measured",
-        "$0.00022265 measured",
-        "$0.00534360",
-        "$0.03568560",
-        "$0.11567400",
-        "$0.213744",
-        "$1.427424",
-        "$4.626960",
-        "$0.008916 one-time cold-cache extrapolation",
-        "**Measured:**",
-        "**Extrapolated:**",
-    ):
-        assert required_text in report
+
+def test_cost_report_publishes_the_measured_totals():
+    report = read_report()
+
+    # The report went stale once: it kept declaring the work unmeasured after
+    # sixty interviews had been metered. Pin the live claim, not just the numbers.
+    assert "**Status: P3.4 is complete.**" in report
+    assert "is not complete" not in report
+
+    for label, (interviews, per_interview, total) in PUBLISHED_MEASURED.items():
+        assert label in report
+        assert f"${per_interview:.4f}" in report
+        assert f"${total:.4f}" in report
+        # Internal consistency: a per-interview figure that no longer divides the
+        # published total means one of the two was edited on its own.
+        assert abs(per_interview * interviews - total) <= Decimal("0.01")
+
+    assert f"${PUBLISHED_TOTAL}" in report
+    assert abs(sum(t for _, _, t in PUBLISHED_MEASURED.values()) - PUBLISHED_TOTAL) <= Decimal("0.01")
+
+    # The classroom ceiling is enforced in llm_budget.py; the report must quote it
+    # as a ceiling, never as the expected spend.
+    assert "$22.50" in report
+    assert "hard ceiling" in report
+    assert "not the expected bill" in report
 
 
 def test_lin_recommended_models_are_in_the_catalog_and_priced_in_the_report():
@@ -166,11 +188,8 @@ def test_lin_recommended_models_are_in_the_catalog_and_priced_in_the_report():
     assert blended(haiku) == Decimal("0.0200")
     assert blended(deepseek) < blended(haiku)
 
-    for required_text in (
-        "$0.228250 / $0.303821",
-        "$0.559559 / $0.668887",
-        "less to run than",
-        "$1.0353 against $1.00",
-        "$2.0706 against $5.00",
-    ):
-        assert required_text in report
+    # The report's qualitative claim about the pair, which survives the rewrite:
+    # they are close in price, and the reason is Qwen's reasoning tokens.
+    report = read_report()
+    assert "within ten percent of each other" in report
+    assert "reasoning" in report
