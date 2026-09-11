@@ -101,14 +101,8 @@ broken for the next round to find (batch then regenerate; comparison client then
 two are written to hold across **every** surface that can spend money — the standalone chat, the
 model comparison, and the batch runner — so the family closes rather than one more instance.
 
-- [ ] (refuter round 4, F1) On every surface, an answer cannot be regenerated once a later turn in
-      the same session depends on it — including an answer that was produced by the model comparison
-      and then followed up in chat. The rejection happens before any provider call, so a blocked
-      regeneration never costs anything. — check: `cd ../.. && ./apps/api/.venv/bin/python -m pytest apps/api/tests/test_standalone_batch.py -q -k 'dependent_followup_blocks_regeneration'`
-- [ ] (refuter round 4, F2) On every surface, when a budget stop happens the student still sees every
-      answer that was actually persisted and charged, in the right order, and the app never offers to
-      regenerate a turn the backend already considers superseded. What is displayed matches what is
-      stored. — check: `cd ../.. && ./apps/api/.venv/bin/python -m pytest apps/api/tests/test_standalone_batch.py -q -k 'budget_stop_returns_committed' && cd apps/web && npm run test:unit`
+- [ ] (refuter round 4, F1) On every surface, an answer cannot be regenerated once a later turn in the same session depends on it — including an answer that was produced by the model comparison and then followed up in chat. The rejection happens before any provider call, so a blocked regeneration never costs anything. — check: `cd ../.. && ./apps/api/.venv/bin/python -m pytest apps/api/tests/test_standalone_batch.py -q -k 'dependent_followup_blocks_regeneration'`
+- [ ] (refuter round 4, F2) On every surface, when a budget stop happens the student still sees every answer that was actually persisted and charged, in the right order, and the app never offers to regenerate a turn the backend already considers superseded. What is displayed matches what is stored. — check: `cd ../.. && ./apps/api/.venv/bin/python -m pytest apps/api/tests/test_standalone_batch.py -q -k 'budget_stop_returns_committed' && cd apps/web && npm run test:unit`
 
 ## Added by Sol refute (each needs a check before it can pass)
-- [ ] (sol) A student can download a completed or partially completed batch as CSV or Markdown for submission, with each question and answer attributed to its persona and selected models. — check: `cd ../.. && cd apps/web && npm run test:unit`
+- [x] (sol) A student can download a completed or partially completed batch as CSV or Markdown for submission, with each question and answer attributed to its persona and selected models. — check: `cd ../.. && cd apps/web && npm run test:unit`

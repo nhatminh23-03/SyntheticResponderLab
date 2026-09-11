@@ -1,3 +1,25 @@
+# Completion-check formatting follow-up
+
+Current implementation is committed at `a62b051`, following `99afc65` and
+`f193ca1`. This follow-up changes only DONE and this handoff; it preserves the
+pre-existing checked batch-download outcome. No commit or board write was made.
+
+The two round-4 regressions and fixes were already present. The completion parser
+reads one line per outcome, so their multiline checklist entries hid the commands.
+Joined each entry onto one line, preserving its wording, command and checkbox.
+The actual done.py parser now finds 44 outcomes and 44 nonempty checks. Both
+round-4 commands were executed from the plan directory and passed.
+
+Verification: API 226 passed (10 deprecation warnings); web 79 passed; TypeScript
+`--noEmit --incremental false` passed; R suite nine files passed; diff whitespace,
+protected-file comparison against `91b6e56`, and workflow entry-point AST comparison
+passed. No live provider, browser or PostgreSQL integration checks ran. The accepted
+process-crash accounting window is unchanged. Next step: wrapper completion review;
+checkboxes and board posts remain wrapper-owned. Preserve all protected paths in
+BRIEF and the existing application implementation.
+
+---
+
 # Current follow-up — dependent answers, budget results, and batch downloads
 
 Implemented after `99afc65`; no new commit created. Recent commits: `99afc65`,
