@@ -6,7 +6,7 @@ from decimal import Decimal
 
 from src.persistence.models import InterviewTurn
 from src.services import interview_service as insights
-from src.services.exceptions import ConflictApiError, QuotaExceededApiError, ValidationApiError
+from src.services.exceptions import ConflictApiError, QuotaExceededApiError, TransientProviderError, ValidationApiError
 from src.services.llm_budget import (enforce_budget_open, enforce_measured_cost,
     enforce_run_preflight, load_interview_budget_snapshot, lock_class_budget_for_transaction)
 from src.services.model_catalog import list_interview_model_catalog
@@ -76,17 +76,28 @@ def standalone_themes(session, settings, study, job_id, payload=None):
     record = {"revision": view["revision"], "attempt": attempt, "outcome": "unknown", "themes": None}
     _, pairs = corpus(job)
     result = None
-    def call(**prompts):
-        nonlocal result
-        result = insights._call_openrouter_messages(api_key=settings.openrouter_api_key, model=MODEL,
-            messages=[{"role": "system", "content": prompts["system_prompt"]},
-                      {"role": "user", "content": prompts["user_prompt"]}], timeout=90, max_attempts=1)
+    def record_charge(measured):
         # Empty text keeps the accounting row out of the student transcript corpus.
         session.add(InterviewTurn(study_id=study.id, session_id=job_id,
-            persona_id="__themes__", role="assistant", text="", model=result.model,
-            tokens_in=result.tokens_in, tokens_out=result.tokens_out, cost_usd=result.cost_usd,
-            created_at=insights.utcnow()))
-        record.update(outcome="charged", cost_usd=str(result.cost_usd))
+            persona_id="__themes__", role="assistant", text="", model=measured.model,
+            tokens_in=measured.tokens_in, tokens_out=measured.tokens_out,
+            cost_usd=measured.cost_usd, created_at=insights.utcnow()))
+        record.update(outcome="charged", cost_usd=str(measured.cost_usd))
+
+    def call(**prompts):
+        nonlocal result
+        try:
+            result = insights._call_openrouter_messages(api_key=settings.openrouter_api_key, model=MODEL,
+                messages=[{"role": "system", "content": prompts["system_prompt"]},
+                          {"role": "user", "content": prompts["user_prompt"]}], timeout=90, max_attempts=1)
+        except TransientProviderError as exc:
+            # The provider charged for this call even though its content is unusable.
+            # Record the spend before failing, or the next budget check undercounts
+            # it and authorises a call the allowance no longer covers.
+            if exc.measured_usage is not None:
+                record_charge(exc.measured_usage)
+            raise
+        record_charge(result)
         try:
             enforce_measured_cost(snapshot, cost_usd=result.cost_usd)
         except QuotaExceededApiError as exc:
@@ -108,9 +119,13 @@ def standalone_themes(session, settings, study, job_id, payload=None):
                 raise ValueError("Invalid or ungrounded theme")
         record["themes"] = themes
     except Exception:
+        # Key off whether a charge was actually recorded, not whether a usable result
+        # came back: a rejected-but-billed response has a known charge and would
+        # otherwise be reported to the student as an unknown billing outcome.
         record["message"] = ("Theme extraction failed. Your transcripts are preserved. " +
-            ("The provider's billing outcome is unknown. Retrying may incur another charge." if result is None else
-             "The response could not be validated; its measured charge is recorded. Retrying adds another charge."))
+            ("The response could not be validated; its measured charge is recorded. Retrying adds another charge."
+             if record["outcome"] == "charged" else
+             "The provider's billing outcome is unknown. Retrying may incur another charge."))
     logger.log(logging.INFO if record["themes"] else logging.WARNING, "interview_themes study=%s run=%s revision=%s attempt=%s outcome=%s valid=%s",
         study.public_id, job_id, view["revision"], attempt, record["outcome"], bool(record["themes"]))
     job.result_json = {**job.result_json, "insights": record}

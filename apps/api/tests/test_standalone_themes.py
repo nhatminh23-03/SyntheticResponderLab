@@ -8,6 +8,9 @@ from sqlalchemy import select
 from test_standalone_batch import classroom, start, finish
 from src.persistence.models import Job
 from src.services.interview_cache import InterviewAnswer
+# Bound at import, before any fixture replaces the module attribute, so a test can
+# put the real helper back and exercise the parser at the HTTP boundary.
+from src.services.interview_service import _call_openrouter_messages as _real_openrouter_call
 
 
 @pytest.fixture
@@ -133,3 +136,36 @@ def test_standalone_themes_revision(completed, db_session):
     assert result['stale'] and result['saved']['revision'] == payload['revision']
     assert client.post(url, json=payload).status_code == 409
     assert len(calls) == 1
+
+
+@pytest.mark.parametrize('content', ['', '<think>only reasoning</think>', None])
+def test_standalone_themes_unusable_content_records_measured_cost(completed, monkeypatch, content):
+    """A charged call whose content cannot be used must still move the ledger.
+
+    Refuter round 1 blocker B1. Mock at the HTTP boundary, not at
+    `_call_openrouter_messages`, so the real parser runs and really raises —
+    mocking the helper would skip the exact code path under test.
+    """
+    client, url, batch, calls, _, payload = completed
+    message = {} if content is None else {'content': content}
+
+    class Response:
+        status_code = 200
+        def raise_for_status(self): pass
+        def json(self, **kw):
+            return {'model': 'openai/gpt-4o-mini',
+                    'choices': [{'message': message}],
+                    'usage': {'prompt_tokens': 10, 'completion_tokens': 4, 'cost': Decimal('.002')}}
+
+    monkeypatch.setattr('src.services.interview_service._call_openrouter_messages', _real_openrouter_call)
+    monkeypatch.setattr('src.services.interview_service.requests.post', lambda *a, **kw: Response())
+    result = client.post(url, json=payload).json()['data']['insights']
+
+    assert not result['available'], 'unusable content must not present themes'
+    assert result['saved']['outcome'] == 'charged', 'the provider billed for this call'
+    # The batch itself already spent .048; the discarded call adds its own .002.
+    assert Decimal(result['session_usage']['cost_usd']) == Decimal('.050'), \
+        'the measured charge must reach the ledger or the next budget check undercounts'
+    assert 'billing outcome is unknown' not in result['saved']['message'], \
+        'the charge is known and recorded — do not tell the student otherwise'
+    assert client.get(url.removesuffix('/themes')).json()['data']['batch']['transcripts'] == batch['transcripts']
