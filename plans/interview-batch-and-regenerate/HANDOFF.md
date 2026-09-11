@@ -1,6 +1,18 @@
 # Batch and regeneration handoff
 
-Implemented in the current uncommitted diff on top of `91b6e56` (prior commits: `61b9424`, `2068be9`, `617eab8`, `2398890`). Preserve the pre-existing modified `DONE.md` and untracked wrapper `build.sh`. This session added check commands to the Sol outcomes in `DONE.md`; it did not mark the outcomes complete or write to the wrapper-owned board.
+## Round 2 — completion check paths
+
+The implementation is committed in `39631a2`, following pre-build snapshot `91b6e56` and planning commits `61b9424` and `2068be9`. The worktree was clean when round 2 started.
+
+The reported missing Python runner and web directory were caused by check commands resolving relative to `plans/interview-batch-and-regenerate/`. The completion runner explicitly uses the directory containing `DONE.md` as its working directory. Every check now begins with `cd ../..`; the stale machine-specific checkout path in the explanatory text was removed. No application code or wrapper script changed in round 2.
+
+Reverified in this worktree: API suite (218 passed), web unit suite (69 passed), TypeScript type check, and R suite (nine files passed). Protected files, including the whole budget module, match `91b6e56`; the source of workflow-driven `start_interview_run` also matches that commit. No live paid calls or new PostgreSQL/browser integration checks were run; the limitations below still apply.
+
+All 33 corrected check commands were then executed verbatim via subprocesses with the plan directory as their working directory: 33/33 passed. This verifies the command paths without invoking the wrapper or its board operations. `git diff --check` passed.
+
+Only `DONE.md` and this handoff are edited in round 2. Preserve the committed implementation and wrapper `build.sh`. The wrapper owns board posts and completion checkbox updates; no board write was attempted.
+
+## Round 1 implementation record
 
 ## Implementation
 
