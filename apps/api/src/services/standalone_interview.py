@@ -9,7 +9,7 @@ from uuid import UUID
 from sqlalchemy import select
 
 from src.persistence.models import InterviewTurn, Job, Persona
-from src.services.exceptions import ApiError, ConflictApiError, NotFoundApiError, QuotaExceededApiError, ValidationApiError
+from src.services.exceptions import ApiError, ConflictApiError, NotFoundApiError, QuotaExceededApiError, TransientProviderError, ValidationApiError
 from src.services.ids import make_public_id
 from src.services.interview_cache import resolve_interview_answer
 from src.services.interviewer_agent import build_interviewer_messages, derive_interviewer_turn_plan
@@ -120,7 +120,7 @@ def regenerate_answer(session, settings, study, answer_id, payload):
         select(Job).where(Job.study_id == study.id, Job.job_type == "interview_answer"))
         if answer.payload_json.get("comparison")]
     if session.scalar(select(InterviewTurn.id).where(
-        InterviewTurn.role == "assistant", InterviewTurn.id.not_in(independent_ids),
+        InterviewTurn.role == "assistant", InterviewTurn.text != "", InterviewTurn.id.not_in(independent_ids),
         InterviewTurn.session_id == turn.session_id, InterviewTurn.study_id == study.id,
         InterviewTurn.created_at > turn.created_at).limit(1)):
         raise ConflictApiError("Only the latest answer can be regenerated once follow-ups exist.")
@@ -163,10 +163,16 @@ def regenerate_answer(session, settings, study, answer_id, payload):
             persona_id=context["persona_id"], model=context["model"], question=context["question"],
             prior_turns=context["prior_turns"], call_provider=provider)
     except Exception as exc:
+        measured = exc.measured_usage if isinstance(exc, TransientProviderError) else None
+        if measured is not None:
+            session.add(InterviewTurn(study_id=study.id, persona_id=turn.persona_id,
+                session_id=turn.session_id, role=turn.role, text="", model=measured.model,
+                tokens_in=measured.tokens_in, tokens_out=measured.tokens_out,
+                cost_usd=measured.cost_usd, created_at=service.utcnow()))
         from src.services.exceptions import ProviderUnavailableApiError
         error = exc if isinstance(exc, ApiError) else ProviderUnavailableApiError(str(exc))
         message = error.message
-        if provider_started:
+        if provider_started and measured is None:
             message += " The provider outcome may be unknown; retrying can incur another charge."
         message += " Your previous answer is preserved."
         details = {**error.details, "answer_id": answer_id, "version": expected + 1, "retry_required": True}
@@ -178,6 +184,9 @@ def regenerate_answer(session, settings, study, answer_id, payload):
         attempt.error_json = job.error_json
         attempt.result_json = {"outcome": "unknown" if provider_started else "rejected",
                                "incremental_cost_usd": None if provider_started else "0"}
+        if measured is not None:
+            attempt.result_json = {"outcome": "rejected", "incremental_cost_usd": str(measured.cost_usd),
+                                   "tokens_in": measured.tokens_in, "tokens_out": measured.tokens_out}
         session.commit()
         raise ApiError(error.status_code, error.code, message, details) from exc
     # Keep all incurred spend while replacing only the selected transcript text.
@@ -343,11 +352,17 @@ def advance_batch(session, settings, study, job_id, payload):
         if budget_error:
             raise budget_error
     except Exception as exc:
+        measured = exc.measured_usage if isinstance(exc, TransientProviderError) else None
+        if measured is not None:
+            session.add(InterviewTurn(study_id=study.id, persona_id=persona_id, session_id=job_id,
+                role="user" if asking else "assistant", text="", model=measured.model,
+                tokens_in=measured.tokens_in, tokens_out=measured.tokens_out,
+                cost_usd=measured.cost_usd, created_at=service.utcnow()))
         # Consume even a failed attempt: already queued requests cannot authorize a retry.
         state["revision"] = payload["revision"] + 1
         job.status = "budget_stopped" if isinstance(exc, QuotaExceededApiError) else "failed"
         job.error_json = {"code": exc.code if isinstance(exc, ApiError) else "provider_unavailable",
-                          "message": str(exc) + (" The provider outcome may be unknown; retrying can incur another charge." if not isinstance(exc, ApiError) else ""), "details": exc.details if isinstance(exc, ApiError) else {},
+                          "message": str(exc) + (" The provider outcome may be unknown; retrying can incur another charge." if not isinstance(exc, ApiError) and measured is None else ""), "details": exc.details if isinstance(exc, ApiError) else {},
                           "persona_id": persona_id, "model": model, "revision": state["revision"]}
         job.result_json = state
         session.commit()

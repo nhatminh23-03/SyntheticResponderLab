@@ -161,3 +161,26 @@ def test_openrouter_chat_response_rejects_an_answer_that_was_only_reasoning():
 
     with pytest.raises(TransientProviderError):
         _parse_openrouter_chat_response(payload, requested_model="qwen/qwen3.7-plus")
+
+
+@pytest.mark.parametrize('choices', [[], [{'message': {'content': None}}],
+                                    [{'message': {'content': ''}}]])
+def test_unusable_openrouter_text_carries_validated_usage(choices):
+    from src.services.exceptions import TransientProviderError
+
+    payload = _provider_payload()
+    payload['choices'] = choices
+    with pytest.raises(TransientProviderError) as error:
+        _parse_openrouter_chat_response(payload, requested_model='qwen/qwen3.7-plus')
+    measured = error.value.measured_usage
+    assert measured.text == ''
+    assert measured.cost_usd == Decimal('0.000123456789')
+    assert (measured.tokens_in, measured.tokens_out) == (211, 17)
+
+
+def test_reasoning_only_without_usage_still_rejects_unmeasured_cost():
+    payload = _provider_payload()
+    payload.pop('usage')
+    payload['choices'] = [{'message': {'content': '<think>Reasoning only</think>'}}]
+    with pytest.raises(RuntimeError, match='did not include measured usage'):
+        _parse_openrouter_chat_response(payload, requested_model='qwen/qwen3.7-plus')

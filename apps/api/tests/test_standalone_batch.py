@@ -572,3 +572,64 @@ def test_budget_stop_returns_committed_chat_answer(classroom, db_session, monkey
     assert db_session.get(InterviewTurn, UUID(job.payload_json['turn_id'])).text == committed['reply']
     assert Decimal(committed['session_usage']['cost_usd']) == Decimal('1.001')
     assert regen(client, study_id, first['answer_id']).status_code == 409
+
+
+@pytest.mark.parametrize('activity', ['regenerate', 'batch_question', 'batch_answer'])
+def test_reasoning_only_response_records_measured_cost(classroom, monkeypatch, db_session, activity):
+    import requests
+    from src.services.llm_budget import load_interview_budget_snapshot
+
+    client, study_id, _ = classroom
+    if activity == 'regenerate':
+        original = chat(client, study_id).json()['data']['interview_chat']
+        session_id = original['session_id']
+    else:
+        original = start(client, study_id).json()['data']['batch']
+        # Preserve an existing displayed answer, exercising both batch roles.
+        for _ in range(2 if activity == 'batch_question' else 3):
+            original = step(client, study_id, original).json()['data']['batch']
+        session_id = original['job_id']
+    before = load_interview_budget_snapshot(db_session, session_id=session_id,
+                                           run_budget_usd=client.app.state.settings.llm_budget_usd)
+    attempts = []
+    def reasoning_only(*args, **kwargs):
+        attempts.append(kwargs)
+        response = requests.Response()
+        response.status_code = 200
+        response._content = b'{"model":"qwen/qwen3.7-plus","choices":[{"message":{"content":"<think>Private reasoning only</think>"}}],"usage":{"prompt_tokens":123,"completion_tokens":456,"cost":0.012345}}'
+        return response
+    from src.services import interview_service
+    successful_provider = interview_service._call_openrouter_messages
+    monkeypatch.setattr('src.services.interview_service._call_openrouter_messages', real_provider)
+    monkeypatch.setattr('src.services.interview_service.requests.post', reasoning_only)
+
+    if activity == 'regenerate':
+        failed = regen(client, study_id, original['answer_id'])
+        assert failed.status_code == 503
+        saved = db_session.scalar(select(Job).where(Job.public_id == original['answer_id']))
+        db_session.refresh(saved)
+        assert saved.result_json['reply'] == original['reply']
+        turn = db_session.get(InterviewTurn, UUID(saved.payload_json['turn_id']))
+        db_session.refresh(turn)
+        assert turn.text == original['reply']
+        assert turn.cost_usd == before.run_spent_usd
+        assert chat(client, study_id).json()['data']['interview_chat']['reply'] == original['reply']
+    else:
+        failed = step(client, study_id, original).json()['data']['batch']
+        assert failed['status'] == 'failed'
+        retrieved = client.get(f'/api/v1/studies/{study_id}/interview/batches/{session_id}').json()['data']['batch']
+        assert retrieved['transcripts'] == original['transcripts']
+
+    after = load_interview_budget_snapshot(db_session, session_id=session_id,
+                                          run_budget_usd=client.app.state.settings.llm_budget_usd)
+    assert after.run_spent_usd == before.run_spent_usd + Decimal('0.012345')
+    assert after.class_spent_usd == before.class_spent_usd + Decimal('0.012345')
+    charged = db_session.scalar(select(InterviewTurn).where(
+        InterviewTurn.session_id == session_id, InterviewTurn.cost_usd == Decimal('0.012345')))
+    assert charged.text == ''
+    assert (charged.tokens_in, charged.tokens_out, charged.model) == (123, 456, 'qwen/qwen3.7-plus')
+    assert len(attempts) == 1
+
+    if activity == 'regenerate':
+        monkeypatch.setattr('src.services.interview_service._call_openrouter_messages', successful_provider)
+        assert regen(client, study_id, original['answer_id'], version=1, retry=True).status_code == 200

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
+
+if TYPE_CHECKING:
+    from src.services.interview_cache import InterviewAnswer
 
 
 class ApiError(Exception):
@@ -79,3 +82,7 @@ class TransientProviderError(RuntimeError):
     misconfiguration (no API key) or a budget stop, both of which must stay
     fatal. Only raise this where the fault is demonstrably the response itself.
     """
+
+    def __init__(self, message: str, *, measured_usage: InterviewAnswer | None = None) -> None:
+        super().__init__(message)
+        self.measured_usage = measured_usage

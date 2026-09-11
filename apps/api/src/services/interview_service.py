@@ -1558,16 +1558,6 @@ def _parse_openrouter_chat_response(
     if not isinstance(payload, dict):
         raise RuntimeError("OpenRouter chat response must be a JSON object.")
 
-    try:
-        text = payload["choices"][0]["message"]["content"]
-    except (KeyError, IndexError, TypeError) as exc:
-        raise TransientProviderError("OpenRouter chat response did not include assistant text.") from exc
-    if not isinstance(text, str):
-        raise TransientProviderError("OpenRouter chat response included empty assistant text.")
-    text = _strip_inline_reasoning(text)
-    if not text.strip():
-        raise TransientProviderError("OpenRouter chat response included empty assistant text.")
-
     usage = payload.get("usage")
     if not isinstance(usage, dict):
         raise RuntimeError(
@@ -1578,6 +1568,20 @@ def _parse_openrouter_chat_response(
     tokens_out = _required_nonnegative_usage_int(usage, "completion_tokens")
     cost_usd = _required_nonnegative_usage_cost(usage)
     response_model = str(payload.get("model") or requested_model).strip() or requested_model
+
+    measured_usage = OpenRouterChatResult(
+        text="", model=response_model, tokens_in=tokens_in,
+        tokens_out=tokens_out, cost_usd=cost_usd,
+    )
+    try:
+        text = payload["choices"][0]["message"]["content"]
+    except (KeyError, IndexError, TypeError) as exc:
+        raise TransientProviderError("OpenRouter chat response did not include assistant text.", measured_usage=measured_usage) from exc
+    if not isinstance(text, str):
+        raise TransientProviderError("OpenRouter chat response included empty assistant text.", measured_usage=measured_usage)
+    text = _strip_inline_reasoning(text)
+    if not text.strip():
+        raise TransientProviderError("OpenRouter chat response included empty assistant text.", measured_usage=measured_usage)
 
     return OpenRouterChatResult(
         text=text,

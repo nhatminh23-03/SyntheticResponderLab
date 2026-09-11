@@ -1,3 +1,28 @@
+# Reasoning-only response cost fix — 2026-09-10
+
+Scoped fix: the chat parser validates usage before rejecting text and carries it
+on TransientProviderError. Regeneration and batch failures persist empty-text
+InterviewTurns with that measured usage. Regeneration's follow-up guard ignores
+these empty cost records so explicit retry remains possible; its audit records
+known rejected spend. Original answers/cache and batch transcripts are preserved.
+
+Changed production files: apps/api/src/services/{exceptions,interview_service,
+standalone_interview}.py. Tests: test_interview_turns.py and
+test_standalone_batch.py. Full API suite: 241 passed (10 existing warnings).
+Web npm run test:unit: 82 passed. The three cases selected by
+reasoning_only_response_records_measured_cost failed on missing spend with only
+the three production files restored to HEAD, then passed after exact restoration
+of the fix. git diff --check passed. No live provider calls were made.
+
+No commits created; initial worktree was clean. Recent commits: 4dd304e,
+d965506, a084941. Dirty files are the five code/test files above and this handoff.
+Active plan context remains BRIEF.md and DONE.md in this directory. No further
+patch is identified. Preserve the prerecord script, budget constants, and cost
+report/test, all unchanged. The existing process-crash accounting limitation
+remains outside this fix.
+
+---
+
 # Scoped defect fixes — 2026-09-10
 
 Fixed only the two requested spending defects. In `standalone_interview.py`,
