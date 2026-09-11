@@ -77,7 +77,7 @@ Default API check: `cd ../.. && ./apps/api/.venv/bin/python -m pytest apps/api/t
 ## Added by Sol refute (each needs a check before it can pass)
 - [x] (sol) Pausing a batch visibly confirms when execution has stopped, prevents further paid calls until Resume, and preserves the current call’s completed result and cost. — check: `cd ../.. && cd apps/web && npm run test:unit`
 - [x] (sol) An operator can trace each regeneration attempt to its answer, student session, model, outcome, and incremental spend, including failures with unknown provider outcomes. — check: `cd ../.. && ./apps/api/.venv/bin/python -m pytest apps/api/tests/test_standalone_batch.py -q -k attempt_audit`
-- [ ] (refuter F2) When a budget stop happens partway through a model comparison, an answer that already completed and was already charged stays visible and stays regeneratable; only the models that never answered show the budget error. — check: `cd ../.. && cd apps/web && npm run test:unit`
+- [x] (refuter F2) When a budget stop happens partway through a model comparison, an answer that already completed and was already charged stays visible and stays regeneratable; only the models that never answered show the budget error. — check: `cd ../.. && cd apps/web && npm run test:unit`
 
 ## Deliberately accepted, not a defect to fix
 
@@ -93,3 +93,19 @@ session. Leave a `ponytail:` comment at the provider-call site naming the ceilin
 path so the next person does not rediscover it as a surprise.
 
 Revisit if this ever runs unattended at volume, or if spend per step rises by an order of magnitude.
+
+## Added after refuter round 4 — stated as invariants, not single instances
+
+Rounds 1-4 each reported one path and the fix landed on that path only, leaving the sibling path
+broken for the next round to find (batch then regenerate; comparison client then chat page). These
+two are written to hold across **every** surface that can spend money — the standalone chat, the
+model comparison, and the batch runner — so the family closes rather than one more instance.
+
+- [ ] (refuter round 4, F1) On every surface, an answer cannot be regenerated once a later turn in
+      the same session depends on it — including an answer that was produced by the model comparison
+      and then followed up in chat. The rejection happens before any provider call, so a blocked
+      regeneration never costs anything. — check: `cd ../.. && ./apps/api/.venv/bin/python -m pytest apps/api/tests/test_standalone_batch.py -q -k 'dependent_followup_blocks_regeneration'`
+- [ ] (refuter round 4, F2) On every surface, when a budget stop happens the student still sees every
+      answer that was actually persisted and charged, in the right order, and the app never offers to
+      regenerate a turn the backend already considers superseded. What is displayed matches what is
+      stored. — check: `cd ../.. && ./apps/api/.venv/bin/python -m pytest apps/api/tests/test_standalone_batch.py -q -k 'budget_stop_returns_committed' && cd apps/web && npm run test:unit`
