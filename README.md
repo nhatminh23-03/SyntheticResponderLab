@@ -161,6 +161,7 @@ Use [`apps/web/.env.example`](apps/web/.env.example):
 API_BASE_URL=http://localhost:8000
 DEPLOYMENT_SHARED_SECRET=
 APP_ACCESS_PASSWORD=
+CLASSROOM_NO_LOGIN=false
 
 # Clerk (real user auth). Required in production unless APP_ACCESS_PASSWORD
 # is being used as the only gate.
@@ -178,6 +179,7 @@ Production note:
 - `DEPLOYMENT_SHARED_SECRET` must match the backend value so the server-side proxy can reach protected API routes
 - Clerk (`NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` + `CLERK_SECRET_KEY`) is the primary authentication method; users sign in via Clerk and the proxy forwards trusted identity headers to the backend
 - `APP_ACCESS_PASSWORD` is now **optional**. It remains available as an emergency / maintenance pre-gate that can be enabled in front of Clerk; if set in production it must be at least 12 characters. Leave empty for normal Clerk-authenticated operation
+- `CLASSROOM_NO_LOGIN` defaults to `false`. Set it to `true` only for a classroom window to let anonymous students use `/interview`; it does not open the study workflow or unrelated backend routes. Each browser receives an HTTP-only classroom session id so studies and transcripts remain isolated between students.
 - in local development only, the web app can fall back to `http://127.0.0.1:8000` when `API_BASE_URL` is unset
 - in production-like environments, missing or invalid backend env will fail during startup/build instead of silently falling back
 - production builds must configure either Clerk or `APP_ACCESS_PASSWORD`; configuring neither fails fast at startup
@@ -278,6 +280,10 @@ This means anonymous users cannot:
 - call the protected frontend proxy routes (proxy returns 401)
 - directly call backend study/upload/simulation routes without the shared secret
 - impersonate another user by setting `X-Authenticated-*` headers manually (the proxy always overwrites them)
+
+When `CLASSROOM_NO_LOGIN=true`, the first two statements have one narrow exception: anonymous users
+can load `/interview` and call the persona list, interview model catalog, study bootstrap/read, chat,
+comparison, and transcript-export routes required by that page. Turn the flag back off after class.
 
 Design notes:
 - the backend does not verify Clerk JWTs directly today; trust flows through the proxy + `DEPLOYMENT_SHARED_SECRET`. Adding JWT verification on the FastAPI side is a future defense-in-depth step.

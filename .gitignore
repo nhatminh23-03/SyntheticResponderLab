@@ -74,3 +74,4 @@ NeoSmart-Hackathon-App/.streamlit/
 .coverage
 coverage/
 htmlcov/
+.build-loop/

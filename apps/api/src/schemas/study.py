@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from decimal import Decimal
 from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl
@@ -158,3 +159,35 @@ class InterviewChatRequest(BaseModel):
     messages: List[InterviewChatMessage] = Field(default_factory=list)
     transcript_source: Literal["model_a", "model_b"] = "model_a"
     model: Optional[str] = None
+    session_id: Optional[str] = Field(default=None, max_length=128)
+    estimated_run_cost_usd: Optional[Decimal] = Field(default=None, ge=0)
+    standalone: bool = False
+    allow_expensive_models: bool = False
+
+
+class InterviewTranscriptExportTurn(BaseModel):
+    role: Literal["student", "persona"]
+    text: str = Field(min_length=1, max_length=50_000)
+
+
+class InterviewTranscriptExportRequest(BaseModel):
+    persona_id: str = Field(min_length=1, max_length=128)
+    interviewee_model: str = Field(min_length=1, max_length=256)
+    turns: List[InterviewTranscriptExportTurn] = Field(min_length=1, max_length=200)
+
+
+class InterviewComparisonRequest(BaseModel):
+    persona_id: str
+    question: str
+    model_ids: List[str] = Field(min_length=2, max_length=6)
+    allow_expensive_models: bool = False
+    session_id: Optional[str] = Field(default=None, max_length=128)
+
+
+class InterviewerNextQuestionRequest(BaseModel):
+    persona_id: str
+    messages: List[InterviewChatMessage] = Field(default_factory=list)
+    interviewer_model: Optional[str] = None
+    interviewee_model: Optional[str] = None
+    persona_count: int = Field(default=3, ge=3, le=30)
+    session_id: Optional[str] = Field(default=None, max_length=128)

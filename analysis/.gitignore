@@ -1,0 +1,5 @@
+.RData
+.Rhistory
+.Ruserdata
+renv/library/
+renv/staging/

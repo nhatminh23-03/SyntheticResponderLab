@@ -19,6 +19,7 @@ import requests
 from src.simulation.interview_prompt_builder import (
     build_judge_prompt,
     resolve_questions,
+    resolve_fit_tier,
 )
 
 _OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
@@ -60,7 +61,8 @@ def score_interview_batch(
                 {
                     "persona_id": str,
                     "score": float,
-                    "dimension_scores": {dimension: 0|1, ...},
+                    "dimension_scores": {dimension: 0|1|null, ...},
+                    "not_applicable_dimensions": [dimension, ...],
                     "has_error": bool,
                 },
                 ...
@@ -79,22 +81,32 @@ def score_interview_batch(
             pair.get("model_a", {}).get("error")
             or pair.get("model_b", {}).get("error")
         )
+        applicable_dimensions = _applicable_dimensions(persona)
 
         if has_error:
-            # Error pairs contribute 0 to all dimensions
-            dimension_scores = {d: 0 for d in _DIMENSIONS}
+            # Error pairs contribute 0 to every applicable dimension.
+            dimension_scores = {d: 0 for d in applicable_dimensions}
             score = 0.0
         else:
             dimension_scores = _score_pair(
                 resolved_questions, answers_a, answers_b, persona,
                 api_key, judge_model, timeout
             )
-            score = sum(dimension_scores.values()) / len(_DIMENSIONS)
+            score = sum(dimension_scores.values()) / len(applicable_dimensions)
+
+        not_applicable_dimensions = [
+            dimension for dimension in _DIMENSIONS
+            if dimension not in applicable_dimensions
+        ]
 
         persona_scores.append({
             "persona_id": persona_id,
             "score": round(score, 4),
-            "dimension_scores": dimension_scores,
+            "dimension_scores": {
+                dimension: dimension_scores.get(dimension)
+                for dimension in _DIMENSIONS
+            },
+            "not_applicable_dimensions": not_applicable_dimensions,
             "has_error": has_error,
         })
 
@@ -110,13 +122,18 @@ def score_interview_batch(
 
     corpus_average = sum(p["score"] for p in persona_scores) / len(persona_scores)
 
-    per_dimension_avg = {
-        d: round(
-            sum(p["dimension_scores"].get(d, 0) for p in persona_scores) / len(persona_scores),
-            4,
+    per_dimension_avg = {}
+    for dimension in _DIMENSIONS:
+        applicable_scores = [
+            score["dimension_scores"][dimension]
+            for score in persona_scores
+            if score["dimension_scores"][dimension] is not None
+        ]
+        per_dimension_avg[dimension] = (
+            round(sum(applicable_scores) / len(applicable_scores), 4)
+            if applicable_scores
+            else None
         )
-        for d in _DIMENSIONS
-    }
 
     flagged = [
         p["persona_id"] for p in persona_scores
@@ -150,10 +167,20 @@ def _score_pair(
     system_prompt, user_prompt = build_judge_prompt(questions, answers_a, answers_b, persona)
 
     raw = _call_openrouter(api_key, judge_model, system_prompt, user_prompt, timeout)
-    return _parse_dimension_scores(raw)
+    return _parse_dimension_scores(raw, _applicable_dimensions(persona))
 
 
-def _parse_dimension_scores(raw: str) -> dict[str, int]:
+def _applicable_dimensions(persona: dict) -> list[str]:
+    """Return the dimensions that can be scored from the available persona data."""
+    if resolve_fit_tier(persona):
+        return list(_DIMENSIONS)
+    return [dimension for dimension in _DIMENSIONS if dimension != "fit_tier_alignment"]
+
+
+def _parse_dimension_scores(
+    raw: str,
+    dimensions: list[str] | None = None,
+) -> dict[str, int]:
     """Parse judge output and return {dimension: 0|1}. Defaults to 0 on parse failure."""
     parsed: dict[str, Any] = {}
     try:
@@ -172,7 +199,7 @@ def _parse_dimension_scores(raw: str) -> dict[str, int]:
                     pass
 
     result = {}
-    for d in _DIMENSIONS:
+    for d in dimensions or _DIMENSIONS:
         val = parsed.get(d, 0)
         try:
             result[d] = 1 if int(val) >= 1 else 0

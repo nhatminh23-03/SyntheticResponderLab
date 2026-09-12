@@ -1,6 +1,13 @@
 from __future__ import annotations
 
+from decimal import Decimal
 from pathlib import Path
+
+from sqlalchemy import select
+
+from src.persistence.models import InterviewTurn, Persona, Study
+from src.persistence.persona_seed import load_persona_seed_rows
+from src.services.interview_service import OpenRouterChatResult
 
 
 def _create_ready_to_run_study(client, study_mode: str = "neo_smart") -> str:
@@ -363,10 +370,427 @@ def test_interview_chat_endpoint_continues_selected_persona(client, monkeypatch)
 
     client.app.state.settings.openrouter_api_key = "test-key"
     captured = {}
+    provider_call_count = 0
 
     def fake_call_openrouter_messages(**kwargs):
+        nonlocal provider_call_count
+        provider_call_count += 1
         captured.update(kwargs)
-        return "I would move faster if the install felt predictable and the price included everything."
+        return OpenRouterChatResult(
+            text="I would move faster if the install felt predictable and the price included everything.",
+            model=kwargs["model"],
+            tokens_in=347,
+            tokens_out=19,
+            cost_usd=Decimal("0.000184250000"),
+        )
+
+    monkeypatch.setattr(
+        "src.services.interview_service._call_openrouter_messages",
+        fake_call_openrouter_messages,
+    )
+
+    first_question = {
+        "persona_id": persona_id,
+        "prompt": "What would make you more confident about buying?",
+        "messages": [
+            {
+                "role": "user",
+                "content": "Remind me what matters most in your decision?",
+            },
+            {
+                "role": "assistant",
+                "content": "I need to trust the install process and feel like I will use it every week.",
+            },
+        ],
+        "transcript_source": "model_a",
+    }
+    response = client.post(
+        f"/api/v1/studies/{study_id}/interview/chat",
+        json=first_question,
+    )
+
+    assert response.status_code == 200
+    payload = response.json()["data"]["interview_chat"]
+    assert payload["persona_id"] == persona_id
+    assert payload["transcript_source"] == "model_a"
+    assert payload["reply"].startswith("I would move faster")
+    assert payload["model"] == latest_interview["pairs"][0]["model_a"]["model"]
+    assert payload["session_id"].startswith("ses_")
+    assert payload["cache_hit"] is False
+    assert payload["session_usage"] == {
+        "tokens_in": 347,
+        "tokens_out": 19,
+        "cost_usd": "0.00018425",
+    }
+    assert provider_call_count == 1
+    assert captured["api_key"] == "test-key"
+    assert captured["messages"][0]["role"] == "system"
+    assert '"fit_tier"' not in captured["messages"][0]["content"]
+    assert '"likely_use_case": "Dedicated home office"' in captured["messages"][0]["content"]
+    assert captured["messages"][-1] == {
+        "role": "user",
+        "content": "What would make you more confident about buying?",
+    }
+
+    client.app.state.settings.openrouter_api_key = ""
+    repeated_response = client.post(
+        f"/api/v1/studies/{study_id}/interview/chat",
+        json=first_question,
+    )
+    assert repeated_response.status_code == 200
+    repeated_payload = repeated_response.json()["data"]["interview_chat"]
+    assert repeated_payload["reply"] == payload["reply"]
+    assert repeated_payload["cache_hit"] is True
+    assert repeated_payload["session_usage"] == {
+        "tokens_in": 0,
+        "tokens_out": 0,
+        "cost_usd": "0",
+    }
+    assert repeated_payload["session_id"] != payload["session_id"]
+    assert provider_call_count == 1
+
+    client.app.state.settings.openrouter_api_key = "test-key"
+
+    over_budget_preflight = client.post(
+        f"/api/v1/studies/{study_id}/interview/chat",
+        json={
+            **first_question,
+            "prompt": "What else would make this purchase impossible?",
+            # This session currently contains only a free cache hit. Its first
+            # paid call must still go through the run preflight.
+            "session_id": repeated_payload["session_id"],
+            "estimated_run_cost_usd": "0.7501",
+        },
+    )
+    assert over_budget_preflight.status_code == 429
+    preflight_error = over_budget_preflight.json()["error"]
+    assert preflight_error["code"] == "quota_exceeded"
+    assert "would cost $0.76" in preflight_error["message"]
+    assert provider_call_count == 1
+
+    followup_response = client.post(
+        f"/api/v1/studies/{study_id}/interview/chat",
+        json={
+            "persona_id": persona_id,
+            "prompt": "What would predictable installation look like?",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "What would make you more confident about buying?",
+                },
+                {"role": "assistant", "content": payload["reply"]},
+            ],
+            "transcript_source": "model_a",
+            "session_id": payload["session_id"],
+        },
+    )
+    assert followup_response.status_code == 200
+    followup_payload = followup_response.json()["data"]["interview_chat"]
+    assert followup_payload["session_id"] == payload["session_id"]
+    assert followup_payload["cache_hit"] is False
+    assert followup_payload["session_usage"] == {
+        "tokens_in": 694,
+        "tokens_out": 38,
+        "cost_usd": "0.00036850",
+    }
+    assert provider_call_count == 2
+
+    session_factory = client.app.state.session_factory
+    with session_factory() as session:
+        turns = session.scalars(
+            select(InterviewTurn)
+            .where(InterviewTurn.session_id == payload["session_id"])
+            .order_by(InterviewTurn.created_at, InterviewTurn.id)
+        ).all()
+
+    assert [(turn.role, turn.text) for turn in turns] == [
+        ("user", "What would make you more confident about buying?"),
+        (
+            "assistant",
+            "I would move faster if the install felt predictable and the price included everything.",
+        ),
+        ("user", "What would predictable installation look like?"),
+        (
+            "assistant",
+            "I would move faster if the install felt predictable and the price included everything.",
+        ),
+    ]
+    assert all(turn.study_id is not None for turn in turns)
+    assert all(turn.persona_id == persona_id for turn in turns)
+    assert all(turn.model == payload["model"] for turn in turns)
+    assert [(turn.tokens_in, turn.tokens_out, turn.cost_usd) for turn in turns] == [
+        (0, 0, Decimal("0E-18")),
+        (347, 19, Decimal("0.000184250000000000")),
+        (0, 0, Decimal("0E-18")),
+        (347, 19, Decimal("0.000184250000000000")),
+    ]
+
+    measured_session_spend = Decimal("0.000368500000")
+    client.app.state.settings.llm_budget_usd = measured_session_spend
+    run_hard_stop = client.post(
+        f"/api/v1/studies/{study_id}/interview/chat",
+        json={
+            **first_question,
+            "prompt": "Can you add one more concern?",
+            "session_id": payload["session_id"],
+        },
+    )
+    assert run_hard_stop.status_code == 429
+    assert run_hard_stop.json()["error"]["details"]["scope"] == "run"
+    assert provider_call_count == 2
+
+    client.app.state.settings.llm_budget_usd = measured_session_spend + Decimal("0.0001")
+    measured_overage = client.post(
+        f"/api/v1/studies/{study_id}/interview/chat",
+        json={
+            **first_question,
+            "prompt": "Could one last concern fit in the remaining budget?",
+            "session_id": payload["session_id"],
+        },
+    )
+    assert measured_overage.status_code == 429
+    assert measured_overage.json()["error"]["details"]["measured_cost_usd"] == "0.000184250000"
+    assert measured_overage.json()["error"]["details"]["session_id"] == payload["session_id"]
+    assert measured_overage.json()["error"]["details"]["session_usage"] == {
+        "tokens_in": 1041,
+        "tokens_out": 57,
+        "cost_usd": "0.00055275",
+    }
+    assert provider_call_count == 3
+
+    blocked_after_overage = client.post(
+        f"/api/v1/studies/{study_id}/interview/chat",
+        json={
+            **first_question,
+            "prompt": "This second overage must not reach the provider.",
+            "session_id": payload["session_id"],
+        },
+    )
+    assert blocked_after_overage.status_code == 429
+    assert provider_call_count == 3
+
+    spend_after_overage = measured_session_spend + Decimal("0.000184250000")
+    client.app.state.settings.llm_budget_usd = spend_after_overage / 30
+    class_hard_stop = client.post(
+        f"/api/v1/studies/{study_id}/interview/chat",
+        json={
+            **first_question,
+            "prompt": "Which new issue should the whole class consider?",
+        },
+    )
+    assert class_hard_stop.status_code == 429
+    assert class_hard_stop.json()["error"]["details"]["scope"] == "class"
+    assert provider_call_count == 3
+
+    client.app.state.settings.llm_budget_usd = Decimal("0")
+    kill_switch_stop = client.post(
+        f"/api/v1/studies/{study_id}/interview/chat",
+        json={
+            **first_question,
+            "prompt": "Should this paid request be disabled?",
+        },
+    )
+    assert kill_switch_stop.status_code == 429
+    assert "Budget hard stop" in kill_switch_stop.json()["error"]["message"]
+    assert provider_call_count == 3
+
+    client.app.state.settings.llm_budget_usd = Decimal("0.0001")
+    first_call_overage = client.post(
+        f"/api/v1/studies/{study_id}/interview/chat",
+        json={
+            **first_question,
+            "prompt": "Can a newly started session exceed its first-call budget?",
+        },
+    )
+    assert first_call_overage.status_code == 429
+    first_call_error = first_call_overage.json()["error"]
+    over_budget_session_id = first_call_error["details"]["session_id"]
+    assert over_budget_session_id.startswith("ses_")
+    assert first_call_error["details"]["session_usage"] == {
+        "tokens_in": 347,
+        "tokens_out": 19,
+        "cost_usd": "0.00018425",
+    }
+    assert provider_call_count == 4
+
+    retry_over_budget_session = client.post(
+        f"/api/v1/studies/{study_id}/interview/chat",
+        json={
+            **first_question,
+            "prompt": "This retry must retain the generated session and stop before charging.",
+            "session_id": over_budget_session_id,
+        },
+    )
+    assert retry_over_budget_session.status_code == 429
+    assert retry_over_budget_session.json()["error"]["details"]["scope"] == "run"
+    assert provider_call_count == 4
+
+    client.app.state.settings.llm_budget_usd = Decimal("0.75")
+
+    with session_factory() as session:
+        repeated_turns = session.scalars(
+            select(InterviewTurn)
+            .where(InterviewTurn.session_id == repeated_payload["session_id"])
+            .order_by(InterviewTurn.created_at, InterviewTurn.id)
+        ).all()
+    assert [(turn.role, turn.tokens_in, turn.tokens_out, turn.cost_usd) for turn in repeated_turns] == [
+        ("user", 0, 0, Decimal("0E-18")),
+        ("assistant", 0, 0, Decimal("0E-18")),
+    ]
+
+    client.app.state.settings.cache_mode = "replay_only"
+    replay_miss_response = client.post(
+        f"/api/v1/studies/{study_id}/interview/chat",
+        json={
+            **first_question,
+            "prompt": "Which entirely new concern should we discuss?",
+        },
+    )
+    assert replay_miss_response.status_code == 409
+    assert "CACHE_MODE=replay_only" in replay_miss_response.json()["error"]["message"]
+    assert provider_call_count == 4
+
+
+def test_interview_chat_endpoint_supports_standalone_fixed_personas(
+    client,
+    db_session,
+    monkeypatch,
+):
+    persona_row = load_persona_seed_rows()[0]
+    db_session.add(Persona(**persona_row))
+    db_session.commit()
+    study_id = client.post("/api/v1/studies", json={}).json()["data"]["study"]["study_id"]
+    client.app.state.settings.openrouter_api_key = "test-key"
+    provider_calls: list[dict] = []
+
+    def fake_call_openrouter_messages(**kwargs):
+        provider_calls.append(kwargs)
+        return OpenRouterChatResult(
+            text="I would first want to understand the total installed cost.",
+            model=kwargs["model"],
+            tokens_in=210,
+            tokens_out=14,
+            cost_usd=Decimal("0.0001"),
+        )
+
+    monkeypatch.setattr(
+        "src.services.interview_service._call_openrouter_messages",
+        fake_call_openrouter_messages,
+    )
+    request_payload = {
+        "persona_id": persona_row["persona_id"],
+        "prompt": "What would you need to know first?",
+        "messages": [
+            {"role": "user", "content": "What is your first reaction?"},
+            {"role": "assistant", "content": "I like the idea, but I would be cautious."},
+        ],
+        "model": "openai/gpt-4o-mini",
+        "session_id": None,
+        "standalone": True,
+        "allow_expensive_models": False,
+    }
+
+    response = client.post(
+        f"/api/v1/studies/{study_id}/interview/chat",
+        json=request_payload,
+    )
+
+    assert response.status_code == 200
+    payload = response.json()["data"]["interview_chat"]
+    assert payload["persona_id"] == persona_row["persona_id"]
+    assert payload["transcript_source"] == "standalone"
+    assert payload["source_run_id"] is None
+    assert payload["session_id"].startswith("ses_")
+    assert payload["reply"].startswith("I would first want")
+    assert payload["session_usage"] == {
+        "tokens_in": 210,
+        "tokens_out": 14,
+        "cost_usd": "0.0001",
+    }
+    assert payload["system_prompt"] == provider_calls[0]["messages"][0]["content"]
+    assert "fit_tier" not in payload["system_prompt"]
+    assert provider_calls[0]["messages"][-3:] == [
+        {"role": "user", "content": "What is your first reaction?"},
+        {"role": "assistant", "content": "I like the idea, but I would be cautious."},
+        {"role": "user", "content": "What would you need to know first?"},
+    ]
+
+    session_factory = client.app.state.session_factory
+    with session_factory() as session:
+        persisted_turns = session.scalars(
+            select(InterviewTurn)
+            .where(InterviewTurn.session_id == payload["session_id"])
+            .order_by(InterviewTurn.created_at, InterviewTurn.id)
+        ).all()
+    assert [(turn.role, turn.text) for turn in persisted_turns] == [
+        ("user", "What would you need to know first?"),
+        ("assistant", "I would first want to understand the total installed cost."),
+    ]
+
+    client.app.state.settings.openrouter_api_key = ""
+    missing_key = client.post(
+        f"/api/v1/studies/{study_id}/interview/chat",
+        json={**request_payload, "prompt": "What is one uncached concern?"},
+    )
+    assert missing_key.status_code == 409
+    missing_key_details = missing_key.json()["error"]["details"]
+    assert missing_key_details["system_prompt"] == payload["system_prompt"]
+    assert "fit_tier" not in missing_key_details["system_prompt"]
+
+    unknown_model = client.post(
+        f"/api/v1/studies/{study_id}/interview/chat",
+        json={**request_payload, "model": "provider/not-curated"},
+    )
+    assert unknown_model.status_code == 400
+    assert "curated interview catalog" in unknown_model.json()["error"]["message"]
+
+    expensive_without_opt_in = client.post(
+        f"/api/v1/studies/{study_id}/interview/chat",
+        json={**request_payload, "model": "anthropic/claude-sonnet-4.5"},
+    )
+    assert expensive_without_opt_in.status_code == 400
+    assert "require opt-in" in expensive_without_opt_in.json()["error"]["message"]
+    assert len(provider_calls) == 1
+
+
+def test_standalone_chat_cannot_understate_estimate_to_bypass_class_budget(
+    client,
+    db_session,
+    monkeypatch,
+):
+    persona_row = load_persona_seed_rows()[0]
+    db_session.add(Persona(**persona_row))
+    study_id = client.post("/api/v1/studies", json={}).json()["data"]["study"]["study_id"]
+    study = db_session.scalar(select(Study).where(Study.public_id == study_id))
+    assert study is not None
+    db_session.add(
+        InterviewTurn(
+            study_id=study.id,
+            persona_id=persona_row["persona_id"],
+            session_id="ses_existing_class_spend",
+            role="assistant",
+            text="Previously billed answer.",
+            model="openai/gpt-4o-mini",
+            tokens_in=1,
+            tokens_out=1,
+            cost_usd=Decimal("0.29995"),
+        )
+    )
+    db_session.commit()
+
+    client.app.state.settings.llm_budget_usd = Decimal("0.01")
+    client.app.state.settings.openrouter_api_key = "test-key"
+    provider_calls: list[dict] = []
+
+    def fake_call_openrouter_messages(**kwargs):
+        provider_calls.append(kwargs)
+        return OpenRouterChatResult(
+            text="This call should never be made.",
+            model=kwargs["model"],
+            tokens_in=10,
+            tokens_out=2,
+            cost_usd=Decimal("0.0001"),
+        )
 
     monkeypatch.setattr(
         "src.services.interview_service._call_openrouter_messages",
@@ -376,34 +800,120 @@ def test_interview_chat_endpoint_continues_selected_persona(client, monkeypatch)
     response = client.post(
         f"/api/v1/studies/{study_id}/interview/chat",
         json={
-            "persona_id": persona_id,
-            "prompt": "What would make you more confident about buying?",
-            "messages": [
-                {
-                    "role": "user",
-                    "content": "Remind me what matters most in your decision?",
-                },
-                {
-                    "role": "assistant",
-                    "content": "I need to trust the install process and feel like I will use it every week.",
-                },
-            ],
-            "transcript_source": "model_a",
+            "persona_id": persona_row["persona_id"],
+            "prompt": "Can I bypass the class preflight?",
+            "model": "openai/gpt-4o-mini",
+            "session_id": None,
+            "estimated_run_cost_usd": "0",
+            "standalone": True,
         },
     )
 
-    assert response.status_code == 200
-    payload = response.json()["data"]["interview_chat"]
-    assert payload["persona_id"] == persona_id
-    assert payload["transcript_source"] == "model_a"
-    assert payload["reply"].startswith("I would move faster")
-    assert payload["model"] == latest_interview["pairs"][0]["model_a"]["model"]
-    assert captured["api_key"] == "test-key"
-    assert captured["messages"][0]["role"] == "system"
-    assert captured["messages"][-1] == {
-        "role": "user",
-        "content": "What would make you more confident about buying?",
+    assert response.status_code == 429
+    assert response.json()["error"]["details"]["scope"] == "class"
+    assert provider_calls == []
+
+
+def test_interview_comparison_is_budgeted_cached_and_persisted(client, db_session, monkeypatch):
+    persona_row = load_persona_seed_rows()[0]
+    db_session.add(Persona(**persona_row))
+    db_session.commit()
+    study_id = client.post("/api/v1/studies", json={}).json()["data"]["study"]["study_id"]
+    client.app.state.settings.openrouter_api_key = "test-key"
+    provider_models: list[str] = []
+    provider_messages: list[list[dict[str, str]]] = []
+
+    def fake_call_openrouter_messages(**kwargs):
+        provider_models.append(kwargs["model"])
+        provider_messages.append(kwargs["messages"])
+        return OpenRouterChatResult(
+            text=f"Answer from {kwargs['model']}",
+            model=kwargs["model"],
+            tokens_in=100,
+            tokens_out=20,
+            cost_usd=Decimal("0.001"),
+        )
+
+    monkeypatch.setattr(
+        "src.services.interview_service._call_openrouter_messages",
+        fake_call_openrouter_messages,
+    )
+    request_payload = {
+        "persona_id": persona_row["persona_id"],
+        "question": "What matters most to you?",
+        "model_ids": ["google/gemini-2.5-flash-lite", "openai/gpt-4o-mini"],
+        "allow_expensive_models": False,
     }
+
+    response = client.post(
+        f"/api/v1/studies/{study_id}/interview/compare",
+        json=request_payload,
+    )
+
+    assert response.status_code == 200
+    comparison = response.json()["data"]["interview_comparison"]
+    assert comparison["persona_id"] == persona_row["persona_id"]
+    assert comparison["question"] == request_payload["question"]
+    assert [result["model_id"] for result in comparison["results"]] == request_payload["model_ids"]
+    assert all(result["error"] is None for result in comparison["results"])
+    assert all(
+        result["post_interview_score"] == {
+            "fit_tier": "latent",
+            "emotional_classification": "neutral",
+            "label": "scored after the interview, never before",
+        }
+        for result in comparison["results"]
+    )
+    assert comparison["session_usage"] == {
+        "tokens_in": 200,
+        "tokens_out": 40,
+        "cost_usd": "0.002",
+    }
+    assert provider_models == request_payload["model_ids"]
+    assert all(messages[-1]["content"] == request_payload["question"] for messages in provider_messages)
+    assert all('"fit_tier"' not in messages[0]["content"] for messages in provider_messages)
+
+    session_factory = client.app.state.session_factory
+    with session_factory() as session:
+        turns = session.scalars(
+            select(InterviewTurn).where(
+                InterviewTurn.session_id == comparison["session_id"]
+            )
+        ).all()
+    assert len(turns) == 4
+    assert {turn.study_id for turn in turns} == {turns[0].study_id}
+    assert {turn.persona_id for turn in turns} == {persona_row["persona_id"]}
+
+    # A repeat uses the shared cache even with the zero-dollar kill switch.
+    client.app.state.settings.llm_budget_usd = Decimal("0")
+    repeated = client.post(
+        f"/api/v1/studies/{study_id}/interview/compare",
+        json=request_payload,
+    )
+    assert repeated.status_code == 200
+    repeated_comparison = repeated.json()["data"]["interview_comparison"]
+    assert all(result["cache_hit"] is True for result in repeated_comparison["results"])
+    assert repeated_comparison["session_usage"]["cost_usd"] == "0"
+    assert provider_models == request_payload["model_ids"]
+
+    expensive_without_opt_in = client.post(
+        f"/api/v1/studies/{study_id}/interview/compare",
+        json={
+            **request_payload,
+            "model_ids": ["google/gemini-2.5-flash-lite", "google/gemini-2.5-pro"],
+        },
+    )
+    assert expensive_without_opt_in.status_code == 400
+    assert "require opt-in" in expensive_without_opt_in.json()["error"]["message"]
+    assert provider_models == request_payload["model_ids"]
+
+    blocked = client.post(
+        f"/api/v1/studies/{study_id}/interview/compare",
+        json={**request_payload, "question": "A new paid comparison?"},
+    )
+    assert blocked.status_code == 429
+    assert blocked.json()["error"]["code"] == "quota_exceeded"
+    assert provider_models == request_payload["model_ids"]
 
 
 def test_save_audience_and_get_workflow(client):
@@ -465,10 +975,8 @@ def test_load_neo_survey_preset_endpoint(client):
 
 
 def test_upload_aytm_docx_succeeds_with_fallback_parser(client):
-    workspace_root = Path(__file__).resolve().parents[3]
     docx_path = (
-        workspace_root
-        / "NeoSmart-Hackathon-App"
+        Path(client.app.state.settings.legacy_app_root)
         / "Provided Info"
         / "aytm Survey #760085  (Neo Smart Living — Tahoe Mini Survey).docx"
     )

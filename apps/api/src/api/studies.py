@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Literal, Optional
 
 from fastapi import APIRouter, Body, Depends, File, Form, Query, Request, UploadFile
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from src.api.auth import AuthUser, get_current_user
@@ -12,6 +13,9 @@ from src.config.settings import AppSettings
 from src.services.exceptions import PayloadTooLargeApiError, UnsupportedMediaTypeApiError
 from src.schemas.study import (
     InterviewChatRequest,
+    InterviewComparisonRequest,
+    InterviewTranscriptExportRequest,
+    InterviewerNextQuestionRequest,
     PersonaPreviewRequest,
     ProductUrlAutofillRequest,
     SimulationRunRequest,
@@ -46,7 +50,9 @@ from src.services.study_service import (
     start_stability_check,
 )
 from src.services.interview_service import (
+    compare_interview_models,
     continue_interview_chat,
+    generate_interviewer_question,
     get_interview_synthesis,
     save_interview_synthesis_config,
     start_interview_run,
@@ -55,6 +61,7 @@ from src.services.interview_service import (
     save_research_brief,
     get_interview_insights,
 )
+from src.services.interview_export import build_interview_transcript_export
 
 
 router = APIRouter(tags=["studies"])
@@ -648,3 +655,111 @@ def interview_chat_endpoint(
     study = get_owned_study_or_404(db, study_id, current_user)
     result = continue_interview_chat(db, settings, study, payload.model_dump())
     return response_envelope(request, {"interview_chat": result})
+
+
+@router.post("/api/v1/studies/{study_id}/interview/export")
+def interview_transcript_export_endpoint(
+    study_id: str,
+    payload: InterviewTranscriptExportRequest,
+    export_format: Literal["csv", "markdown"] = Query(alias="format"),
+    db: Session = Depends(get_db_session),
+    current_user: AuthUser = Depends(get_current_user),
+):
+    get_owned_study_or_404(db, study_id, current_user)
+    export = build_interview_transcript_export(payload.model_dump(), export_format)
+    return Response(
+        content=export.content,
+        media_type=export.media_type,
+        headers={"Content-Disposition": f'attachment; filename="{export.filename}"'},
+    )
+
+
+@router.post("/api/v1/studies/{study_id}/interview/compare")
+def interview_comparison_endpoint(
+    study_id: str,
+    payload: InterviewComparisonRequest,
+    request: Request,
+    db: Session = Depends(get_db_session),
+    settings: AppSettings = Depends(get_settings),
+    current_user: AuthUser = Depends(get_current_user),
+):
+    study = get_owned_study_or_404(db, study_id, current_user)
+    result = compare_interview_models(db, settings, study, payload.model_dump())
+    return response_envelope(request, {"interview_comparison": result})
+
+
+@router.post("/api/v1/studies/{study_id}/interview/interviewer/next-question")
+def interviewer_next_question_endpoint(
+    study_id: str,
+    payload: InterviewerNextQuestionRequest,
+    request: Request,
+    db: Session = Depends(get_db_session),
+    settings: AppSettings = Depends(get_settings),
+    current_user: AuthUser = Depends(get_current_user),
+):
+    study = get_owned_study_or_404(db, study_id, current_user)
+    result = generate_interviewer_question(db, settings, study, payload.model_dump())
+    return response_envelope(request, {"interviewer_question": result})
+
+
+@router.post("/api/v1/studies/{study_id}/interview/batches")
+def create_standalone_batch(study_id: str, request: Request, payload: dict = Body(...),
+    db: Session = Depends(get_db_session), settings: AppSettings = Depends(get_settings),
+    current_user: AuthUser = Depends(get_current_user)):
+    from src.services.standalone_interview import start_batch
+    study = get_owned_study_or_404(db, study_id, current_user)
+    return response_envelope(request, {"batch": start_batch(db, settings, study, payload)})
+
+
+@router.get("/api/v1/studies/{study_id}/interview/batches")
+def list_standalone_batches(study_id: str, request: Request,
+    db: Session = Depends(get_db_session), settings: AppSettings = Depends(get_settings),
+    current_user: AuthUser = Depends(get_current_user)):
+    from src.services.standalone_interview import list_batches
+    study = get_owned_study_or_404(db, study_id, current_user)
+    return response_envelope(request, {"batches": list_batches(db, settings, study)})
+
+
+@router.get("/api/v1/studies/{study_id}/interview/batches/{job_id}")
+def get_standalone_batch(study_id: str, job_id: str, request: Request,
+    db: Session = Depends(get_db_session), settings: AppSettings = Depends(get_settings),
+    current_user: AuthUser = Depends(get_current_user)):
+    from src.services.standalone_interview import batch_status
+    study = get_owned_study_or_404(db, study_id, current_user)
+    return response_envelope(request, {"batch": batch_status(db, settings, study, job_id)})
+
+
+@router.post("/api/v1/studies/{study_id}/interview/batches/{job_id}/advance")
+def advance_standalone_batch(study_id: str, job_id: str, request: Request, payload: dict = Body(...),
+    db: Session = Depends(get_db_session), settings: AppSettings = Depends(get_settings),
+    current_user: AuthUser = Depends(get_current_user)):
+    from src.services.standalone_interview import advance_batch
+    study = get_owned_study_or_404(db, study_id, current_user)
+    return response_envelope(request, {"batch": advance_batch(db, settings, study, job_id, payload)})
+
+
+@router.post("/api/v1/studies/{study_id}/interview/answers/{answer_id}/regenerate")
+def regenerate_interview_answer(study_id: str, answer_id: str, request: Request, payload: dict = Body(...),
+    db: Session = Depends(get_db_session), settings: AppSettings = Depends(get_settings),
+    current_user: AuthUser = Depends(get_current_user)):
+    from src.services.standalone_interview import regenerate_answer
+    study = get_owned_study_or_404(db, study_id, current_user)
+    return response_envelope(request, {"answer": regenerate_answer(db, settings, study, answer_id, payload)})
+
+
+@router.get("/api/v1/studies/{study_id}/interview/batches/{job_id}/themes")
+def get_standalone_themes(study_id: str, job_id: str, request: Request,
+    db: Session = Depends(get_db_session), settings: AppSettings = Depends(get_settings),
+    current_user: AuthUser = Depends(get_current_user)):
+    from src.services.standalone_themes import standalone_themes
+    study = get_owned_study_or_404(db, study_id, current_user)
+    return response_envelope(request, {"insights": standalone_themes(db, settings, study, job_id)})
+
+
+@router.post("/api/v1/studies/{study_id}/interview/batches/{job_id}/themes")
+def generate_standalone_themes(study_id: str, job_id: str, request: Request, payload: dict = Body(...),
+    db: Session = Depends(get_db_session), settings: AppSettings = Depends(get_settings),
+    current_user: AuthUser = Depends(get_current_user)):
+    from src.services.standalone_themes import standalone_themes
+    study = get_owned_study_or_404(db, study_id, current_user)
+    return response_envelope(request, {"insights": standalone_themes(db, settings, study, job_id, payload)})

@@ -1,0 +1,48 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
+
+const interviewPageSource = readFileSync(
+  resolve(__dirname, "../../src/app/interview/page.tsx"),
+  "utf8"
+);
+
+test("suggested questions populate the free-text box submitted by ask", () => {
+  assert.match(
+    interviewPageSource,
+    /SUGGESTED\.map\(\(suggestion\) => \([\s\S]*?onClick=\{\(\) => setQuestion\(suggestion\)\}[\s\S]*?<\/button>[\s\S]*?\)\)\}/
+  );
+  assert.match(
+    interviewPageSource,
+    /<input[\s\S]*?value=\{question\}[\s\S]*?onChange=\{\(event\) => setQuestion\(event\.target\.value\)\}[\s\S]*?if \(event\.key === "Enter"\) ask\(\);[\s\S]*?placeholder="Ask a follow-up…"/
+  );
+  assert.match(
+    interviewPageSource,
+    /async function ask\(\) \{[\s\S]*?const asked = question\.trim\(\);[\s\S]*?prompt: asked,/
+  );
+  assert.match(
+    interviewPageSource,
+    /<Button[\s\S]*?onClick=\{ask\}[\s\S]*?\{loading \? "Asking…" : "Ask"\}[\s\S]*?<\/Button>/
+  );
+});
+
+test("persona selection is locked during chat, comparison, batch and regeneration", () => {
+  assert.match(interviewPageSource, /const busy = loading \|\| comparisonLoading \|\| batchLoading \|\| regenerating/);
+  assert.match(
+    interviewPageSource,
+    /personas\.map\(\(entry\) => \([\s\S]*?onClick=\{\(\) => selectPersona\(entry\.persona_id\)\}[\s\S]*?disabled=\{busy\}/
+  );
+});
+
+test("the interview page toggles the exact system prompt returned by FastAPI", () => {
+  assert.match(
+    interviewPageSource,
+    /const \[systemPrompt, setSystemPrompt\] = useState\(""\);[\s\S]*?const response = await sendInterviewChatMessage\([\s\S]*?if \(response\.system_prompt\) setSystemPrompt\(response\.system_prompt\);[\s\S]*?err instanceof InterviewChatApiError && err\.systemPrompt[\s\S]*?setSystemPrompt\(err\.systemPrompt\);/
+  );
+  assert.match(
+    interviewPageSource,
+    /\{systemPrompt \? \([\s\S]*?onClick=\{\(\) => setShowPrompt\(\(value\) => !value\)\}[\s\S]*?\{showPrompt \? "Hide" : "Show"\} the prompt built from this record[\s\S]*?\{showPrompt \? \([\s\S]*?<pre[\s\S]*?\{systemPrompt\}[\s\S]*?<\/pre>/
+  );
+});

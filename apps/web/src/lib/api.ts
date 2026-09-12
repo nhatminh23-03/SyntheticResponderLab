@@ -61,6 +61,150 @@ export type CreateStudyResponse = {
   };
 };
 
+export type InterviewPersona = {
+  persona_id: string;
+  age_bucket: string;
+  income_bucket: string;
+  ownership: string;
+  home_type: string;
+  work_mode: string;
+  fit_tier: string;
+  lifestyle_tags: string[];
+  census_profile: string;
+  headline: string;
+};
+
+export type InterviewModelTier = "cheap" | "mid" | "expensive";
+
+export type InterviewModelCatalogEntry = {
+  id: string;
+  name: string;
+  tier: InterviewModelTier;
+  prompt_price_per_million: number;
+  completion_price_per_million: number;
+  estimated_cost_per_persona_usd: number;
+};
+
+export type InterviewPersonaCountRange = {
+  minimum: number;
+  default: number;
+  maximum: number;
+};
+
+export type InterviewCostEstimateAssumptions = {
+  prompt_tokens_per_model_persona: number;
+  completion_tokens_per_model_persona: number;
+};
+
+type InterviewModelCatalogResponse = {
+  data?: {
+    source?: "curated";
+    pricing_as_of?: string;
+    pricing_source?: string;
+    default_model_id?: string;
+    persona_count?: InterviewPersonaCountRange;
+    cost_estimate?: InterviewCostEstimateAssumptions;
+    models?: InterviewModelCatalogEntry[];
+  };
+};
+
+type InterviewPersonasResponse = {
+  data?: {
+    personas?: InterviewPersona[];
+    source?: string;
+  };
+};
+
+export async function getInterviewPersonas() {
+  const response = await fetch(`${getApiBaseUrl()}/api/v1/personas`, {
+    method: "GET",
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      await readApiErrorMessage(
+        response,
+        `Persona list load failed with status ${response.status}`
+      )
+    );
+  }
+
+  const result = (await response.json()) as InterviewPersonasResponse;
+  return {
+    personas: result.data?.personas ?? [],
+    source: result.data?.source ?? "database",
+  };
+}
+
+export async function getInterviewModelCatalog() {
+  const response = await fetch(`${getApiBaseUrl()}/api/v1/interview/models`, {
+    method: "GET",
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      await readApiErrorMessage(
+        response,
+        `Interview model catalog load failed with status ${response.status}`
+      )
+    );
+  }
+
+  const result = (await response.json()) as InterviewModelCatalogResponse;
+  const data = result.data;
+  const models = data?.models;
+  const defaultModelId = data?.default_model_id;
+  const personaCount = data?.persona_count;
+  const costEstimate = data?.cost_estimate;
+  const validTiers: InterviewModelTier[] = ["cheap", "mid", "expensive"];
+  const hasValidModels =
+    Array.isArray(models) &&
+    models.length > 0 &&
+    models.every(
+      (model) =>
+        typeof model?.id === "string" &&
+        model.id.trim().length > 0 &&
+        typeof model.name === "string" &&
+        model.name.trim().length > 0 &&
+        validTiers.includes(model.tier) &&
+        Number.isFinite(model.prompt_price_per_million) &&
+        model.prompt_price_per_million >= 0 &&
+        Number.isFinite(model.completion_price_per_million) &&
+        model.completion_price_per_million >= 0 &&
+        Number.isFinite(model.estimated_cost_per_persona_usd) &&
+        model.estimated_cost_per_persona_usd >= 0
+    );
+  const hasValidPersonaCount =
+    personaCount?.minimum === 3 &&
+    personaCount.default === 3 &&
+    personaCount.maximum === 30;
+  const hasValidCostEstimate =
+    Number.isInteger(costEstimate?.prompt_tokens_per_model_persona) &&
+    (costEstimate?.prompt_tokens_per_model_persona ?? 0) > 0 &&
+    Number.isInteger(costEstimate?.completion_tokens_per_model_persona) &&
+    (costEstimate?.completion_tokens_per_model_persona ?? 0) > 0;
+
+  if (
+    !hasValidModels ||
+    !hasValidPersonaCount ||
+    !hasValidCostEstimate ||
+    typeof defaultModelId !== "string" ||
+    !models.some((model) => model.id === defaultModelId)
+  ) {
+    throw new Error("The backend returned an invalid interview model catalog.");
+  }
+
+  return {
+    source: data?.source ?? "curated",
+    pricingAsOf: data?.pricing_as_of ?? "",
+    pricingSource: data?.pricing_source ?? "",
+    defaultModelId,
+    personaCount: personaCount!,
+    costEstimate: costEstimate!,
+    models,
+  };
+}
+
 export type AudiencePayload = {
   state?: string | null;
   metro?: string | null;
@@ -727,7 +871,7 @@ export type InterviewSynthesisConfig = {
 export type InterviewDimensionScores = {
   purchase_intent: 0 | 1;
   primary_objection: 0 | 1;
-  fit_tier_alignment: 0 | 1;
+  fit_tier_alignment: 0 | 1 | null;
   use_case_specificity: 0 | 1;
 };
 
@@ -735,6 +879,7 @@ export type InterviewPersonaScore = {
   persona_id: string;
   score: number;
   dimension_scores: InterviewDimensionScores;
+  not_applicable_dimensions?: string[];
   has_error: boolean;
 };
 
@@ -745,7 +890,7 @@ export type InterviewGroundingReport = {
   per_dimension_avg: {
     purchase_intent: number;
     primary_objection: number;
-    fit_tier_alignment: number;
+    fit_tier_alignment: number | null;
     use_case_specificity: number;
   };
   flagged_persona_ids: string[];
@@ -837,15 +982,135 @@ export type InterviewChatPayload = {
   messages?: InterviewChatMessage[];
   transcript_source?: "model_a" | "model_b";
   model?: string;
+  session_id: string | null;
+  standalone?: boolean;
+  allow_expensive_models?: boolean;
 };
 
-export type InterviewChatResponse = {
-  persona_id: string;
-  transcript_source: "model_a" | "model_b";
-  model: string | null;
-  source_run_id: string;
-  reply: string;
+export type InterviewSessionUsage = {
+  tokens_in: number;
+  tokens_out: number;
+  cost_usd: string;
 };
+
+export class InterviewChatApiError extends Error {
+  readonly sessionId: string | null;
+  readonly sessionUsage: InterviewSessionUsage | null;
+  readonly systemPrompt: string | null;
+
+  constructor(
+    message: string,
+    sessionId: string | null,
+    sessionUsage: InterviewSessionUsage | null,
+    systemPrompt: string | null,
+    public committedAnswer: InterviewChatResponse | null = null
+  ) {
+    super(message);
+    this.name = "InterviewChatApiError";
+    this.sessionId = sessionId;
+    this.sessionUsage = sessionUsage;
+    this.systemPrompt = systemPrompt;
+  }
+}
+
+function getInterviewErrorDetails(payload: unknown): Record<string, unknown> | null {
+  if (!payload || typeof payload !== "object") return null;
+  const error = (payload as { error?: unknown }).error;
+  if (!error || typeof error !== "object") return null;
+  const details = (error as { details?: unknown }).details;
+  return details && typeof details === "object"
+    ? (details as Record<string, unknown>)
+    : null;
+}
+
+export function getInterviewSessionIdFromApiError(payload: unknown): string | null {
+  const sessionId = getInterviewErrorDetails(payload)?.session_id;
+  return typeof sessionId === "string" && sessionId.trim() ? sessionId : null;
+}
+
+export function getInterviewSystemPromptFromApiError(payload: unknown): string | null {
+  const systemPrompt = getInterviewErrorDetails(payload)?.system_prompt;
+  return typeof systemPrompt === "string" && systemPrompt.trim() ? systemPrompt : null;
+}
+
+export function getInterviewSessionUsageFromApiError(
+  payload: unknown
+): InterviewSessionUsage | null {
+  const usage = getInterviewErrorDetails(payload)?.session_usage;
+  if (!usage || typeof usage !== "object") return null;
+
+  const { tokens_in, tokens_out, cost_usd } = usage as Record<string, unknown>;
+  if (
+    !Number.isInteger(tokens_in) ||
+    Number(tokens_in) < 0 ||
+    !Number.isInteger(tokens_out) ||
+    Number(tokens_out) < 0 ||
+    typeof cost_usd !== "string"
+  ) {
+    return null;
+  }
+  return {
+    tokens_in: Number(tokens_in),
+    tokens_out: Number(tokens_out),
+    cost_usd,
+  };
+}
+
+export type InterviewChatResponse = {
+  answer_id?: string;
+  version?: number;
+  persona_id: string;
+  session_id: string;
+  transcript_source: "model_a" | "model_b" | "standalone";
+  model: string | null;
+  source_run_id: string | null;
+  reply: string;
+  cache_hit: boolean;
+  session_usage: InterviewSessionUsage;
+  system_prompt?: string;
+};
+
+export type InterviewTranscriptExportFormat = "csv" | "markdown";
+
+export type InterviewTranscriptExportTurn = {
+  role: "student" | "persona";
+  text: string;
+};
+
+export async function getInterviewTranscriptExport(
+  studyId: string,
+  payload: {
+    persona_id: string;
+    interviewee_model: string;
+    turns: InterviewTranscriptExportTurn[];
+  },
+  format: InterviewTranscriptExportFormat
+) {
+  const response = await fetch(
+    `${getApiBaseUrl()}/api/v1/studies/${encodeURIComponent(studyId)}/interview/export?format=${format}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      await readApiErrorMessage(
+        response,
+        `Transcript export failed with status ${response.status}`
+      )
+    );
+  }
+
+  const disposition = response.headers.get("Content-Disposition") ?? "";
+  const filename = disposition.match(/filename="([^"]+)"/)?.[1];
+  return {
+    blob: await response.blob(),
+    filename: filename ?? `interview-transcript.${format === "csv" ? "csv" : "md"}`,
+  };
+}
 
 export type GetStudyResponse = {
   data?: {
@@ -1881,11 +2146,31 @@ export async function sendInterviewChatMessage(
   );
 
   if (!response.ok) {
-    throw new Error(
-      await readApiErrorMessage(
-        response,
-        `Interview chat failed with status ${response.status}`
-      )
+    const errorResponse = response.clone();
+    let sessionId: string | null = null;
+    let sessionUsage: InterviewSessionUsage | null = null;
+    let systemPrompt: string | null = null;
+    let committedAnswer: InterviewChatResponse | null = null;
+    let budgetMessage: string | null = null;
+    try {
+      const errorPayload = await errorResponse.json();
+      const details = getInterviewErrorDetails(errorPayload);
+      committedAnswer = details?.committed_answer as InterviewChatResponse ?? null;
+      if (errorPayload.error?.code === "quota_exceeded" && details?.scope) {
+        budgetMessage = `Budget stop (${details.scope} cap): ${errorPayload.error.message}`;
+      }
+      sessionId = getInterviewSessionIdFromApiError(errorPayload);
+      sessionUsage = getInterviewSessionUsageFromApiError(errorPayload);
+      systemPrompt = getInterviewSystemPromptFromApiError(errorPayload);
+    } catch {
+      // The shared message parser below handles empty and non-JSON responses.
+    }
+    throw new InterviewChatApiError(
+      budgetMessage ?? await readApiErrorMessage(response, `Interview chat failed with status ${response.status}`),
+      sessionId,
+      sessionUsage,
+      systemPrompt,
+      committedAnswer
     );
   }
 

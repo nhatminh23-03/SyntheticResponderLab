@@ -7,6 +7,13 @@ import {
   hasValidAccessCookie,
   isAppAccessGateEnabled,
 } from "./lib/access-control";
+import {
+  CLASSROOM_SESSION_COOKIE_NAME,
+  isClassroomInterviewApiRequest,
+  isClassroomInterviewPage,
+  isClassroomNoLoginEnabled,
+  isValidClassroomSessionId,
+} from "./lib/classroom-access";
 
 const isClerkConfigured =
   (process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?.trim() || "") !== "" &&
@@ -31,8 +38,45 @@ function unauthorizedApiResponse() {
   );
 }
 
+function classroomAccessResponse(request: NextRequest) {
+  if (!isClassroomNoLoginEnabled()) {
+    return null;
+  }
+
+  const { pathname } = request.nextUrl;
+  const sessionId = request.cookies.get(CLASSROOM_SESSION_COOKIE_NAME)?.value;
+
+  if (isClassroomInterviewPage(pathname)) {
+    const response = NextResponse.next();
+    if (!isValidClassroomSessionId(sessionId)) {
+      response.cookies.set(CLASSROOM_SESSION_COOKIE_NAME, crypto.randomUUID(), {
+        httpOnly: true,
+        sameSite: "lax",
+        secure: request.nextUrl.protocol === "https:",
+        path: "/",
+        maxAge: 60 * 60 * 12,
+      });
+    }
+    return response;
+  }
+
+  if (
+    isClassroomInterviewApiRequest(pathname, request.method) &&
+    isValidClassroomSessionId(sessionId)
+  ) {
+    return NextResponse.next();
+  }
+
+  return null;
+}
+
 async function runLegacyGate(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
+
+  const classroomResponse = classroomAccessResponse(request);
+  if (classroomResponse) {
+    return classroomResponse;
+  }
 
   if (isAlwaysPublicPath(pathname)) {
     return NextResponse.next();
@@ -77,6 +121,11 @@ async function runLegacyGate(request: NextRequest) {
 const composed = isClerkConfigured
   ? clerkMiddleware(async (auth, request) => {
       const { pathname } = request.nextUrl;
+
+      const classroomResponse = classroomAccessResponse(request);
+      if (classroomResponse) {
+        return classroomResponse;
+      }
 
       if (pathname.startsWith("/api/backend/")) {
         const { userId } = await auth();

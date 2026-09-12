@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
+
+if TYPE_CHECKING:
+    from src.services.interview_cache import InterviewAnswer
 
 
 class ApiError(Exception):
@@ -69,3 +72,17 @@ class DependencyMissingApiError(ApiError):
 class LegacyModuleApiError(ApiError):
     def __init__(self, message: str, details: Optional[dict] = None) -> None:
         super().__init__(500, "legacy_module_error", message, details)
+
+
+class TransientProviderError(RuntimeError):
+    """The provider answered, but the answer was unusable.
+
+    Empty completion text, a missing message, or a body that is not JSON. These
+    are hiccups a retry usually clears, and they are distinct from a
+    misconfiguration (no API key) or a budget stop, both of which must stay
+    fatal. Only raise this where the fault is demonstrably the response itself.
+    """
+
+    def __init__(self, message: str, *, measured_usage: InterviewAnswer | None = None) -> None:
+        super().__init__(message)
+        self.measured_usage = measured_usage
