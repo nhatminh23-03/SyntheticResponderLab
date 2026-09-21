@@ -411,9 +411,21 @@ def _strip_json_fence(raw: str) -> str:
     return raw[start:end + 1] if 0 <= start < end else raw.strip()
 
 
+def _rendered_answers(pair):
+    """The answers _build_transcript_corpus emits; the rest never reach the model."""
+    return {qid: a for qid, a in (pair.get("model_a", {}).get("answers") or {}).items()
+            if qid != "additional_thoughts" and a and not a.startswith("[")}
+
+
 def rendered_pairs(pairs, max_pairs: int = 30):
-    """The pairs _build_transcript_corpus actually renders — the only ones the model sees."""
-    return [p for p in pairs if (p.get("model_a", {}).get("answers") or {})][:max_pairs]
+    """The corpus the model is actually shown, so one number means one thing.
+
+    Narrowing the answers here — not just dropping empty pairs — keeps the caller's
+    validation from accepting a quote out of text the prompt never carried.
+    """
+    shown = [(p, _rendered_answers(p)) for p in pairs]
+    return [{**p, "model_a": {**p.get("model_a", {}), "answers": answers}}
+            for p, answers in shown if answers][:max_pairs]
 
 
 def _extract_insight_themes(pairs, brief_context, call):

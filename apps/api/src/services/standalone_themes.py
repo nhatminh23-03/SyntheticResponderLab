@@ -151,9 +151,10 @@ def standalone_themes(session, settings, study, job_id, payload=None):
             record["budget_stop"] = exc.message
         return result.text
 
-    reason = None
+    reason, validated = None, False
     try:
         themes = insights._extract_insight_themes(pairs, "", call)
+        validated = True
         reason = validate(themes, pairs)
         if not reason:
             record["themes"] = themes
@@ -167,10 +168,13 @@ def standalone_themes(session, settings, study, job_id, payload=None):
         # Key off whether a charge was actually recorded, not whether a usable result
         # came back: a rejected-but-billed response has a known charge and would
         # otherwise be reported to the student as an unknown billing outcome.
+        # Two different failures reach here: a response that broke a rule, and a call
+        # that never produced one. Saying which is the point of showing a reason at all.
         record["message"] = ("Theme extraction failed. Your transcripts are preserved. " +
-            ("The response could not be validated; its measured charge is recorded. Retrying adds another charge."
+            ("The response broke a rule; " if validated else "The call produced no usable response; ") +
+            ("its measured charge is recorded. Retrying adds another charge."
              if record["outcome"] == "charged" else
-             "The provider's billing outcome is unknown. Retrying may incur another charge.") +
+             "the provider's billing outcome is unknown. Retrying may incur another charge.") +
             f" ({record['reason']})")
     logger.log(logging.INFO if record["themes"] else logging.WARNING, "interview_themes study=%s run=%s revision=%s attempt=%s outcome=%s valid=%s",
         study.public_id, job_id, view["revision"], attempt, record["outcome"], bool(record["themes"]))

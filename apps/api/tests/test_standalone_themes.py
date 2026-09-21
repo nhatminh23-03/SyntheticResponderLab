@@ -92,6 +92,7 @@ def test_standalone_themes_timeout_retry_and_safe_diagnostics(completed, monkeyp
     assert 'secret transcript credential' not in caplog.text
     assert 'secret transcript credential' not in response['saved']['message']
     assert response['saved']['reason'] == 'RuntimeError'
+    assert 'produced no usable response' in response['saved']['message']
     client.post(url, json=payload)
     assert len(calls) == 1
     retry = {**payload, 'retry_attempt': response['saved']['attempt']}
@@ -199,6 +200,7 @@ def test_standalone_themes_failure_names_the_rule_it_broke(completed):
     saved = client.post(url, json=payload).json()['data']['insights']['saved']
     assert saved['reason'] == "Theme 1 quote is not in %s's answers" % themes[0]['quote_persona_id']
     assert saved['reason'] in saved['message']
+    assert 'broke a rule' in saved['message']
 
 
 def test_standalone_themes_reads_a_fenced_json_answer(completed, monkeypatch):
@@ -217,11 +219,16 @@ def test_standalone_themes_reads_a_fenced_json_answer(completed, monkeypatch):
 def test_extract_themes_counts_only_the_interviews_it_renders():
     """The prompt's interview count has to match the corpus, or validate accepts a count the model never saw."""
     pairs = [{'persona_id': 'p1', 'model_a': {'answers': {'0': 'said something'}}},
-             {'persona_id': 'p2', 'model_a': {'answers': {}}}]
+             {'persona_id': 'p2', 'model_a': {'answers': {}}},
+             # Every answer here is one the corpus builder skips, so the model sees no text.
+             {'persona_id': 'p3', 'model_a': {'answers': {'0': '[no answer]',
+                                                          'additional_thoughts': 'aside'}}}]
     seen = {}
     def call(**prompts):
         seen.update(prompts)
         return '{"themes": []}'
     insights_module._extract_insight_themes(pairs, '', call)
     assert 'There are 1 interviews' in seen['user_prompt']
-    assert 'p2' not in seen['user_prompt']
+    assert 'p2' not in seen['user_prompt'] and 'p3' not in seen['user_prompt']
+    # The quote check must not reach text the prompt never carried.
+    assert [p['persona_id'] for p in insights_module.rendered_pairs(pairs)] == ['p1']
