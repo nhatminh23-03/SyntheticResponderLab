@@ -244,6 +244,21 @@ def test_standalone_themes_refuses_an_unreadable_corpus(completed, db_session):
         for t in result['transcripts']]
     job.result_json = result
     db_session.commit()
-    revision = client.get(url).json()['data']['insights']['revision']
-    assert client.post(url, json={**payload, 'revision': revision}).status_code == 409
+    view = client.get(url).json()['data']['insights']
+    assert not view['eligible']
+    assert client.post(url, json={**payload, 'revision': view['revision']}).json()['data']['insights'] == view
     assert calls == []
+
+
+def test_standalone_themes_accepts_a_quote_from_a_repeated_persona(completed, db_session):
+    """Two transcripts can share a persona_id; the prompt carries both, so the check must too."""
+    client, url, batch, calls, themes, payload = completed
+    job = db_session.scalar(select(Job).where(Job.public_id == batch['job_id']))
+    result = dict(job.result_json)
+    first = result['transcripts'][0]['persona_id']
+    result['transcripts'] = [{**t, 'persona_id': first} for t in result['transcripts']]
+    job.result_json = result
+    db_session.commit()
+    revision = client.get(url).json()['data']['insights']['revision']
+    saved = client.post(url, json={**payload, 'revision': revision}).json()['data']['insights']
+    assert saved['available'], saved.get('saved', {}).get('message')

@@ -413,7 +413,7 @@ def _strip_json_fence(raw: str) -> str:
 
 def _rendered_answers(pair):
     """The answers _build_transcript_corpus emits; the rest never reach the model."""
-    return {qid: a for qid, a in (pair.get("model_a", {}).get("answers") or {}).items()
+    return {qid: a for qid, a in ((pair.get("model_a") or {}).get("answers") or {}).items()
             if qid != "additional_thoughts" and a and not a.startswith("[")}
 
 

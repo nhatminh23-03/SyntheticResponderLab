@@ -42,7 +42,9 @@ def validate(themes, pairs):
         return "Response held no theme list"
     if not 3 <= len(themes) <= 6:
         return f"Expected 3-6 themes, got {len(themes)}"
-    answers = {p["persona_id"]: list(p["model_a"]["answers"].values()) for p in pairs}
+    answers = {}
+    for pair in pairs:
+        answers.setdefault(pair["persona_id"], []).extend(pair["model_a"]["answers"].values())
     for index, theme in enumerate(themes, 1):
         if not isinstance(theme, dict):
             return f"Theme {index} is not an object"
@@ -73,6 +75,9 @@ def corpus(job):
 
 def status(job):
     revision, pairs = corpus(job)
+    # The corpus the model would be shown — so "eligible", the cost estimate and the
+    # extraction itself all agree instead of inviting a charge the rules must reject.
+    pairs = insights.rendered_pairs(pairs)
     saved = (job.result_json or {}).get("insights")
     complete = (job.status == "completed" and bool(pairs) and
         len(pairs) == job.payload_json.get("persona_count") and
@@ -122,9 +127,6 @@ def standalone_themes(session, settings, study, job_id, payload=None):
     record = {"revision": view["revision"], "attempt": attempt, "outcome": "unknown", "themes": None}
     _, pairs = corpus(job)
     pairs = insights.rendered_pairs(pairs)
-    if not pairs:
-        # An empty corpus can only come back rejected, and the student pays either way.
-        raise ConflictApiError("These transcripts hold no answers to extract themes from.")
     result = None
     def record_charge(measured):
         # Empty text keeps the accounting row out of the student transcript corpus.
