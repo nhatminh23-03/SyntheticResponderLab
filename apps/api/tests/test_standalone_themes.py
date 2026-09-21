@@ -90,6 +90,8 @@ def test_standalone_themes_timeout_retry_and_safe_diagnostics(completed, monkeyp
     assert 'unknown' in response['saved']['message']
     assert batch['job_id'] in caplog.text and payload['revision'] in caplog.text
     assert 'secret transcript credential' not in caplog.text
+    assert 'secret transcript credential' not in response['saved']['message']
+    assert response['saved']['reason'] == 'RuntimeError'
     client.post(url, json=payload)
     assert len(calls) == 1
     retry = {**payload, 'retry_attempt': response['saved']['attempt']}
@@ -176,6 +178,7 @@ def test_standalone_themes_unusable_content_records_measured_cost(completed, mon
     '0: {quote}',                      # the transcript's own answer prefix
     '“{quote}”',             # typographic quotation marks
     '  {quote}  ',                     # stray whitespace
+    '“0: {quote}”',          # both at once: the prefix inside the quotation marks
 ])
 def test_standalone_themes_accepts_a_rerendered_quote(completed, rendering):
     """A quote the model really did copy must survive being re-rendered.
@@ -204,8 +207,21 @@ def test_standalone_themes_reads_a_fenced_json_answer(completed, monkeypatch):
     real = insights_module._call_openrouter_messages
     def fenced(**kw):
         answer = real(**kw)
-        return InterviewAnswer(text='```json\n' + answer.text + '\n```', model=answer.model,
+        return InterviewAnswer(text='Here is the JSON:\n\n```json\n' + answer.text + '\n```', model=answer.model,
             tokens_in=answer.tokens_in, tokens_out=answer.tokens_out, cost_usd=answer.cost_usd)
     monkeypatch.setattr('src.services.interview_service._call_openrouter_messages', fenced)
     result = client.post(url, json=payload).json()['data']['insights']
     assert result['available'], result.get('saved', {}).get('message')
+
+
+def test_extract_themes_counts_only_the_interviews_it_renders():
+    """The prompt's interview count has to match the corpus, or validate accepts a count the model never saw."""
+    pairs = [{'persona_id': 'p1', 'model_a': {'answers': {'0': 'said something'}}},
+             {'persona_id': 'p2', 'model_a': {'answers': {}}}]
+    seen = {}
+    def call(**prompts):
+        seen.update(prompts)
+        return '{"themes": []}'
+    insights_module._extract_insight_themes(pairs, '', call)
+    assert 'There are 1 interviews' in seen['user_prompt']
+    assert 'p2' not in seen['user_prompt']

@@ -403,16 +403,22 @@ Return ONLY a JSON object:
 
 
 def _strip_json_fence(raw: str) -> str:
-    """A fenced block is still a JSON answer; only an unparseable one is a failure."""
-    text = raw.strip()
-    if not text.startswith("```"):
-        return text
-    body = text.split("\n", 1)[1] if "\n" in text else ""
-    return body.rsplit("```", 1)[0].strip()
+    """A fenced block, wherever it sits, is still a JSON answer; only an unparseable one is a failure."""
+    fenced = re.search(r"```[a-zA-Z]*[ \t]*\n(.*?)```", raw, re.S)
+    if fenced:
+        return fenced.group(1).strip()
+    start, end = raw.find("{"), raw.rfind("}")
+    return raw[start:end + 1] if 0 <= start < end else raw.strip()
+
+
+def rendered_pairs(pairs, max_pairs: int = 30):
+    """The pairs _build_transcript_corpus actually renders — the only ones the model sees."""
+    return [p for p in pairs if (p.get("model_a", {}).get("answers") or {})][:max_pairs]
 
 
 def _extract_insight_themes(pairs, brief_context, call):
     """Shared extraction protocol; callers own authorization, usage and caching."""
+    pairs = rendered_pairs(pairs)
     raw = call(system_prompt=_insights_system_prompt(brief_context),
                user_prompt=f"There are {len(pairs)} interviews.\n\nINTERVIEW TRANSCRIPTS:\n"
                            f"{_build_transcript_corpus(pairs)}")

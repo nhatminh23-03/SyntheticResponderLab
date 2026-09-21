@@ -30,8 +30,9 @@ def _comparable(text: str) -> str:
     for fancy, plain in (("\u2018", "'"), ("\u2019", "'"), ("\u201c", '"'), ("\u201d", '"'),
                          ("\u2013", "-"), ("\u2014", "-"), ("\u2026", "...")):
         folded = folded.replace(fancy, plain)
-    folded = re.sub(r"^\s*\d+\s*:\s*", "", folded)
-    folded = " ".join(folded.split()).strip().strip('"\'').strip()
+    folded = " ".join(folded.split()).strip().strip('"\'')
+    # Either order: a prefix inside the wrapping marks, or marks inside the prefix.
+    folded = re.sub(r"^\s*\d+\s*:\s*", "", folded).strip().strip('"\'').strip()
     return folded.casefold()
 
 
@@ -120,6 +121,7 @@ def standalone_themes(session, settings, study, job_id, payload=None):
     attempt = (saved.get("attempt", 0) if saved else 0) + 1
     record = {"revision": view["revision"], "attempt": attempt, "outcome": "unknown", "themes": None}
     _, pairs = corpus(job)
+    pairs = insights.rendered_pairs(pairs)
     result = None
     def record_charge(measured):
         # Empty text keeps the accounting row out of the student transcript corpus.
@@ -149,15 +151,19 @@ def standalone_themes(session, settings, study, job_id, payload=None):
             record["budget_stop"] = exc.message
         return result.text
 
+    reason = None
     try:
         themes = insights._extract_insight_themes(pairs, "", call)
         reason = validate(themes, pairs)
-        if reason:
-            raise ValueError(reason)
-        record["themes"] = themes
+        if not reason:
+            record["themes"] = themes
     except Exception as exc:
+        # Only this module's own validation strings are safe to show the student; a
+        # provider exception can carry transcript or credential text.
+        reason = exc.__class__.__name__
+    if reason:
         # The student pays for every retry, so say which rule the response broke.
-        record["reason"] = str(exc)[:200] or exc.__class__.__name__
+        record["reason"] = reason[:200]
         # Key off whether a charge was actually recorded, not whether a usable result
         # came back: a rejected-but-billed response has a known charge and would
         # otherwise be reported to the student as an unknown billing outcome.
