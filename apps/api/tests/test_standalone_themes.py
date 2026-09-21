@@ -232,3 +232,18 @@ def test_extract_themes_counts_only_the_interviews_it_renders():
     assert 'p2' not in seen['user_prompt'] and 'p3' not in seen['user_prompt']
     # The quote check must not reach text the prompt never carried.
     assert [p['persona_id'] for p in insights_module.rendered_pairs(pairs)] == ['p1']
+
+
+def test_standalone_themes_refuses_an_unreadable_corpus(completed, db_session):
+    """Every answer is one the corpus skips, so the call could only come back rejected."""
+    client, url, batch, calls, _, payload = completed
+    job = db_session.scalar(select(Job).where(Job.public_id == batch['job_id']))
+    result = dict(job.result_json)
+    result['transcripts'] = [{**t, 'messages': [
+        {**m, 'content': '[no answer]'} if m['role'] == 'assistant' else m for m in t['messages']]}
+        for t in result['transcripts']]
+    job.result_json = result
+    db_session.commit()
+    revision = client.get(url).json()['data']['insights']['revision']
+    assert client.post(url, json={**payload, 'revision': revision}).status_code == 409
+    assert calls == []

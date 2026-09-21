@@ -455,7 +455,7 @@ def get_interview_insights(
         }
 
     result = latest_run.result_json
-    pairs = result.get("pairs") or []
+    pairs = rendered_pairs(result.get("pairs") or [])
     grounding_report = result.get("grounding_report") or {}
 
     if not pairs:

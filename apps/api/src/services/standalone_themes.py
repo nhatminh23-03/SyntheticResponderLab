@@ -122,6 +122,9 @@ def standalone_themes(session, settings, study, job_id, payload=None):
     record = {"revision": view["revision"], "attempt": attempt, "outcome": "unknown", "themes": None}
     _, pairs = corpus(job)
     pairs = insights.rendered_pairs(pairs)
+    if not pairs:
+        # An empty corpus can only come back rejected, and the student pays either way.
+        raise ConflictApiError("These transcripts hold no answers to extract themes from.")
     result = None
     def record_charge(measured):
         # Empty text keeps the accounting row out of the student transcript corpus.
@@ -159,8 +162,8 @@ def standalone_themes(session, settings, study, job_id, payload=None):
         if not reason:
             record["themes"] = themes
     except Exception as exc:
-        # Only this module's own validation strings are safe to show the student; a
-        # provider exception can carry transcript or credential text.
+        # A provider exception can carry transcript or credential text, so only its class
+        # is shown. Validation reasons are ours, and quote only the response's own field.
         reason = exc.__class__.__name__
     if reason:
         # The student pays for every retry, so say which rule the response broke.
