@@ -8,6 +8,7 @@ from sqlalchemy import select
 from test_standalone_batch import classroom, start, finish
 from src.persistence.models import Job
 from src.services.interview_cache import InterviewAnswer
+import src.services.interview_service as insights_module
 # Bound at import, before any fixture replaces the module attribute, so a test can
 # put the real helper back and exercise the parser at the HTTP boundary.
 from src.services.interview_service import _call_openrouter_messages as _real_openrouter_call
@@ -169,3 +170,42 @@ def test_standalone_themes_unusable_content_records_measured_cost(completed, mon
     assert 'billing outcome is unknown' not in result['saved']['message'], \
         'the charge is known and recorded — do not tell the student otherwise'
     assert client.get(url.removesuffix('/themes')).json()['data']['batch']['transcripts'] == batch['transcripts']
+
+
+@pytest.mark.parametrize('rendering', [
+    '0: {quote}',                      # the transcript's own answer prefix
+    '“{quote}”',             # typographic quotation marks
+    '  {quote}  ',                     # stray whitespace
+])
+def test_standalone_themes_accepts_a_rerendered_quote(completed, rendering):
+    """A quote the model really did copy must survive being re-rendered.
+
+    Every one of these is the same sentence from the same persona; rejecting them costs
+    the student another charge for a response that was never wrong.
+    """
+    client, url, batch, calls, themes, payload = completed
+    themes[0]['representative_quote'] = rendering.format(quote=themes[0]['representative_quote'])
+    result = client.post(url, json=payload).json()['data']['insights']
+    assert result['available'], result.get('saved', {}).get('message')
+
+
+def test_standalone_themes_failure_names_the_rule_it_broke(completed):
+    """The student pays per retry, so a rejection has to say what was wrong."""
+    client, url, batch, calls, themes, payload = completed
+    themes[0]['representative_quote'] = 'a quote nobody said'
+    saved = client.post(url, json=payload).json()['data']['insights']['saved']
+    assert saved['reason'] == "Theme 1 quote is not in %s's answers" % themes[0]['quote_persona_id']
+    assert saved['reason'] in saved['message']
+
+
+def test_standalone_themes_reads_a_fenced_json_answer(completed, monkeypatch):
+    """A fenced block is still a JSON answer; only an unparseable one is a failure."""
+    client, url, batch, calls, themes, payload = completed
+    real = insights_module._call_openrouter_messages
+    def fenced(**kw):
+        answer = real(**kw)
+        return InterviewAnswer(text='```json\n' + answer.text + '\n```', model=answer.model,
+            tokens_in=answer.tokens_in, tokens_out=answer.tokens_out, cost_usd=answer.cost_usd)
+    monkeypatch.setattr('src.services.interview_service._call_openrouter_messages', fenced)
+    result = client.post(url, json=payload).json()['data']['insights']
+    assert result['available'], result.get('saved', {}).get('message')

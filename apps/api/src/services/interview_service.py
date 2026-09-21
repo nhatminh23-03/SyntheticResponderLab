@@ -382,6 +382,10 @@ Identify 3–6 distinct themes that appear across multiple interviews. For each 
 - Pick the most representative verbatim quote from a specific persona (include persona_id)
 - Label the overall sentiment for this theme: "positive", "neutral", or "negative"
 
+The quote is checked against the transcript, and the whole response is rejected if it does not match. Copy it character for character from a single answer by that persona. Do not include the "<number>:" prefix the transcript puts in front of each answer, do not wrap it in quotation marks, do not join two sentences that are not adjacent, and do not shorten it with an ellipsis. A short exact quote is always better than a long approximate one.
+
+"count" is how many of the interviews below mention the theme. It is a whole number and cannot exceed the number of interviews.
+
 Return ONLY a JSON object:
 {{
   "themes": [
@@ -398,11 +402,21 @@ Return ONLY a JSON object:
 }}"""
 
 
+def _strip_json_fence(raw: str) -> str:
+    """A fenced block is still a JSON answer; only an unparseable one is a failure."""
+    text = raw.strip()
+    if not text.startswith("```"):
+        return text
+    body = text.split("\n", 1)[1] if "\n" in text else ""
+    return body.rsplit("```", 1)[0].strip()
+
+
 def _extract_insight_themes(pairs, brief_context, call):
     """Shared extraction protocol; callers own authorization, usage and caching."""
     raw = call(system_prompt=_insights_system_prompt(brief_context),
-               user_prompt=f"INTERVIEW TRANSCRIPTS:\n{_build_transcript_corpus(pairs)}")
-    return json.loads(raw).get("themes") or []
+               user_prompt=f"There are {len(pairs)} interviews.\n\nINTERVIEW TRANSCRIPTS:\n"
+                           f"{_build_transcript_corpus(pairs)}")
+    return json.loads(_strip_json_fence(raw)).get("themes") or []
 
 
 def get_interview_insights(
