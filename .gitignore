@@ -86,3 +86,8 @@ htmlcov/
 
 # Research pipeline: raw Census archives (hundreds of MB, re-downloadable).
 research/neo_persona_set/raw/
+
+# Minh's run archive and anything unpacked from it: ~40MB of run outputs that belong in the
+# Assets folder next to the repository, not in its history.
+research/6_subset_of_dataset_plus_the_all_600_persona_data.zip
+research/6_subset_of_dataset_plus_the_all_600_persona_data/
