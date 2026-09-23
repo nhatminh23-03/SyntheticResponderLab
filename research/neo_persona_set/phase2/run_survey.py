@@ -115,6 +115,9 @@ PRICE_TABLE: Dict[str, Tuple[float, float]] = {
 REAL_DATA_MARKERS = ("aytm", "survey-760085", "raw 600-participant", "tony visit")
 
 BUCKET_COLUMNS = ["persona_id", "age_bucket", "income_bucket", "ownership", "work_mode", "home_type"]
+# Bucket labels --drop-census-fields may withhold as well. persona_id is not droppable: the
+# runner keys every answer by it.
+DROPPABLE_BUCKET_COLUMNS = {c for c in BUCKET_COLUMNS if c != "persona_id"}
 CLASSIFIER_COLUMNS = [
     "fit_tier",
     "awareness_stage",
@@ -334,6 +337,9 @@ def build_persona(
         if income_label is not None and income_label != fields.get("income_bucket"):
             LAST_LOAD_STATS["income_bucket_recomputed"] += 1
             fields["income_bucket"] = income_label
+    for column in (drop_census or ()):
+        if column in DROPPABLE_BUCKET_COLUMNS:
+            fields[column] = None  # exclude_none keeps it out of the prompt entirely
     fields["lifestyle_tags"] = [tag.strip() for tag in (row.get("lifestyle_tags") or "").split(";") if tag.strip()]
     for column in CLASSIFIER_COLUMNS:
         fields[column] = _clean(row.get(column))
@@ -1926,7 +1932,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     # than silently running a condition that dropped nothing.
     drop_census = set(_split_fields(args.drop_census_fields))
     drop_story = set(_split_fields(args.drop_story_fields))
-    unknown_census = drop_census - set(CENSUS_COLUMNS)
+    unknown_census = drop_census - set(CENSUS_COLUMNS) - DROPPABLE_BUCKET_COLUMNS
     if unknown_census:
         parser_error = ", ".join(sorted(unknown_census))
         raise SystemExit(f"--drop-census-fields: unknown column(s): {parser_error}")
