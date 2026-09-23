@@ -46,7 +46,7 @@ import time
 from collections import Counter, OrderedDict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 import requests
 from dotenv import dotenv_values
@@ -164,6 +164,11 @@ STORY_PREFIX = "story_"
 STORY_LIST_FIELDS = {"priorities"}
 
 PROMPT_VARIANTS = ("full", "census", "buckets")
+
+
+def _split_fields(value: str) -> List[str]:
+    """Parse a comma-separated ablation field list. Sorted so the manifest is stable."""
+    return sorted({item.strip() for item in (value or "").split(",") if item.strip()})
 RESPONDENT_ID_PATTERN = re.compile(r"RESP_(\d+)")
 CSV_ENCODING = "utf-8-sig"  # BOM so Excel detects UTF-8 on double-click
 
@@ -297,7 +302,22 @@ def band_label(value: Optional[int], bands: List[Tuple[int, int, str]]) -> Optio
 LAST_LOAD_STATS: Dict[str, int] = {"age_bucket_recomputed": 0, "income_bucket_recomputed": 0}
 
 
-def build_persona(row: Dict[str, str], prompt_variant: str, *, recompute_buckets: bool = True) -> RichPersonaProfile:
+def build_persona(
+    row: Dict[str, str],
+    prompt_variant: str,
+    *,
+    recompute_buckets: bool = True,
+    drop_census: Optional[Set[str]] = None,
+    drop_story: Optional[Set[str]] = None,
+) -> RichPersonaProfile:
+    """`drop_census` / `drop_story` remove named fields from the prompt for ablation runs.
+
+    The prompt variants are coarse: "census" drops every story section and "buckets" drops the
+    census record as well. The ablations need one field at a time — exact_household_income while
+    keeping the band, or the three money story sections while keeping the rest — so the drop sets
+    are applied on top of whichever variant is in force. The analysis still reads the true income
+    from the persona file, so the correlation can be computed on a value the model never saw.
+    """
     if prompt_variant not in PROMPT_VARIANTS:
         raise ValueError(f"prompt_variant must be one of {PROMPT_VARIANTS}, got {prompt_variant!r}")
 
@@ -322,6 +342,8 @@ def build_persona(row: Dict[str, str], prompt_variant: str, *, recompute_buckets
         fields["name"] = _clean(row.get("name"))
         census: Dict[str, Any] = OrderedDict()
         for column in CENSUS_COLUMNS:
+            if drop_census and column in drop_census:
+                continue
             value: Any = _to_int(row.get(column)) if column in CENSUS_INT_COLUMNS else _clean(row.get(column))
             if value is not None:
                 census[column] = value
@@ -333,6 +355,8 @@ def build_persona(row: Dict[str, str], prompt_variant: str, *, recompute_buckets
             if not column.startswith(STORY_PREFIX):
                 continue
             key = column[len(STORY_PREFIX) :]
+            if drop_story and key in drop_story:
+                continue
             text = _clean(raw)
             if text is None:
                 continue
@@ -361,7 +385,9 @@ def read_persona_ids(path: Path) -> List[str]:
 
 
 def load_personas(
-    path: Path, *, limit: Optional[int], prompt_variant: str, recompute_buckets: bool = True, persona_ids: Optional[List[str]] = None
+    path: Path, *, limit: Optional[int], prompt_variant: str, recompute_buckets: bool = True,
+    persona_ids: Optional[List[str]] = None, drop_census: Optional[Set[str]] = None,
+    drop_story: Optional[Set[str]] = None,
 ) -> List[RichPersonaProfile]:
     with open(path, newline="", encoding="utf-8") as handle:
         reader = csv.DictReader(handle)
@@ -381,7 +407,11 @@ def load_personas(
         rows = rows[: int(limit)]
     LAST_LOAD_STATS["age_bucket_recomputed"] = 0
     LAST_LOAD_STATS["income_bucket_recomputed"] = 0
-    personas = [build_persona(row, prompt_variant, recompute_buckets=recompute_buckets) for row in rows]
+    personas = [
+        build_persona(row, prompt_variant, recompute_buckets=recompute_buckets,
+                      drop_census=drop_census, drop_story=drop_story)
+        for row in rows
+    ]
     ids = [persona.persona_id for persona in personas]
     duplicates = [pid for pid, count in Counter(ids).items() if count > 1]
     if duplicates:
@@ -1375,6 +1405,8 @@ def run_one(
         "max_retries": args.max_retries,
         "concurrency": args.concurrency,
         "prompt_variant": args.prompt_variant,
+        "drop_census_fields": _split_fields(getattr(args, "drop_census_fields", "")),
+        "drop_story_fields": _split_fields(getattr(args, "drop_story_fields", "")),
         "likert_label_map": not args.no_likert_label_map,
         "prompt_builder": "backend.simulation.prompt_builder.build_openrouter_prompt_payload",
         "survey_description_sent": survey.description is not None,
@@ -1852,6 +1884,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--temperature-jitter", type=float, default=0.0, help="vary temperature per persona by ±F around --temperature (deterministic per seed)")
     parser.add_argument("--seed-base", type=int, default=DEFAULT_SEED_BASE, help="seed = seed_base*10 + repeat")
     parser.add_argument("--prompt-variant", choices=PROMPT_VARIANTS, default="full")
+    parser.add_argument(
+        "--drop-census-fields", default="",
+        help="comma-separated census columns withheld from the prompt, for ablations "
+             "(e.g. exact_household_income)")
+    parser.add_argument(
+        "--drop-story-fields", default="",
+        help="comma-separated story sections withheld from the prompt, without the "
+             "story_ prefix (e.g. financial_picture,money_decisions)")
     parser.add_argument("--survey-description", choices=("keep", "drop"), default="drop",
                         help="send the markdown before the first question (the 'Survey Setup' block) to the model, or drop it (default)")
     parser.add_argument(
@@ -1882,6 +1922,26 @@ def main(argv: Optional[List[str]] = None) -> int:
         args.persona_ids = assert_not_real_data(args.persona_ids, "--persona-ids")
     args.concurrency = max(1, min(int(args.concurrency), 32))
 
+    # Ablation switches. Validated against the real column lists so a typo fails here rather
+    # than silently running a condition that dropped nothing.
+    drop_census = set(_split_fields(args.drop_census_fields))
+    drop_story = set(_split_fields(args.drop_story_fields))
+    unknown_census = drop_census - set(CENSUS_COLUMNS)
+    if unknown_census:
+        parser_error = ", ".join(sorted(unknown_census))
+        raise SystemExit(f"--drop-census-fields: unknown column(s): {parser_error}")
+    # Story sections are whatever the persona file carries, so read its header rather than
+    # keeping a second list here that could drift away from the data.
+    with args.personas.open("r", encoding=CSV_ENCODING, newline="") as handle:
+        header = next(csv.reader(handle), [])
+    story_columns = {c[len(STORY_PREFIX):] for c in header if c.startswith(STORY_PREFIX)}
+    unknown_story = drop_story - story_columns
+    if unknown_story:
+        raise SystemExit(
+            f"--drop-story-fields: unknown section(s): {', '.join(sorted(unknown_story))}\n"
+            f"known sections: {', '.join(sorted(story_columns))}"
+        )
+
     survey = load_survey(args.survey)
     census_lookup = persona_census_lookup(args.personas)
 
@@ -1893,7 +1953,9 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     persona_ids = read_persona_ids(args.persona_ids) if args.persona_ids else None
     personas = load_personas(
-        args.personas, limit=args.limit, prompt_variant=args.prompt_variant, recompute_buckets=not args.keep_file_buckets, persona_ids=persona_ids
+        args.personas, limit=args.limit, prompt_variant=args.prompt_variant,
+        recompute_buckets=not args.keep_file_buckets, persona_ids=persona_ids,
+        drop_census=drop_census, drop_story=drop_story
     )
     if LAST_LOAD_STATS["age_bucket_recomputed"] or LAST_LOAD_STATS["income_bucket_recomputed"]:
         print(
