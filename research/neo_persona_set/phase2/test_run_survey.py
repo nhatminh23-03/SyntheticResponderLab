@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import types
 import sys
 from collections import Counter
 from pathlib import Path
@@ -645,3 +646,21 @@ def test_interest_note_is_added_to_the_system_message_and_recorded(tmp_path: Pat
     plain_manifest = run_survey.run_one(model="stub/model", repeat=1, seed=1, personas=personas, survey=survey, contexts=run_survey.load_contexts(),
                                         args=_args(tmp_path, persona_csv, run_tag="plain"), client=StubClient(survey), census_lookup={})
     assert plain_manifest["respondent_note"] is None
+
+
+def test_response_style_is_the_same_persona_in_every_repeat():
+    """A style is a property of the respondent, so re-dealing it per repeat is a bug.
+
+    When assign_traits was seeded on the per-repeat seed, only 22 of 100 personas kept their style
+    between repeat 1 and repeat 2, and the fall in repeat agreement that followed was largely
+    measuring the re-deal rather than the panel becoming less deterministic.
+    """
+    mix = run_survey.parse_trait_mix("skeptical:0.25,enthusiastic:0.20,pragmatic:0.20,indifferent:0.15")
+    personas = [types.SimpleNamespace(persona_id=f"P{i:03d}") for i in range(1, 101)]
+    base = 20260909
+    first = run_survey.assign_traits(personas, mix, base)
+    second = run_survey.assign_traits(personas, mix, base)
+    assert first == second, "same seed_base must deal the same styles"
+    assert sum(1 for p in personas if first.get(p.persona_id)) == 80
+    # and the per-repeat seed, which is what the bug used, would have dealt a different hand
+    assert run_survey.assign_traits(personas, mix, base * 10 + 1) != first

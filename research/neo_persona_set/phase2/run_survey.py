@@ -431,7 +431,9 @@ def load_personas(
 def persona_census_lookup(path: Path) -> Dict[str, Dict[str, Any]]:
     """persona_id -> {exact_age, exact_household_income} for the consistency checks."""
     lookup: Dict[str, Dict[str, Any]] = {}
-    with open(path, newline="", encoding="utf-8") as handle:
+    # utf-8-sig, not utf-8: a persona file written with a BOM otherwise yields a first column named
+    # "\ufeffpersona_id" and this raises KeyError before the run starts.
+    with open(path, newline="", encoding=CSV_ENCODING) as handle:
         for row in csv.DictReader(handle):
             lookup[row["persona_id"]] = {
                 "exact_age": _to_int(row.get("exact_age")),
@@ -1440,7 +1442,11 @@ def run_one(
     price_in, price_out, price_source = price_for(model, args.price_in, args.price_out)
     git = git_info()
     trait_mix = parse_trait_mix(getattr(args, "trait_mix", None))
-    traits = assign_traits(personas, trait_mix, seed)
+    # Seeded on seed_base, not on `seed`, which carries the repeat. A response style is a property
+    # of the respondent, so it has to be the same in every repeat; when it was re-dealt per repeat
+    # only 22 of 100 personas kept their style, and the drop in repeat agreement that was reported
+    # as evidence of a less deterministic panel was mostly measuring that re-deal.
+    traits = assign_traits(personas, trait_mix, int(getattr(args, "seed_base", 0) or 0))
     for persona in personas:  # reset when no mix, so a persona list shared across runs never leaks a trait
         persona.trait = traits.get(persona.persona_id)
         persona.response_style = TRAITS[persona.trait] if persona.trait else None
@@ -1790,7 +1796,7 @@ def dry_run(*, personas: List[Any], survey: Any, contexts: Tuple[Any, Any], args
         respondent_note=INTEREST_NOTE if getattr(args, "interest_note", False) else None,
     )
     trait_mix = parse_trait_mix(getattr(args, "trait_mix", None))
-    traits = assign_traits(personas, trait_mix, args.seed_base * 10 + 1)
+    traits = assign_traits(personas, trait_mix, int(args.seed_base))
     for persona in personas:
         persona.trait = traits.get(persona.persona_id)
         persona.response_style = TRAITS[persona.trait] if persona.trait else None
