@@ -35,6 +35,7 @@ import argparse
 import csv
 import hashlib
 import json
+import math
 import os
 import random
 import re
@@ -761,6 +762,7 @@ class OpenRouterClient:
         retry_base_seconds: float = 2.0,
         json_mode: bool = False,
         reasoning_effort: Optional[str] = None,
+        top_logprobs: int = 0,
         progress_every: int = 10,
         total: Optional[int] = None,
     ) -> None:
@@ -775,6 +777,7 @@ class OpenRouterClient:
         self.retry_base_seconds = float(retry_base_seconds)
         self.json_mode = bool(json_mode)
         self.reasoning_effort = reasoning_effort
+        self.top_logprobs = max(0, int(top_logprobs))
         self.progress_every = max(1, int(progress_every))
         self.total = total
         self.captures: Dict[str, Dict[str, Any]] = {}
@@ -807,6 +810,12 @@ class OpenRouterClient:
             body["response_format"] = {"type": "json_object"}
         if self.reasoning_effort and self.reasoning_effort != "default":
             body["reasoning"] = {"enabled": False} if self.reasoning_effort == "off" else {"effort": self.reasoning_effort}
+        if self.top_logprobs:
+            # The answers arrive as one JSON object, so the alternatives for the token carrying a
+            # likert answer are that question's distribution over 1-5. Only some providers return
+            # them; a model that ignores the field still runs, and logprobs.csv is simply empty.
+            body["logprobs"] = True
+            body["top_logprobs"] = int(self.top_logprobs)
         return body
 
     # -- the call the adapter makes ----------------------------------------------------------
@@ -912,6 +921,11 @@ class OpenRouterClient:
 
             raw_text = llm_client._extract_text_content(data)
             capture["raw_text"] = raw_text
+            if self.top_logprobs:
+                content = ((choices[0] or {}).get("logprobs") or {}).get("content") if choices else None
+                capture["logprobs"] = content or None
+                with self._lock:
+                    self.stats["logprobs_returned" if content else "logprobs_missing"] += 1
             parsed = llm_client._parse_json_strict(raw_text)
             if parsed is None:
                 recovered = _recover_json_object(raw_text)
@@ -1067,6 +1081,41 @@ def write_json(path: Path, payload: Any) -> None:
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=False, default=str) + "\n", encoding="utf-8")
 
 
+LIKERT_TOKEN = re.compile(r"^[\s\"']*([1-5])[\s\"',}\]]*$")
+ANSWER_FIELD = re.compile(r'"question_id"\s*:\s*"([^"]+)"[^}]*?"answer"\s*:\s*$', re.DOTALL)
+
+
+def likert_distributions(capture: Dict[str, Any]) -> List[Tuple[str, Dict[str, float]]]:
+    """Recover each likert question's distribution over 1-5 from the token alternatives.
+
+    The model returns all 39 answers as one JSON object, so there is no per-question response to
+    read a distribution off. Instead the tokens are replayed in order while the text is rebuilt; the
+    token carrying a likert answer is the first digit token after that question's "answer":, and its
+    alternatives are the scale points the model was weighing at that moment.
+
+    Alternatives that are not a bare 1-5 are dropped and the rest renormalised, because the list
+    also holds punctuation and out-of-range digits that are not answers to this question.
+    """
+    content = capture.get("logprobs") or []
+    out: List[Tuple[str, Dict[str, float]]] = []
+    text = ""
+    for entry in content:
+        token = str(entry.get("token", ""))
+        if LIKERT_TOKEN.match(token):
+            preceding = ANSWER_FIELD.search(text)
+            if preceding:
+                weights: Dict[str, float] = {}
+                for alternative in entry.get("top_logprobs") or []:
+                    hit = LIKERT_TOKEN.match(str(alternative.get("token", "")))
+                    if hit:
+                        weights[hit.group(1)] = weights.get(hit.group(1), 0.0) + math.exp(float(alternative["logprob"]))
+                total = sum(weights.values())
+                if total > 0:
+                    out.append((preceding.group(1), {k: v / total for k, v in weights.items()}))
+        text += token
+    return out
+
+
 def write_run_outputs(
     *,
     run_dir: Path,
@@ -1160,6 +1209,20 @@ def write_run_outputs(
             if capture is None:
                 capture = {"persona_id": pid, "error": "no response captured"}
             handle.write(json.dumps(capture, ensure_ascii=False, default=str) + "\n")
+
+    rows_written = 0
+    logprob_path = run_dir / "logprobs.csv"
+    with open(logprob_path, "w", newline="", encoding=CSV_ENCODING) as handle:
+        writer = csv.writer(handle)
+        writer.writerow(["run_id", "persona_id", "question_id", "level", "probability"])
+        for pid in persona_ids:
+            for question_id, distribution in likert_distributions(captures.get(pid) or {}):
+                for level in ("1", "2", "3", "4", "5"):
+                    writer.writerow([run_id, pid, question_id, level, round(distribution.get(level, 0.0), 6)])
+                rows_written += 1
+    if not rows_written:
+        # Nothing to keep: either --top-logprobs was not passed, or the provider ignored the field.
+        logprob_path.unlink(missing_ok=True)
 
     if prompt_sample:
         lines = []
@@ -1411,6 +1474,7 @@ def run_one(
         "max_retries": args.max_retries,
         "concurrency": args.concurrency,
         "prompt_variant": args.prompt_variant,
+        "top_logprobs": int(getattr(args, "top_logprobs", 0) or 0),
         "drop_census_fields": _split_fields(getattr(args, "drop_census_fields", "")),
         "drop_story_fields": _split_fields(getattr(args, "drop_story_fields", "")),
         "likert_label_map": not args.no_likert_label_map,
@@ -1460,6 +1524,7 @@ def run_one(
             max_retries=args.max_retries,
             json_mode=args.json_mode,
             reasoning_effort=args.reasoning_effort,
+            top_logprobs=args.top_logprobs,
             progress_every=args.progress_every,
             total=len(personas),
         )
@@ -1890,6 +1955,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--temperature-jitter", type=float, default=0.0, help="vary temperature per persona by ±F around --temperature (deterministic per seed)")
     parser.add_argument("--seed-base", type=int, default=DEFAULT_SEED_BASE, help="seed = seed_base*10 + repeat")
     parser.add_argument("--prompt-variant", choices=PROMPT_VARIANTS, default="full")
+    parser.add_argument(
+        "--top-logprobs", type=int, default=0, metavar="N",
+        help="ask for the N most likely alternatives at every generated token and write "
+             "logprobs.csv, the per-question distribution over the likert scale. 0 disables it. "
+             "Only some providers return them: DeepSeek and Llama 4 do, Gemini and Mistral ignore "
+             "the field, and Qwen's provider rejects the request")
     parser.add_argument(
         "--drop-census-fields", default="",
         help="comma-separated census columns withheld from the prompt, for ablations "

@@ -60,6 +60,36 @@ def read_wide(run_dir: Path) -> List[Dict[str, str]]:
         return list(csv.DictReader(handle))
 
 
+def read_distributions(run_dir: Path, filename: str, keep: Optional[set] = None) -> Dict[str, Dict[str, float]]:
+    """{question_id: {option: mean probability}} from a run's per-respondent distributions.
+
+    Both runners write one row per respondent, question and option: the Jev runner as
+    probabilities.csv, the chat runner as logprobs.csv when --top-logprobs was passed. Averaging a
+    respondent's probability vector rather than counting the answer it collapsed to is the whole
+    point of the comparison, so the two files are read the same way.
+
+    `keep` restricts to a set of persona ids, which is how the outdoor-space screen is applied here.
+    """
+    path = run_dir / filename
+    if not path.exists():
+        return {}
+    totals: Dict[str, Dict[str, float]] = defaultdict(lambda: defaultdict(float))
+    respondents: Dict[str, set] = defaultdict(set)
+    column = "level" if filename == "logprobs.csv" else "option"
+    with path.open(newline="", encoding="utf-8-sig") as handle:
+        for row in csv.DictReader(handle):
+            if keep is not None and row["persona_id"] not in keep:
+                continue
+            question = row["question_id"]
+            totals[question][row[column]] += float(row["probability"])
+            respondents[question].add(row["persona_id"])
+    out: Dict[str, Dict[str, float]] = {}
+    for question, options in totals.items():
+        n = len(respondents[question]) or 1
+        out[question] = {option: value / n for option, value in options.items()}
+    return out
+
+
 def tv(a: Dict[str, float], b: Dict[str, float]) -> float:
     return 0.5 * sum(abs(a.get(k, 0.0) - b.get(k, 0.0)) for k in set(a) | set(b))
 
@@ -77,7 +107,8 @@ def js(a: Dict[str, float], b: Dict[str, float]) -> float:
 
 
 def score(arm: str, run_dirs: List[Path], real: Dict[str, Dict[str, float]],
-          require_outdoor_space: bool) -> Tuple[Dict[str, object], List[Dict[str, object]]]:
+          require_outdoor_space: bool,
+          distributions_file: str = "") -> Tuple[Dict[str, object], List[Dict[str, object]]]:
     rows: List[Dict[str, str]] = []
     for d in run_dirs:
         rows += read_wide(d)
@@ -87,6 +118,22 @@ def score(arm: str, run_dirs: List[Path], real: Dict[str, Dict[str, float]],
         # real respondents who answered No were terminated and never reached the rest of the survey.
         kept = [r for r in rows if str(r.get("S3", "")).strip().lower() != "no"]
         dropped, rows = len(rows) - len(kept), kept
+
+    # When a distributions file is named, a question that has one is scored on the averaged
+    # probability vector and the rest still fall back to counting answers, so a run that only
+    # carries distributions for its likert items is scored end to end.
+    distributions: Dict[str, Dict[str, float]] = {}
+    if distributions_file:
+        keep = {r["persona_id"] for r in rows}
+        merged: Dict[str, List[Dict[str, float]]] = defaultdict(list)
+        for d in run_dirs:
+            for question, shares in read_distributions(d, distributions_file, keep).items():
+                merged[question].append(shares)
+        for question, per_run in merged.items():
+            options = {o for shares in per_run for o in shares}
+            distributions[question] = {
+                o: sum(shares.get(o, 0.0) for shares in per_run) / len(per_run) for o in options
+            }
 
     per_question: List[Dict[str, object]] = []
     for our_id, real_shares in sorted(real.items()):
@@ -98,7 +145,7 @@ def score(arm: str, run_dirs: List[Path], real: Dict[str, Dict[str, float]],
             continue
         counts = Counter(answers)
         n = sum(counts.values())
-        synth = {k: v / n for k, v in counts.items()}
+        synth = distributions.get(our_id) or {k: v / n for k, v in counts.items()}
         if not set(synth) & set(real_shares):
             continue  # option labels do not line up; compare_real reports these as unmapped
         per_question.append({
@@ -106,7 +153,8 @@ def score(arm: str, run_dirs: List[Path], real: Dict[str, Dict[str, float]],
             "question": our_id,
             "tv": tv(real_shares, synth),
             "js": js(real_shares, synth),
-            "top_match": int(max(real_shares, key=real_shares.get) == counts.most_common(1)[0][0]),
+            "top_match": int(max(real_shares, key=real_shares.get) == max(synth, key=synth.get)),
+            "source": "distribution" if our_id in distributions else "answers",
         })
 
     tvs = [float(q["tv"]) for q in per_question]
@@ -121,6 +169,7 @@ def score(arm: str, run_dirs: List[Path], real: Dict[str, Dict[str, float]],
         "mean_js": round(sum(float(q["js"]) for q in per_question) / len(per_question), 4) if per_question else float("nan"),
         "share_close": round(sum(1 for t in tvs if t <= CLOSE_TV) / len(tvs), 4) if tvs else float("nan"),
         "share_top_match": round(sum(int(q["top_match"]) for q in per_question) / len(per_question), 4) if per_question else float("nan"),
+        "questions_from_distributions": sum(1 for q in per_question if q["source"] == "distribution"),
     }
     return summary, per_question
 
@@ -130,6 +179,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--real-from", type=Path, required=True, help="a folder written by compare_real.py")
     parser.add_argument("--arm", action="append", required=True, metavar="NAME=RUN_DIR[,RUN_DIR...]")
     parser.add_argument("--keep-all", dest="require_outdoor_space", action="store_false", default=True)
+    parser.add_argument(
+        "--distributions", default="", metavar="FILENAME",
+        help="score on the per-respondent distributions in this file instead of the answers they "
+             "collapsed to: probabilities.csv for a Jev run, logprobs.csv for a chat run")
     parser.add_argument("--out", type=Path, default=None)
     parser.add_argument("--per-question", type=Path, default=None)
     args = parser.parse_args(argv)
@@ -141,11 +194,12 @@ def main(argv: Optional[List[str]] = None) -> int:
     for spec in args.arm:
         name, _, paths = spec.partition("=")
         dirs = [Path(p.strip()) for p in paths.split(",") if p.strip()]
-        summary, per_question = score(name.strip(), dirs, real, args.require_outdoor_space)
+        summary, per_question = score(name.strip(), dirs, real, args.require_outdoor_space,
+                                      distributions_file=args.distributions)
         summaries.append(summary)
         details += per_question
 
-    header = ["arm", "questions_compared", "mean_tv", "median_tv", "mean_js", "share_close", "share_top_match", "n_rows", "n_dropped_outdoor"]
+    header = ["arm", "questions_compared", "questions_from_distributions", "mean_tv", "median_tv", "mean_js", "share_close", "share_top_match", "n_rows", "n_dropped_outdoor"]
     widths = {"arm": 34}
     print(" ".join(f"{h:<{widths.get(h, 18)}}" for h in header))
     print("-" * 150)
@@ -159,7 +213,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             writer.writerows(summaries)
     if args.per_question:
         with args.per_question.open("w", newline="", encoding="utf-8-sig") as handle:
-            writer = csv.DictWriter(handle, fieldnames=["arm", "question", "tv", "js", "top_match"])
+            writer = csv.DictWriter(handle, fieldnames=["arm", "question", "tv", "js", "top_match", "source"])
             writer.writeheader()
             writer.writerows(details)
     return 0
