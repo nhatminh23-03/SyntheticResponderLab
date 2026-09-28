@@ -10,6 +10,11 @@ side are counted and reported), and metrics.py supplies distances, rank checks a
 Outputs: comparison_long.csv, comparison_options.csv, comparison_summary.csv,
 comparison_by_question.md, unmapped.md, crosswalk.csv, manifest.json. Nothing is ever written
 next to the real file.
+
+--items picks which questions count toward the summary (a named set from item_sets.py, e.g.
+lin13-validation, or a file of question ids); the others are still compared and reported, marked
+scored=false. --real-ids scores against only the listed real respondents (a file of AYTM Response
+IDs, e.g. the score half from make_real_split.py).
 """
 
 from __future__ import annotations
@@ -20,10 +25,10 @@ import json
 import math
 import subprocess
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Set
+from typing import Any, Callable, Dict, List, Optional, Sequence, Set
 
 HERE = Path(__file__).resolve().parent
 REPO_ROOT = HERE.parents[2]
@@ -32,6 +37,7 @@ if str(HERE) not in sys.path:
 
 import crosswalk  # noqa: E402
 import filter_qualified  # noqa: E402
+import item_sets  # noqa: E402
 import metrics  # noqa: E402
 import realdata  # noqa: E402
 
@@ -56,7 +62,7 @@ OPTIONS_COLUMNS = [
 SUMMARY_COLUMNS = [
     "run_id", "run_label", "model", "n_synth_total", "n_synth_after_filter", "n_dropped_outdoor", "n_fallback_blanked",
     "questions_compared", "questions_close", "share_close", "mean_tv", "median_tv", "mean_js", "share_top_match",
-    "mean_spearman", "likert_questions", "mean_abs_mean_diff", "questions_chi2_p_below_05",
+    "mean_spearman", "likert_questions", "mean_abs_mean_diff", "questions_chi2_p_below_05", "item_set", "n_real_respondents",
 ]
 
 
@@ -340,8 +346,16 @@ def compare_one(real: realdata.RealSurvey, run: RunData, qmap: crosswalk.Questio
     return QuestionResult(qmap, run, STATUS_OK, spec, real_x, synth_x, score(qmap, real_x, synth_x, close_tv))
 
 
-def compare_runs(real: realdata.RealSurvey, runs: List[RunData], close_tv: float) -> List[QuestionResult]:
-    return [compare_one(real, run, qmap, close_tv) for qmap in crosswalk.CROSSWALK for run in runs]
+def scored_maps(items: Optional[Sequence[str]] = None) -> List[crosswalk.QuestionMap]:
+    """The crosswalk with `scored` narrowed to `items`; every entry is kept so it is still reported."""
+    if items is None:
+        return list(crosswalk.CROSSWALK)
+    wanted = set(items)
+    return [replace(qmap, scored=qmap.scored and qmap.our_id in wanted) for qmap in crosswalk.CROSSWALK]
+
+
+def compare_runs(real: realdata.RealSurvey, runs: List[RunData], close_tv: float, items: Optional[Sequence[str]] = None) -> List[QuestionResult]:
+    return [compare_one(real, run, qmap, close_tv) for qmap in scored_maps(items) for run in runs]
 
 
 def long_row(result: QuestionResult) -> Dict[str, str]:
@@ -377,7 +391,7 @@ def option_rows(result: QuestionResult) -> List[Dict[str, str]]:
     return rows
 
 
-def summarize_run(run: RunData, results: List[QuestionResult]) -> Dict[str, Any]:
+def summarize_run(run: RunData, results: List[QuestionResult], *, item_set: str = "all", n_real_respondents: Optional[int] = None) -> Dict[str, Any]:
     scored = [r for r in results if r.run is run and r.status == STATUS_OK and r.qmap.scored]
     likert = [r for r in scored if r.qmap.kind == "likert"]
     spearmans = [r.stats["spearman"] for r in scored if not math.isnan(r.stats["spearman"])]
@@ -390,6 +404,7 @@ def summarize_run(run: RunData, results: List[QuestionResult]) -> Dict[str, Any]
         "mean_js": metrics.mean([r.stats["js"] for r in scored]), "share_top_match": (sum(1 for r in scored if r.stats["top_match"]) / count) if count else metrics.NAN,
         "mean_spearman": metrics.mean(spearmans), "likert_questions": len(likert), "mean_abs_mean_diff": metrics.mean([abs(r.stats["mean_diff"]) for r in likert]),
         "questions_chi2_p_below_05": sum(1 for r in scored if not math.isnan(r.stats["chi2_p"]) and r.stats["chi2_p"] < 0.05),
+        "item_set": item_set, "n_real_respondents": "" if n_real_respondents is None else n_real_respondents,
     }
 
 
@@ -435,10 +450,11 @@ def _metrics_table(ok: List[QuestionResult], close_tv: float) -> List[str]:
 def render_by_question(results: List[QuestionResult], close_tv: float) -> str:
     lines = ["# Real (AYTM) vs synthetic runs, question by question", "",
              "Shares are per respondent on the categories both surveys share; answers outside the shared list are reported as the off-list share and excluded before renormalizing. Multi-select shares are the share of respondents selecting each option; TV/JS/chi-square for multi-selects use the pick distribution.", ""]
-    for qmap in crosswalk.CROSSWALK:
-        ok = [r for r in results if r.qmap is qmap and r.status == STATUS_OK]
+    for entry in crosswalk.CROSSWALK:
+        ok = [r for r in results if r.qmap.our_id == entry.our_id and r.status == STATUS_OK]
         if not ok:
             continue
+        qmap = ok[0].qmap  # carries the scored flag for this comparison's item set
         text = ok[0].run.questions[qmap.our_id].text[:140]
         flag = "" if qmap.scored else " (report only)"
         lines += [f"## {qmap.our_id} vs real {qmap.real_key} ({qmap.kind}{flag})", "", text, "", *_shares_table(qmap, ok), "", *_metrics_table(ok, close_tv), ""]
@@ -486,7 +502,8 @@ def write_outputs(out_dir: Path, real: realdata.RealSurvey, runs: List[RunData],
     outputs = {name: out_dir / name for name in ("comparison_long.csv", "comparison_options.csv", "comparison_summary.csv", "comparison_by_question.md", "unmapped.md", "crosswalk.csv")}
     write_csv(outputs["comparison_long.csv"], LONG_COLUMNS, [long_row(r) for r in results])
     write_csv(outputs["comparison_options.csv"], OPTIONS_COLUMNS, [row for r in results for row in option_rows(r)])
-    write_csv(outputs["comparison_summary.csv"], SUMMARY_COLUMNS, [summarize_run(run, results) for run in runs])
+    write_csv(outputs["comparison_summary.csv"], SUMMARY_COLUMNS,
+              [summarize_run(run, results, item_set=args.item_set_name, n_real_respondents=real.n) for run in runs])
     outputs["comparison_by_question.md"].write_text(render_by_question(results, args.close_tv), encoding="utf-8")
     outputs["unmapped.md"].write_text(render_unmapped(real), encoding="utf-8")
     crosswalk.write_crosswalk_csv(outputs["crosswalk.csv"], our_options=crosswalk.our_options_from_questions(runs[0].questions),
@@ -502,7 +519,10 @@ def build_manifest(args: argparse.Namespace, real_path: Path, real: realdata.Rea
     return {
         "created_at": utcnow().isoformat(),
         "script": {"path": SCRIPT_PATH, "git_commit": git["commit"], "git_branch": git["branch"], "git_dirty": git["dirty"], "python": sys.version.split()[0]},
-        "real": {"path": str(real_path), "sha256": sha256_of_file(real_path), "n_rows": real.n, "n_columns": len(real.columns)},
+        "real": {"path": str(real_path), "sha256": sha256_of_file(real_path), "n_rows": real.n, "n_rows_in_file": args.n_real_in_file,
+                 "n_columns": len(real.columns),
+                 "subset": None if args.real_ids is None else {"ids_file": str(args.real_ids), "sha256": sha256_of_file(Path(args.real_ids)), "n": real.n}},
+        "items": {"set": args.item_set_name, "ids": list(args.item_ids), "n": len(args.item_ids)},
         "runs": [{"run_id": run.run_id, "run_label": run.label, "model": run.model, "repeat": run.repeat, "run_dir": str(run.run_dir), "sha256": run.hashes,
                   "n_total": run.n_total, "n_after_outdoor_filter": len(run.rows), "n_dropped_outdoor": run.n_dropped_outdoor, "n_fallback_blanked": run.n_fallback_blanked} for run in runs],
         "filters": {"require_outdoor_space": bool(args.require_outdoor_space), "screener_id": filter_qualified.SCREENER_ID, "exclude_fallback": bool(args.exclude_fallback)},
@@ -524,6 +544,10 @@ def build_parser() -> argparse.ArgumentParser:
     group.add_argument("--keep-all", dest="require_outdoor_space", action="store_false")
     parser.add_argument("--close-tv", type=float, default=0.10)
     parser.add_argument("--exclude-fallback", action="store_true")
+    parser.add_argument("--items", default=None, metavar="SET_OR_FILE",
+                        help=f"questions that count toward the summary: one of {', '.join(item_sets.NAMED_SETS)}, or a file of question ids (default: every comparable question)")
+    parser.add_argument("--real-ids", type=Path, default=None, metavar="FILE",
+                        help="score against only these real respondents: a file of AYTM Response IDs, one per line")
     return parser
 
 
@@ -535,16 +559,27 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 2
     out_dir = realdata.assert_outside_real_folder(args.out, real_path, "--out")
     run_dirs = [realdata.assert_outside_real_folder(path, real_path, "--runs") for path in args.runs]
-    real = realdata.load_real_survey(real_path)
+    try:
+        if args.items is None:
+            args.item_set_name, args.item_ids = "all", [q.our_id for q in crosswalk.CROSSWALK if q.kind != "none" and q.scored]
+        else:
+            args.item_set_name, args.item_ids = item_sets.load_item_set(args.items)
+        real = realdata.load_real_survey(real_path)
+        args.n_real_in_file = real.n
+        if args.real_ids is not None:
+            real = realdata.subset_by_response_id(real, realdata.read_id_file(args.real_ids))
+    except ValueError as error:
+        print(f"compare_real: {error}", file=sys.stderr)
+        return 2
     runs = [load_run(path, require_outdoor_space=args.require_outdoor_space, exclude_fallback=args.exclude_fallback) for path in run_dirs]
     assign_labels(runs)
-    results = compare_runs(real, runs, args.close_tv)
+    results = compare_runs(real, runs, args.close_tv, None if args.items is None else args.item_ids)
     out_dir.mkdir(parents=True, exist_ok=True)
     outputs = write_outputs(out_dir, real, runs, results, args)
     write_json(out_dir / "manifest.json", build_manifest(args, real_path, real, runs, results, outputs))
-    print(f"real: {real.n} respondents, {len(real.columns)} columns")
+    print(f"real: {real.n} of {args.n_real_in_file} respondents, {len(real.columns)} columns; items: {args.item_set_name} ({len(args.item_ids)})")
     for run in runs:
-        summary = summarize_run(run, results)
+        summary = summarize_run(run, results, item_set=args.item_set_name, n_real_respondents=real.n)
         print(f"{run.label:32s} n={len(run.rows):4d} compared={summary['questions_compared']:2d} close={summary['questions_close']:2d} "
               f"mean_tv={summary['mean_tv']:.3f} top_match={pct(summary['share_top_match'])} |mean diff|={summary['mean_abs_mean_diff']:.2f}")
     print(f"wrote {out_dir}")

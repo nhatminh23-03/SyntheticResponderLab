@@ -48,3 +48,33 @@ a two-proportion z-test.
 `write_start_here.py` (START_HERE.md for the shared folder), `judge_reasons.py` (a third model
 picks the better-reasoned answer between two `--reason-per-answer` runs; needs the API). Tests:
 `apps/api/.venv/bin/python -m pytest research/neo_persona_set/phase3 -q`.
+
+## Scoring on a subset of items or respondents
+
+Dr. Lin's calibration / validation split (2026-09-26): anything fitted to real answers uses only
+the calibration items and the fit half of respondents; results are scored only on the validation
+items against the other half.
+
+```bash
+# 1. split the real respondents (ids come from the real file: written outside the repo, refused inside it)
+apps/api/.venv/bin/python research/neo_persona_set/phase3/make_real_split.py \
+  --real "$REAL" --out ../SyntheticResponderLab-Assets/real_splits/provisional-seed42
+
+# 2. score only the 13 validation items, against only the score half
+apps/api/.venv/bin/python research/neo_persona_set/phase3/compare_real.py --real "$REAL" \
+  --runs <run_dir> ... --out <dir> \
+  --items lin13-validation \
+  --real-ids ../SyntheticResponderLab-Assets/real_splits/provisional-seed42/score_ids.txt
+```
+
+- `--items` takes a named set from `item_sets.py` (`lin13-validation`, `lin13-calibration`,
+  `all-scored`) or a file of question ids. Questions outside the set are still compared and
+  reported, with `scored=false`. Without `--items` every comparable question counts, as before.
+- Q15 and Q24 are set aside (Dr. Wang, 2026-09-24) and are in no named set; `all-scored` is the
+  other 34. On our survey the calibration set has 10 items, not 13: our survey carries only 3 of
+  the 5 value drivers and Q15 is set aside.
+- `--real-ids` takes a file of AYTM Response IDs. The split from `make_real_split.py` is
+  **provisional**: Dr. Lin's 300/300 (seed 42) used a method we don't know, so swap in her id lists
+  once she shares them.
+- `comparison_summary.csv` gains `item_set` and `n_real_respondents`; `manifest.json` records the
+  item list and the id file's hash.
