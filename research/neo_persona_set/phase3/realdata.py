@@ -173,6 +173,38 @@ def load_real_survey(path: Path) -> RealSurvey:
     return RealSurvey(path=str(path), columns=columns, header_text=header_text, rows=rows)
 
 
+RESPONSE_ID_KEY = "Response ID"
+
+
+def read_id_file(path: Path) -> List[str]:
+    """One id per line; blank lines and '#' comments are skipped; duplicates are an error."""
+    ids: List[str] = []
+    for raw in Path(path).read_text(encoding="utf-8-sig").splitlines():
+        line = raw.split("#", 1)[0].strip()
+        if line:
+            ids.append(line)
+    duplicates = sorted({item for item in ids if ids.count(item) > 1})
+    if duplicates:
+        raise ValueError(f"{path}: duplicate ids {duplicates[:5]}")
+    if not ids:
+        raise ValueError(f"{path}: no ids")
+    return ids
+
+
+def subset_by_response_id(real: RealSurvey, ids: List[str]) -> RealSurvey:
+    """A copy of the survey holding only the respondents whose Response ID is listed."""
+    column = real.find(RESPONSE_ID_KEY)
+    if column is None:
+        raise ValueError(f"{real.path}: no {RESPONSE_ID_KEY!r} column")
+    present = {row[column].strip() for row in real.rows}
+    missing = [item for item in ids if item not in present]
+    if missing:
+        raise ValueError(f"{len(missing)} ids are not in the real file, e.g. {missing[:5]}")
+    wanted = set(ids)
+    rows = [row for row in real.rows if row[column].strip() in wanted]
+    return RealSurvey(path=real.path, columns=list(real.columns), header_text=dict(real.header_text), rows=rows)
+
+
 def likert_label_to_int(cell: Optional[str]) -> Optional[int]:
     """'1 - Not interested' -> 1, '3' -> 3, '' or 'N/A' -> None."""
     if cell is None:
