@@ -326,10 +326,11 @@ def main() -> int:
         "approx_usd": round(tokens_in / 1e6 * 0.042, 6),
         "elapsed_seconds": round(time.time() - started, 1),
         "reference": {
-            "real_rho_income_q1": 0.10,
+            # Real-side values are not hardcoded here: nothing derived from the AYTM file is
+            # committed. They are in the comparison folders, beside the repository.
+            "real_reference": "see real_comparison/<condition>/comparison_by_question.md",
             "deepseek_rho": 0.67,
             "qwen_rho": 0.72,
-            "real_q1_shares": [0.38, 0.20, 0.18, 0.16, 0.07],
         },
     }
     (run_dir / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
@@ -337,7 +338,7 @@ def main() -> int:
 
     print(f"\n{'':22}{'1':>7}{'2':>7}{'3':>7}{'4':>7}{'5':>7}")
     print(f"  {'Jev expected shares':<20}" + "".join(f"{s:>7.2f}" for s in shares))
-    print(f"  {'real 600':<20}" + "".join(f"{s:>7.2f}" for s in summary['reference']['real_q1_shares']))
+    print("  real 600            see real_comparison/<condition>/comparison_by_question.md")
     print()
     print(f"  rho(income, E[Q1])    {summary['rho_income_q1']:>6}   "
           f"(real 0.10 | DeepSeek 0.67 | Qwen 0.72)")

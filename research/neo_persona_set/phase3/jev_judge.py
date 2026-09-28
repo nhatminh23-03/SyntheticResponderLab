@@ -354,14 +354,12 @@ def main() -> int:
             "qwen": [round(x, 4) for x in qw_shares],
             "jev_judged_hard": [round(x, 4) for x in hard],
             "jev_judged_soft": [round(x, 4) for x in soft],
-            "real": [0.38, 0.20, 0.18, 0.16, 0.07],
         },
         "rho_income_q1": {
             "deepseek": round(spearman([p[0] for p in pairs_ds], [p[1] for p in pairs_ds]), 4),
             "qwen": round(spearman([p[0] for p in pairs_qw], [p[1] for p in pairs_qw]), 4),
             "jev_judged_hard": round(spearman(incomes, hard_scores), 4),
             "jev_judged_soft": round(spearman(incomes, soft_scores), 4),
-            "real": 0.10,
         },
         "judge_position_bias_share_A": round(position_a_wins / max(len(hard_scores), 1), 4),
         "elapsed_note": "stage1 chat + stage2 jev",
@@ -384,8 +382,8 @@ def main() -> int:
     ]:
         print(f"  {label:<20}" + "".join(f"{s:>7.2f}" for s in shares)
               + f"{summary['rho_income_q1'][key]:>9.3f}")
-    print(f"  {'REAL 600':<20}" + "".join(f"{s:>7.2f}" for s in [0.38, 0.20, 0.18, 0.16, 0.07])
-          + f"{0.10:>9.3f}")
+    # Real-side values are not printed here; nothing derived from the AYTM file is committed.
+    print("  REAL 600            see real_comparison/<condition>/comparison_by_question.md")
     print(f"\n  judge picked position A {summary['judge_position_bias_share_A']:.0%} "
           f"(0.50 = no position bias)")
     print(f"Wrote {run_dir}")
