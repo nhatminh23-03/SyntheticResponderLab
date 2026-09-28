@@ -309,7 +309,7 @@ def _args(tmp_path: Path, persona_csv: Path, **overrides) -> argparse.Namespace:
         provider_order=None, provider_ignore=["DigitalOcean"], no_provider_fallbacks=False, json_mode=False, reasoning_effort="off",
         no_likert_label_map=False, fallback_threshold=0.01, price_in=None, price_out=None, progress_every=1000,
         repair_rounds=2, max_failed_respondent_share=0.005, keep_file_buckets=False, survey_description="drop", persona_ids=None,
-        temperature_jitter=0.0, no_sponsor_context=False, trait_mix=None, reason_per_answer=False, questions_per_call=0, interest_note=False,
+        temperature_jitter=0.0, no_sponsor_context=False, trait_mix=None, reason_per_answer=False, questions_per_call=0, interest_note=False, answer_mode="single",
     )
     values.update(overrides)
     return argparse.Namespace(**values)
@@ -664,3 +664,155 @@ def test_response_style_is_the_same_persona_in_every_repeat():
     assert sum(1 for p in personas if first.get(p.persona_id)) == 80
     # and the per-repeat seed, which is what the bug used, would have dealt a different hand
     assert run_survey.assign_traits(personas, mix, base * 10 + 1) != first
+
+
+# --- --answer-mode distribution: the model states odds for each likert point, one answer is drawn ---
+
+LIKERT_LABELS = ["Not at all interested", "Slightly interested", "Moderately interested", "Very interested", "Extremely interested"]
+FIVE_POINT = {"min": 1, "max": 5, "labels": LIKERT_LABELS}
+
+
+def _odds_for(pid: str) -> dict:
+    """Different personas state different odds, so the drawn answers are not all alike."""
+    return [{"1": 0.5, "2": 0.3, "3": 0.2}, {"2": 0.25, "3": 0.5, "4": 0.25}, {"4": 0.6, "5": 0.4}][int(pid[1:]) % 3]
+
+
+class DistributionStub(StubClient):
+    """States odds for every likert item instead of one number; `broken` pairs get invalid odds."""
+
+    def __init__(self, survey, broken=None) -> None:
+        super().__init__(survey)
+        self.broken = set(broken or ())
+
+    def generate_survey_response_with_openrouter(self, *, model_name, prompt_payload, timeout=0):
+        assert "_likert_scales" not in prompt_payload, "the drawing wrapper must strip the scales before the client"
+        pid = prompt_payload.get("_persona_id")
+        items = []
+        for q in self.survey.questions:
+            if q.question_type == "likert":
+                answer = {"1": -1, "2": 0} if (pid, q.id) in self.broken else _odds_for(pid)
+            elif q.question_type == "single_choice":
+                answer = "Moderately interested" if q.id == "Q30" else q.options[0]
+            elif q.question_type == "multi_choice":
+                answer = [q.options[0], q.options[1]]
+            else:
+                answer = "n/a"
+            items.append({"question_id": q.id, "answer": answer})
+        raw = json.dumps({"answers": items})
+        key = pid if self.current_chunk is None else f"{pid}#c{self.current_chunk}"
+        self.captures[key] = {"persona_id": pid, "model_served": model_name, "provider": "stub", "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15, "cost": None}, "raw_text": raw, "parsed_ok": True, "finish_reason": "stop"}
+        self.stats["calls"] += 1
+        return {"ok": True, "parsed_json": json.loads(raw), "raw_text": raw, "error": None, "status_code": 200}
+
+
+def test_parse_distribution_accepts_points_labels_and_percentages() -> None:
+    probs, status = run_survey.parse_distribution({"1": 0.5, "2": 0.3, "3": 0.2}, FIVE_POINT)
+    assert status == "ok" and probs == {1: 0.5, 2: 0.3, 3: 0.2, 4: 0.0, 5: 0.0}
+    probs, status = run_survey.parse_distribution({"1": 2, "2": 2}, FIVE_POINT)
+    assert status == "renormalized" and probs[1] == probs[2] == 0.5
+    probs, status = run_survey.parse_distribution({"Not at all interested": "70%", "slightly interested": 0.3}, FIVE_POINT)
+    assert status == "labels" and probs[1] == pytest.approx(0.7) and probs[2] == pytest.approx(0.3)
+    probs, status = run_survey.parse_distribution({"1 - Not at all interested": 0.6, "5": 0.4}, FIVE_POINT)
+    assert status == "ok" and probs[1] == pytest.approx(0.6) and probs[5] == pytest.approx(0.4)
+    assert run_survey.parse_distribution({1: 1.0}, {"min": 1, "max": 5, "labels": []})[1] == "ok"  # the barrier matrix has no labels
+
+
+@pytest.mark.parametrize("value", [{"1": -0.1, "2": 1.1}, {"9": 1.0}, {"1": 0.5, "9": 0.5}, {}, {"1": 0, "2": 0}, {"1": "lots"}, {"1": True}])
+def test_parse_distribution_rejects_what_it_cannot_trust(value) -> None:
+    assert run_survey.parse_distribution(value, FIVE_POINT) == (None, "invalid")
+
+
+def test_parse_distribution_marks_a_plain_answer() -> None:
+    assert run_survey.parse_distribution(3, FIVE_POINT) == (None, "plain")
+
+
+def test_draw_is_seeded_per_persona_and_question_and_follows_the_odds() -> None:
+    probs = {1: 0.5, 2: 0.3, 3: 0.2, 4: 0.0, 5: 0.0}
+    assert run_survey.draw_answer(probs, 7, "P001", "Q1") == run_survey.draw_answer(probs, 7, "P001", "Q1")
+    draws = [run_survey.draw_answer(probs, 7, f"P{i:04d}", "Q1") for i in range(4000)]
+    assert set(draws) <= {1, 2, 3}
+    assert abs(draws.count(1) / 4000 - 0.5) < 0.03 and abs(draws.count(3) / 4000 - 0.2) < 0.03
+    assert draws != [run_survey.draw_answer(probs, 8, f"P{i:04d}", "Q1") for i in range(4000)]
+    assert run_survey.draw_answer({1: 0.0, 2: 0.0, 3: 1.0, 4: 0.0, 5: 0.0}, 1, "P001", "Q1") == 3
+
+
+def test_draw_answers_replaces_odds_with_one_answer_and_leaves_the_rest() -> None:
+    scales = {"Q1": FIVE_POINT, "Q2": FIVE_POINT}
+    parsed = {"answers": [{"question_id": "Q1", "answer": {"4": 1.0}}, {"question_id": "S3", "answer": "Yes"}, {"question_id": "q2", "answer": {"1": -1}}]}
+    out = run_survey.draw_answers(parsed, scales, 7, "P001")
+    items = {item["question_id"]: item for item in out["answers"]}
+    assert items["Q1"]["answer"] == 4 and items["Q1"]["probabilities"] == {"4": 1.0}
+    assert items["S3"]["answer"] == "Yes"
+    assert items["q2"]["answer"] == {"1": -1}  # left for the engine to flag as a fabricated answer
+    assert parsed["answers"][0]["answer"] == {"4": 1.0}  # the input is not changed
+    assert run_survey.draw_answers({"answers": {"Q1": {"2": 1.0}}}, scales, 7, "P001")["answers"]["Q1"] == 2
+
+
+def test_distribution_mode_rewrites_the_contract_and_attaches_the_scales(survey, persona_csv: Path) -> None:
+    personas = run_survey.load_personas(persona_csv, limit=None, prompt_variant="full")
+    product, market = run_survey.load_contexts()
+    kwargs = dict(persona=personas[0], survey_schema=survey, business_product_context=product, market_context=market, audience_filter=None)
+    payload = run_survey.TaggingPromptBuilder(run_survey.prompt_builder, max_tokens=6000, temperature=0.2, answer_mode="distribution").build_openrouter_prompt_payload(**kwargs)
+    user = payload["messages"][-1]["content"]
+    assert "7) " + run_survey.DISTRIBUTION_RULE in user
+    assert "For likert/numeric, answer must be numeric" not in user
+    assert payload["max_tokens"] >= 9000
+    scales = payload["_likert_scales"]
+    assert set(scales) == {q.id for q in survey.questions if q.question_type == "likert"}
+    assert scales["Q1"] == {"min": 1, "max": 5, "labels": LIKERT_LABELS} and scales["Q5_1"]["labels"] == []
+    both = run_survey.TaggingPromptBuilder(run_survey.prompt_builder, max_tokens=6000, temperature=0.2, answer_mode="distribution", reasons=True).build_openrouter_prompt_payload(**kwargs)
+    assert "8) " + run_survey.DISTRIBUTION_RULE in both["messages"][-1]["content"] and both["max_tokens"] >= 12000
+    single = run_survey.TaggingPromptBuilder(run_survey.prompt_builder, max_tokens=6000, temperature=0.2).build_openrouter_prompt_payload(**kwargs)
+    assert "_likert_scales" not in single and run_survey.DISTRIBUTION_RULE not in single["messages"][-1]["content"]
+
+
+def test_distribution_run_draws_answers_and_writes_the_odds(tmp_path: Path, persona_csv: Path, survey) -> None:
+    personas = run_survey.load_personas(persona_csv, limit=None, prompt_variant="full")
+    args = _args(tmp_path, persona_csv, answer_mode="distribution")
+    args.out_dir.mkdir(parents=True)
+    manifest = run_survey.run_one(model="stub/model", repeat=1, seed=7, personas=personas, survey=survey, contexts=run_survey.load_contexts(),
+                                  args=args, client=DistributionStub(survey, broken={("P002", "Q1")}), census_lookup={})
+    assert manifest["status"] == "completed", manifest["guardrails"]
+    assert manifest["answer_mode"] == "distribution"
+    n_likert = sum(1 for q in survey.questions if q.question_type == "likert")
+    assert manifest["counts"]["distributions"] == {"drawn": 3 * n_likert - 1, "renormalized": 0, "label_keys": 0, "invalid": 1, "plain": 0, "missing": 0}
+    assert manifest["counts"]["fallback_answers"] == 1
+    run_dir = Path(manifest["run_dir"])
+    with open(run_dir / "answers_long.csv", newline="", encoding="utf-8-sig") as handle:
+        q1 = {row["persona_id"]: row for row in csv.DictReader(handle) if row["question_id"] == "Q1"}
+    odds = {int(k): v for k, v in _odds_for("P001").items()}
+    expected = run_survey.draw_answer({p: odds.get(p, 0.0) for p in range(1, 6)}, 7, "P001", "Q1")
+    assert q1["P001"]["answer"] == str(expected) and q1["P001"]["is_fallback"] == "false"
+    assert q1["P002"]["is_fallback"] == "true"
+    with open(run_dir / "probabilities.csv", newline="", encoding="utf-8-sig") as handle:
+        reader = csv.DictReader(handle)
+        assert reader.fieldnames == ["run_id", "persona_id", "question_id", "option", "probability", "drawn", "status"]
+        rows = list(reader)
+    p001 = [r for r in rows if r["persona_id"] == "P001" and r["question_id"] == "Q1"]
+    assert [r["option"] for r in p001] == ["1", "2", "3", "4", "5"]
+    assert [float(r["probability"]) for r in p001] == [0.0, 0.25, 0.5, 0.25, 0.0]
+    assert {r["drawn"] for r in p001} == {str(expected)} and {r["status"] for r in p001} == {"ok"}
+    p002 = [r for r in rows if r["persona_id"] == "P002" and r["question_id"] == "Q1"]
+    assert len(p002) == 1 and p002[0]["status"] == "invalid" and p002[0]["drawn"] == ""
+    assert run_survey.DISTRIBUTION_RULE in (run_dir / "prompt_sample.txt").read_text(encoding="utf-8")
+
+
+def test_single_mode_writes_no_probabilities(tmp_path: Path, persona_csv: Path, survey) -> None:
+    personas = run_survey.load_personas(persona_csv, limit=None, prompt_variant="full")
+    args = _args(tmp_path, persona_csv)
+    args.out_dir.mkdir(parents=True)
+    manifest = run_survey.run_one(model="stub/model", repeat=1, seed=7, personas=personas, survey=survey, contexts=run_survey.load_contexts(),
+                                  args=args, client=StubClient(survey), census_lookup={})
+    assert manifest["answer_mode"] == "single" and "distributions" not in manifest["counts"]
+    assert not (Path(manifest["run_dir"]) / "probabilities.csv").exists()
+
+
+def test_distribution_mode_works_with_the_survey_split_into_calls(tmp_path: Path, persona_csv: Path, survey) -> None:
+    personas = run_survey.load_personas(persona_csv, limit=None, prompt_variant="full")
+    args = _args(tmp_path, persona_csv, answer_mode="distribution", questions_per_call=10)
+    args.out_dir.mkdir(parents=True)
+    manifest = run_survey.run_one(model="stub/model", repeat=1, seed=7, personas=personas, survey=survey, contexts=run_survey.load_contexts(),
+                                  args=args, client=DistributionStub(survey), census_lookup={})
+    n_likert = sum(1 for q in survey.questions if q.question_type == "likert")
+    assert manifest["status"] == "completed" and manifest["calls_per_persona"] == 4
+    assert manifest["counts"]["distributions"]["drawn"] == 3 * n_likert and manifest["counts"]["fallback_answers"] == 0

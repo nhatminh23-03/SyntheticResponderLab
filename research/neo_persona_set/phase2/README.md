@@ -114,6 +114,7 @@ The tests stub OpenRouter; they never call the network.
 | `--trait-mix skeptical:0.3,...` | gives a seeded share of personas a response style (`skeptical`, `enthusiastic`, `indifferent`, `pragmatic`); `answers_wide.csv` gains a `trait` column | `trait_mix`, `trait_counts` |
 | `--reason-per-answer` | asks for a one-sentence reason with every answer (max_tokens raised to 9000); `answers_long.csv` gains a `reason` column | `reason_per_answer`, `counts.answers_with_reason` |
 | `--questions-per-call N` | sends the survey in slices of N questions per call; answers are stitched back per persona, `raw_responses.jsonl` keeps every slice under `chunks` | `questions_per_call`, `calls_per_persona` |
+| `--answer-mode distribution` | likert items are answered as odds over the scale points and one answer is drawn at those odds, seeded by run seed, persona and question (Dr. Lin's arm B); the engine sees the drawn number, so answers files look as usual; `probabilities.csv` keeps the stated odds, the drawn answer and a status per item (invalid odds become a flagged fallback and go to the repair rounds) | `answer_mode`, `counts.distributions` (drawn / renormalized / label_keys / invalid / plain / missing) |
 
 Each question's `preamble` (the product stimulus before Q1, the concept copy before Q9A..Q13A, the
 value-driver text before Q15) travels with its question, so with `--questions-per-call` later slices

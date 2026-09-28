@@ -32,6 +32,7 @@ Usage (from the repository root):
 from __future__ import annotations
 
 import argparse
+import copy
 import csv
 import hashlib
 import json
@@ -600,6 +601,179 @@ INTEREST_NOTE = (
 )
 
 
+# --answer-mode distribution: likert items are answered as odds over the scale points and one answer is
+# drawn at those odds (Dr. Lin's arm B). Asked for one answer, a model gives its safest guess; asked for
+# odds, the spread a single best guess hides survives into the panel.
+ANSWER_MODES = ("single", "distribution")
+DISTRIBUTION_RULE = (
+    'For likert questions do not give a single number: give "answer" as an object with one entry per scale '
+    'point from min_value to max_value, keyed "1", "2", and so on, each value the probability (0 to 1) that '
+    "this person would choose that point, the values summing to 1."
+)
+DISTRIBUTION_MAX_TOKENS = 9000
+_ENGINE_LIKERT_RULE = "4) For likert/numeric, answer must be numeric and within min/max when provided."
+_PERCENT = re.compile(r"^\s*([0-9]*\.?[0-9]+)\s*%\s*$")
+_LEADING_POINT = re.compile(r"^\s*(\d+)(?:\.0+)?(?:\s*$|\s*[-–—:)]\s*\S)")
+
+
+def likert_scales(survey: Any) -> Dict[str, Dict[str, Any]]:
+    """{question_id: {min, max, labels}} for the likert items of a survey (or survey slice)."""
+    return {
+        q.id: {"min": int(q.min_value if q.min_value is not None else 1), "max": int(q.max_value if q.max_value is not None else 5), "labels": list(q.options or [])}
+        for q in survey.questions if q.question_type == "likert"
+    }
+
+
+def _probability(value: Any) -> Optional[float]:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        match = _PERCENT.match(value)
+        if match:
+            return float(match.group(1)) / 100.0
+        try:
+            return float(value.strip())
+        except ValueError:
+            return None
+    return None
+
+
+def parse_distribution(value: Any, scale: Dict[str, Any]) -> Tuple[Optional[Dict[int, float]], str]:
+    """(probabilities over every scale point, status) for a stated answer distribution.
+
+    status: "ok"; "renormalized" (did not sum to 1); "labels" (keyed by option label rather than
+    point); "invalid" (a negative, non-numeric or off-scale entry, or nothing usable); "plain" (a
+    single answer was given instead of odds). Anything invalid is left for the engine to flag.
+    """
+    if not isinstance(value, dict):
+        return None, "plain"
+    points = list(range(int(scale["min"]), int(scale["max"]) + 1))
+    by_label = {_unify_dashes(label).strip().casefold(): int(scale["min"]) + i for i, label in enumerate(scale.get("labels") or [])}
+    probs = {point: 0.0 for point in points}
+    used_labels = False
+    for key, raw in value.items():
+        prob = _probability(raw)
+        if prob is None or math.isnan(prob) or prob < 0:
+            return None, "invalid"
+        text = str(key).strip()
+        match = _LEADING_POINT.match(text)
+        if match:
+            point: Optional[int] = int(match.group(1))
+        else:
+            point = by_label.get(_unify_dashes(text).casefold())
+            used_labels = used_labels or point is not None
+        if point is None or point not in probs:
+            return None, "invalid"
+        probs[point] += prob
+    total = sum(probs.values())
+    if total <= 0:
+        return None, "invalid"
+    status = "labels" if used_labels else ("renormalized" if abs(total - 1.0) > 0.01 else "ok")
+    return {point: prob / total for point, prob in probs.items()}, status
+
+
+def draw_answer(probs: Dict[int, float], seed: Optional[int], persona_id: str, question_id: str) -> int:
+    """One scale point drawn at the stated odds; the same seed, persona and question always draw the same."""
+    u = random.Random(f"{seed}:{persona_id}:{question_id}").random()
+    cumulative = 0.0
+    for point in sorted(probs):
+        cumulative += probs[point]
+        if u < cumulative:
+            return point
+    return max(point for point in probs if probs[point] > 0)  # u landed above a sum that rounded below 1
+
+
+def _scale_for(scales: Dict[str, Dict[str, Any]], question_id: Any) -> Optional[Tuple[str, Dict[str, Any]]]:
+    text = str(question_id or "").strip()
+    if text in scales:
+        return text, scales[text]
+    folded = {key.casefold(): key for key in scales}
+    canonical = folded.get(text.casefold())
+    return (canonical, scales[canonical]) if canonical else None
+
+
+def draw_answers(parsed: Dict[str, Any], scales: Dict[str, Dict[str, Any]], seed: Optional[int], persona_id: str) -> Dict[str, Any]:
+    """A copy of the model's parsed reply with every valid likert distribution replaced by one drawn answer.
+
+    The stated odds are kept beside it under "probabilities". Invalid odds are left in place, so the
+    engine cannot coerce them and flags that answer as fabricated, the same as any unusable answer.
+    """
+    out = copy.deepcopy(parsed)
+    answers = out.get("answers") if isinstance(out, dict) else None
+
+    def drawn(question_id: Any, value: Any) -> Optional[int]:
+        found = _scale_for(scales, question_id)
+        if found is None:
+            return None
+        canonical, scale = found
+        probs, _status = parse_distribution(value, scale)
+        return None if probs is None else draw_answer(probs, seed, persona_id, canonical)
+
+    if isinstance(answers, list):
+        for item in answers:
+            if isinstance(item, dict):
+                answer = drawn(item.get("question_id"), item.get("answer"))
+                if answer is not None:
+                    item["probabilities"] = item.get("answer")
+                    item["answer"] = answer
+    elif isinstance(answers, dict):
+        for question_id in list(answers):
+            answer = drawn(question_id, answers[question_id])
+            if answer is not None:
+                answers[question_id] = answer
+    return out
+
+
+def distributions_from_capture(capture: Optional[Dict[str, Any]], scales: Dict[str, Dict[str, Any]]) -> Dict[str, Tuple[Optional[Dict[int, float]], str]]:
+    """{question_id: parse_distribution(...)} from the raw reply(ies) kept in a capture."""
+    if not capture:
+        return {}
+    out: Dict[str, Tuple[Optional[Dict[int, float]], str]] = {}
+    for part in capture.get("chunks") or [capture]:
+        raw = str(part.get("raw_text") or "")
+        try:
+            parsed = json.loads(raw)
+        except Exception:
+            parsed = _recover_json_object(raw)
+        answers = parsed.get("answers") if isinstance(parsed, dict) else None
+        if isinstance(answers, dict):
+            items = list(answers.items())
+        elif isinstance(answers, list):
+            items = [(item.get("question_id"), item.get("answer")) for item in answers if isinstance(item, dict)]
+        else:
+            items = []
+        for question_id, value in items:
+            found = _scale_for(scales, question_id)
+            if found is not None:
+                out[found[0]] = parse_distribution(value, found[1])
+    return out
+
+
+class DrawingClient:
+    """Sits between the engine and the HTTP client under --answer-mode distribution.
+
+    The prompt builder attaches the likert scales to the payload; this strips them before the request,
+    and turns each likert answer the model gave as odds into one answer drawn at those odds, so the
+    engine receives a number exactly as in single-answer mode. The raw reply, odds included, stays in
+    the client's capture.
+    """
+
+    def __init__(self, inner: Any, *, seed: Optional[int]) -> None:
+        self._inner = inner
+        self.seed = seed
+
+    def generate_survey_response_with_openrouter(self, **kwargs: Any) -> Dict[str, Any]:
+        payload = kwargs["prompt_payload"]
+        scales = payload.pop("_likert_scales", None) or {}
+        persona_id = str(payload.get("_persona_id") or "")
+        result = self._inner.generate_survey_response_with_openrouter(**kwargs)
+        if scales and isinstance(result, dict) and result.get("ok") and isinstance(result.get("parsed_json"), dict):
+            result = {**result, "parsed_json": draw_answers(result["parsed_json"], scales, self.seed, persona_id)}
+        return result
+
+
 def persona_temperature(base: float, jitter: float, seed: Optional[int], persona_id: str) -> float:
     """Deterministic per-persona temperature in [base - jitter, base + jitter], clipped to [0, 1.5]."""
     if jitter <= 0:
@@ -612,7 +786,7 @@ class TaggingPromptBuilder:
     """Wraps the engine's prompt builder: same prompt, larger answer budget, persona tag."""
 
     def __init__(self, original: Any, *, max_tokens: int, temperature: float, jitter: float = 0.0, seed: Optional[int] = None, reasons: bool = False,
-                 respondent_note: Optional[str] = None) -> None:
+                 respondent_note: Optional[str] = None, answer_mode: str = "single") -> None:
         self._original = original
         self.max_tokens = int(max_tokens)
         self.temperature = float(temperature)
@@ -620,6 +794,9 @@ class TaggingPromptBuilder:
         self.seed = seed
         self.reasons = bool(reasons)
         self.respondent_note = respondent_note or None
+        if answer_mode not in ANSWER_MODES:
+            raise ValueError(f"answer_mode must be one of {ANSWER_MODES}, got {answer_mode!r}")
+        self.answer_mode = answer_mode
 
     def build_openrouter_prompt_payload(self, **kwargs: Any) -> Dict[str, Any]:
         payload = self._original.build_openrouter_prompt_payload(**kwargs)
@@ -635,6 +812,13 @@ class TaggingPromptBuilder:
                 '"answer": "<answer value matching question type>", "reason": "<one sentence>"}',
             ) + REASON_RULE
             payload["max_tokens"] = max(self.max_tokens, REASON_MAX_TOKENS)
+        if self.answer_mode == "distribution":
+            user = payload["messages"][-1]
+            number = 8 if self.reasons else 7
+            content = user["content"].replace(_ENGINE_LIKERT_RULE, f"4) For numeric, answer must be numeric and within min/max when provided; for likert, see {number}).")
+            user["content"] = content + f"\n{number}) {DISTRIBUTION_RULE}"
+            payload["max_tokens"] = max(payload["max_tokens"], DISTRIBUTION_MAX_TOKENS + (3000 if self.reasons else 0))
+            payload["_likert_scales"] = likert_scales(kwargs["survey_schema"])
         payload["temperature"] = persona_temperature(self.temperature, self.jitter, self.seed, str(persona_id))
         payload["_persona_id"] = persona_id
         return payload
@@ -1131,6 +1315,7 @@ def write_run_outputs(
     record_is_fallback: List[bool],
     captures: Dict[str, Dict[str, Any]],
     prompt_sample: Optional[Dict[str, Any]],
+    answer_mode: str = "single",
 ) -> Dict[str, Any]:
     """Write answers_long.csv, answers_wide.csv, questions.csv, raw_responses.jsonl, prompt_sample.txt.
 
@@ -1235,7 +1420,40 @@ def write_run_outputs(
         lines.append(f"temperature={prompt_sample.get('temperature')} max_tokens={prompt_sample.get('max_tokens')}")
         (run_dir / "prompt_sample.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
-    return {"fallback_per_persona": dict(fallback_per_persona), "wide_rows": list(wide_rows.values()), "answers_with_reason": answers_with_reason}
+    outputs: Dict[str, Any] = {"fallback_per_persona": dict(fallback_per_persona), "wide_rows": list(wide_rows.values()), "answers_with_reason": answers_with_reason}
+    if answer_mode == "distribution":
+        outputs["distributions"] = write_probabilities(run_dir / "probabilities.csv", run_id=run_id, seed=seed, survey=survey, persona_ids=persona_ids, captures=captures)
+    return outputs
+
+
+def write_probabilities(path: Path, *, run_id: str, seed: Optional[int], survey: Any, persona_ids: List[str], captures: Dict[str, Dict[str, Any]]) -> Dict[str, int]:
+    """probabilities.csv: the odds each persona stated for each likert item, and the answer drawn from them.
+
+    One row per scale point when the odds were usable; one row with blank option and probability when
+    they were invalid, a plain answer, or missing. Returns the counts that go in the manifest.
+    """
+    scales = likert_scales(survey)
+    counts = {"drawn": 0, "renormalized": 0, "label_keys": 0, "invalid": 0, "plain": 0, "missing": 0}
+    with open(path, "w", newline="", encoding=CSV_ENCODING) as handle:
+        writer = csv.writer(handle)
+        writer.writerow(["run_id", "persona_id", "question_id", "option", "probability", "drawn", "status"])
+        for pid in persona_ids:
+            stated = distributions_from_capture(captures.get(pid), scales)
+            for question_id in scales:
+                probs, status = stated.get(question_id, (None, "missing"))
+                if probs is None:
+                    counts[status] += 1
+                    writer.writerow([run_id, pid, question_id, "", "", "", status])
+                    continue
+                counts["drawn"] += 1
+                if status == "renormalized":
+                    counts["renormalized"] += 1
+                elif status == "labels":
+                    counts["label_keys"] += 1
+                drawn = draw_answer(probs, seed, pid, question_id)
+                for point in sorted(probs):
+                    writer.writerow([run_id, pid, question_id, point, round(probs[point], 6), drawn, status])
+    return counts
 
 
 # ---------------------------------------------------------------------------
@@ -1473,6 +1691,7 @@ def run_one(
         "trait_counts": dict(Counter(traits.values())),
         "reason_per_answer": bool(getattr(args, "reason_per_answer", False)),
         "respondent_note": INTEREST_NOTE if getattr(args, "interest_note", False) else None,
+        "answer_mode": getattr(args, "answer_mode", "single"),
         "questions_per_call": per_call,
         "calls_per_persona": len(chunks),
         "max_tokens": args.max_tokens,
@@ -1517,6 +1736,7 @@ def run_one(
         jitter=float(getattr(args, "temperature_jitter", 0.0) or 0.0), seed=seed,
         reasons=bool(getattr(args, "reason_per_answer", False)),
         respondent_note=INTEREST_NOTE if getattr(args, "interest_note", False) else None,
+        answer_mode=getattr(args, "answer_mode", "single"),
     )
     manager = CoercingRunManager(run_manager, enabled=not args.no_likert_label_map, question_ids=[q.id for q in survey.questions])
     if client is None:
@@ -1547,11 +1767,13 @@ def run_one(
     repair_log: List[Dict[str, Any]] = []
     question_count = len(survey.questions)
 
+    answer_client = DrawingClient(client, seed=seed) if getattr(args, "answer_mode", "single") == "distribution" else client
+
     def _batch(subset: List[Any], batch_config: Any, survey_chunk: Any) -> Tuple[List[Any], Dict[str, Any], List[bool]]:
         return domain._generate_live_response_records_with_debug(
             schemas=schemas,
             run_manager=manager,
-            llm_client=client,
+            llm_client=answer_client,
             prompt_builder=builder,
             config=batch_config,
             survey_schema=survey_chunk,
@@ -1681,6 +1903,7 @@ def run_one(
         outputs_info = write_run_outputs(
             run_dir=run_dir, run_id=run_id, model=model, repeat=repeat, seed=seed, survey=survey, personas=personas,
             records=records, record_is_fallback=record_is_fallback, captures=getattr(client, "captures", {}), prompt_sample=prompt_sample,
+            answer_mode=getattr(args, "answer_mode", "single"),
         )
     else:
         # Nothing assembled (terminal error mid-batch): keep whatever the client captured for audit.
@@ -1716,6 +1939,8 @@ def run_one(
         "finish_reason_length": int(stats.get("finish_length", 0)),
         "answers_with_reason": int(outputs_info.get("answers_with_reason", 0) or 0),
     }
+    if "distributions" in outputs_info:
+        manifest["counts"]["distributions"] = outputs_info["distributions"]
     manifest["repair"] = {"rounds_run": len(repair_log), "log": repair_log}
     manifest["diagnostics"] = fallback_diagnostics(
         records=records, record_is_fallback=record_is_fallback, personas=personas, captures=captures, question_count=question_count
@@ -1794,6 +2019,7 @@ def dry_run(*, personas: List[Any], survey: Any, contexts: Tuple[Any, Any], args
         jitter=float(getattr(args, "temperature_jitter", 0.0) or 0.0), seed=args.seed_base * 10 + 1,
         reasons=bool(getattr(args, "reason_per_answer", False)),
         respondent_note=INTEREST_NOTE if getattr(args, "interest_note", False) else None,
+        answer_mode=getattr(args, "answer_mode", "single"),
     )
     trait_mix = parse_trait_mix(getattr(args, "trait_mix", None))
     traits = assign_traits(personas, trait_mix, int(args.seed_base))
@@ -1812,13 +2038,15 @@ def dry_run(*, personas: List[Any], survey: Any, contexts: Tuple[Any, Any], args
         )
         chars_all_calls += sum(len(str(m.get("content", ""))) for m in later["messages"])
     est_in = chars_all_calls // 4
-    est_out = 900
+    # odds for each likert point add about 30 output tokens per likert item over a single number
+    est_out = 900 + (30 * len(likert_scales(survey)) if getattr(args, "answer_mode", "single") == "distribution" else 0)
     print(f"personas: {len(personas)} (variant={args.prompt_variant})  questions: {len(survey.questions)}")
     print("question ids:", ", ".join(q.id for q in survey.questions))
     with_preamble = [q for q in survey.questions if getattr(q, "preamble", None)]
     print(f"questions with a preamble: {len(with_preamble)} ({', '.join(q.id for q in with_preamble) or 'none'})")
     print(f"survey description sent: {survey.description is not None}")
     print(f"interest note in the system message: {bool(getattr(args, 'interest_note', False))}")
+    print(f"answer mode: {getattr(args, 'answer_mode', 'single')}" + (" (likert items answered as odds; one answer drawn per persona and item)" if getattr(args, "answer_mode", "single") == "distribution" else ""))
     print(f"calls per persona: {len(chunks)}" + ("" if len(chunks) == 1 else f" ({per_call} questions per call; the prompt below is slice 1)"))
     print(f"sponsor context removed: {bool(getattr(args, 'no_sponsor_context', False))}  temperature jitter: {float(getattr(args, 'temperature_jitter', 0.0) or 0.0)}  "
           f"reason per answer: {bool(getattr(args, 'reason_per_answer', False))}  trait mix: {getattr(args, 'trait_mix', None) or 'none'} ({dict(Counter(traits.values())) or 'no traits'})")
@@ -1953,6 +2181,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--price-in", type=float, default=None, help="USD per million input tokens (override)")
     parser.add_argument("--price-out", type=float, default=None, help="USD per million output tokens (override)")
     parser.add_argument("--temperature", type=float, default=0.2)
+    parser.add_argument("--answer-mode", choices=ANSWER_MODES, default="single",
+                        help="single: one answer per item (default). distribution: likert items are answered as odds over the scale and one answer is drawn at those odds; writes probabilities.csv")
     parser.add_argument("--interest-note", action="store_true", help="tell the respondent that interest/appeal questions and likelihood questions are different questions (see INTEREST_NOTE)")
     parser.add_argument("--questions-per-call", type=int, default=0, help="send the survey in slices of N questions per call instead of all at once (0 = one call)")
     parser.add_argument("--reason-per-answer", action="store_true", help="ask for a one-sentence reason with every answer and keep it in answers_long.csv (raises max_tokens to 9000)")
