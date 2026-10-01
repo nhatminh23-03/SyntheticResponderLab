@@ -59,3 +59,18 @@ def test_without_crosswalk_says_so_and_explicit_keeper_wins(tmp_path: Path) -> N
     text = (assets / "START_HERE.md").read_text(encoding="utf-8")
     assert "Not yet present" in text and f"Copied from keeper run `{SMOKE}`" in text
     assert not (assets / "crosswalk.csv").exists()
+
+
+def test_lists_the_other_folders_that_exist_and_the_scoring_standard(tmp_path: Path) -> None:
+    assets = _fake_assets(tmp_path)
+    for name in ("DrLinSplit", "real_splits", "discussion"):
+        (assets / name).mkdir()
+    (assets / "EXPERIMENT_LOG.md").write_text("# log\n", encoding="utf-8")
+    assert write_start_here.main(["--assets", str(assets)]) == 0
+    text = (assets / "START_HERE.md").read_text(encoding="utf-8")
+    top = text.split("## What is at the top level")[1].split("## How to score")[0]
+    for name in ("`DrLinSplit/`", "`real_splits/`", "`discussion/`", "`EXPERIMENT_LOG.md`"):
+        assert name in top
+    assert "`Sept24_real_vs_synthetic_experiments/`" not in top and "9:1 email.pdf" not in top
+    scoring = text.split("## How to score")[1].split("## Inside a persona-set folder")[0]
+    assert "real_splits/lin-seed42/score_ids.txt" in scoring and "lin13-validation" in scoring

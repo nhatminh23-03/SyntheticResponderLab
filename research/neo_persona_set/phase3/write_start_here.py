@@ -11,13 +11,25 @@ import shutil
 from collections import OrderedDict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
 PERSONA_SETS = OrderedDict([
     ("600_persona", "the PLAIN draw: 600 California owner-occupied detached single-family households, income $100k+, householder 30-65, drawn at random from the Census (ACS PUMS 2024 5-year, seed 20260825). Describes Neo's likely buyers; cannot be validated against the real survey."),
     ("match_600_persona", "the MATCHED draw: 600 households drawn nationally so age band x gender x income bracket x region reproduce the real 600 respondents (ACS PUMS 2024 1-year, seed 20260909, 199 cells, none short). This is the set compared against the real survey. Demographic agreement is by construction; only answer-level agreement is informative."),
 ])
 REAL_DATA_DIR = "raw 600-participant dataset and a sample report from aytm"
+# Everything else at the top level, listed only when present.
+OTHER_ITEMS = OrderedDict([
+    ("6_subset_of_dataset_plus_the_all_600_persona_data", "Yaza's Sept 16 matched 600 (outdoor-space screen at the draw) and its six 100-persona subsets S1-S6 (`panel_s*_ids.txt`, `subset_id_map.csv` map subset ids to full ids). `survey_runs/` holds the Sept 17 S1 runs; `real_comparison/` their comparisons, including the rescore on Dr. Lin's standard."),
+    ("Sept24_real_vs_synthetic_experiments", "Yaza's Sept 23-24 S1 runs (income ablations, model families, response styles, the R018 and R018b mixed panels, the random control) with their comparisons and write-ups."),
+    ("Sept25_review", "Minh's re-check of the Sept 23-24 results (`checkers.md`, `refutes.md`)."),
+    ("Sept30_lin_standard_baselines", "the unstyled four-model mix (R018u) built from the Sept 23 runs, and the baselines for R020/R020b scored on Dr. Lin's standard."),
+    ("DrLinSplit", "Dr. Lin's split as she sent it: `aytm_respondent_split_ids.csv` (300 cal / 300 val, seed 42; ids are row indexes, aytm_N = respondent row N) and `item_split.csv` (13 calibration, 13 validation items)."),
+    ("real_splits", "her split converted to Response IDs: `lin-seed42/` (`fit_ids.txt` = cal, `score_ids.txt` = val) is the scoring standard; `provisional-seed42/` is superseded."),
+    ("EXPERIMENT_LOG.md", "the lab notebook: every run, its result and its cost."),
+    ("discussion", "`DISCUSSION_LOG.md` (week by week: what happened, decisions, next steps, the email archive), the emails and the meeting transcript."),
+    ("NeoSmartLiving_App_Test_Log.xlsx", "the app test log; not an input to any run."),
+])
 RUN_FILES = OrderedDict([
     ("answers_long.csv", "one row per persona x question: run_id, model, repeat, seed, persona_id, respondent_id, question_id, question_type, answer, answer_json, is_fallback. Drop rows with is_fallback = true."),
     ("answers_wide.csv", "one row per persona, one column per question id, plus n_fallback and all_live. The file to load for analysis."),
@@ -75,7 +87,8 @@ def _table(header: List[str], rows: List[List[str]]) -> List[str]:
     return lines + ["| " + " | ".join(str(c) for c in row) + " |" for row in rows]
 
 
-def render_start_here(*, runs_by_set: Dict[str, Dict[str, List[Dict[str, Any]]]], keeper_run: Optional[Path], crosswalk_present: bool, today: str) -> str:
+def render_start_here(*, runs_by_set: Dict[str, Dict[str, List[Dict[str, Any]]]], keeper_run: Optional[Path], crosswalk_present: bool, today: str,
+                      present: Optional[Set[str]] = None) -> str:
     keeper_name = keeper_run.name if keeper_run else "(no keeper run found)"
     crosswalk_note = "Present." if crosswalk_present else "Not yet present: produced by compare_real.py; pass it to write_start_here.py --crosswalk."
     lines: List[str] = ["# START HERE — Neo Smart Living synthetic survey runs", "",
@@ -85,9 +98,14 @@ def render_start_here(*, runs_by_set: Dict[str, Dict[str, List[Dict[str, Any]]]]
            ["`questions.csv`", f"the codebook: the 39 answer items the synthetic respondents saw (question_id, question_type, min/max, options, text, preamble). Copied from keeper run `{keeper_name}`."],
            ["`crosswalk.csv`", f"our question_id next to the real survey's column, with notes on option differences. {crosswalk_note}"]]
     top += [[f"`{name}/`", description] for name, description in PERSONA_SETS.items()]
-    top += [[f"`{REAL_DATA_DIR}/`", "the real respondents. Only compare_real.py reads it; the runner refuses any path containing aytm or survey-760085."],
-            ["`9:1 email.pdf`, `9:4 email.pdf`, `NeoSmartLiving_App_Test_Log.xlsx`", "correspondence and the app test log; not inputs to any run."]]
+    top += [[f"`{REAL_DATA_DIR}/`", "the real respondents. Only compare_real.py reads it; the runner refuses any path containing aytm or survey-760085."]]
+    top += [[f"`{name}`" if "." in name else f"`{name}/`", description] for name, description in OTHER_ITEMS.items() if name in (present or set())]
     lines += _table(["Item", "What it is"], top)
+    lines += ["", "## How to score (from 2026-09-30)", "",
+              "Dr. Lin's calibration / validation split is the standard. Score on her 13 validation items against her 300 held-out respondents:",
+              "`compare_real.py --items lin13-validation --real-ids real_splits/lin-seed42/score_ids.txt`. Anything fitted to real answers (driver donors, adjustments) uses only `real_splits/lin-seed42/fit_ids.txt` and the calibration items.",
+              "Hybrid runs (persona files with driver answers copied from real respondents) carry `hybrid` in the folder name and `persona_kind: hybrid` in the manifest; they are never scored on the four driver questions.",
+              "Read rank agreement (mean_spearman) and top-answer match first, with the random control alongside; mean TV alone can be beaten by random answers."]
     lines += ["", "## Inside a persona-set folder", "",
               "- `phase1_interview_<set>.csv` — the 600 personas, 49 columns: 7 bucket fields, six blank classifier columns, 21 exact Census fields, name, 14 story_* columns. Names are random and carry no information.",
               "- `phase1_method_<set>.txt` — how the set was drawn, the screens, the bias controls.",
@@ -141,7 +159,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     if args.crosswalk is not None:
         shutil.copyfile(args.crosswalk, assets / "crosswalk.csv")
         crosswalk_present = True
-    text = render_start_here(runs_by_set=runs_by_set, keeper_run=keeper_run, crosswalk_present=crosswalk_present, today=datetime.now(timezone.utc).date().isoformat())
+    text = render_start_here(runs_by_set=runs_by_set, keeper_run=keeper_run, crosswalk_present=crosswalk_present, today=datetime.now(timezone.utc).date().isoformat(),
+                             present={child.name for child in assets.iterdir()})
     (assets / "START_HERE.md").write_text(text, encoding="utf-8")
     print(f"START_HERE.md -> {assets / 'START_HERE.md'}")
     return 0

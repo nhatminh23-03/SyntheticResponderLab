@@ -45,36 +45,59 @@ a two-proportion z-test.
 
 `lint_personas.py` (checks a persona CSV), `select_panel.py` (stratified 150-persona panel),
 `add_bom.py` (Excel-safe rewrite of old run CSVs), `registry.py` (hypothesis registry),
-`write_start_here.py` (START_HERE.md for the shared folder), `judge_reasons.py` (a third model
+`write_start_here.py` (START_HERE.md for the shared folder), `make_mixed_panel.py` (one persona per
+arm across several runs), `spread_diagnostics.py` (spread and the income gradient), `judge_reasons.py` (a third model
 picks the better-reasoned answer between two `--reason-per-answer` runs; needs the API). Tests:
 `apps/api/.venv/bin/python -m pytest research/neo_persona_set/phase3 -q`.
 
-## Scoring on a subset of items or respondents
+## Scoring standard: Dr. Lin's calibration / validation split
 
-Dr. Lin's calibration / validation split (2026-09-26): anything fitted to real answers uses only
-the calibration items and the fit half of respondents; results are scored only on the validation
-items against the other half.
+Adopted 2026-09-30. Anything fitted to real answers (driver donors, model adjustments) uses only the
+calibration items and the fit half of respondents; results are scored only on the 13 validation
+items against the other 300. Every headline number from now on is on this standard.
 
 ```bash
-# 1. split the real respondents (ids come from the real file: written outside the repo, refused inside it)
-apps/api/.venv/bin/python research/neo_persona_set/phase3/make_real_split.py \
-  --real "$REAL" --out ../SyntheticResponderLab-Assets/real_splits/provisional-seed42
+# 1. convert her split (DrLinSplit/aytm_respondent_split_ids.csv) into Response-ID files.
+#    Her ids are row indexes: aytm_N = respondent row N of the raw file, in file order.
+#    Written outside the repo; the script refuses the repo and the real-data folder.
+apps/api/.venv/bin/python research/neo_persona_set/phase3/make_real_split.py --real "$REAL" \
+  --from-lin ../SyntheticResponderLab-Assets/DrLinSplit/aytm_respondent_split_ids.csv \
+  --out ../SyntheticResponderLab-Assets/real_splits/lin-seed42
 
-# 2. score only the 13 validation items, against only the score half
+# 2. score only the 13 validation items, against only her 300 val respondents
 apps/api/.venv/bin/python research/neo_persona_set/phase3/compare_real.py --real "$REAL" \
   --runs <run_dir> ... --out <dir> \
   --items lin13-validation \
-  --real-ids ../SyntheticResponderLab-Assets/real_splits/provisional-seed42/score_ids.txt
+  --real-ids ../SyntheticResponderLab-Assets/real_splits/lin-seed42/score_ids.txt
 ```
 
 - `--items` takes a named set from `item_sets.py` (`lin13-validation`, `lin13-calibration`,
   `all-scored`) or a file of question ids. Questions outside the set are still compared and
   reported, with `scored=false`. Without `--items` every comparable question counts, as before.
-- Q15 and Q24 are set aside (Dr. Wang, 2026-09-24) and are in no named set; `all-scored` is the
+- The named sets match her `item_split.csv` (`item_sets.LIN_ITEM_NAMES` translates her names).
+  Q15 and Q24 are set aside (Dr. Wang, 2026-09-24) and are in no named set; `all-scored` is the
   other 34. On our survey the calibration set has 10 items, not 13: our survey carries only 3 of
   the 5 value drivers and Q15 is set aside.
-- `--real-ids` takes a file of AYTM Response IDs. The split from `make_real_split.py` is
-  **provisional**: Dr. Lin's 300/300 (seed 42) used a method we don't know, so swap in her id lists
-  once she shares them.
+- `--real-ids` takes a file of AYTM Response IDs. `real_splits/lin-seed42/` is her split;
+  `real_splits/provisional-seed42/` was a stand-in drawn before hers arrived and is superseded.
+  Without `--from-lin`, `make_real_split.py` still draws a new seeded split.
 - `comparison_summary.csv` gains `item_set` and `n_real_respondents`; `manifest.json` records the
   item list and the id file's hash.
+
+## Hybrid runs (driver personas)
+
+Dr. Lin's driver method gives each persona four answers copied from a real respondent in the
+calibration half with the same income band, age group and kids: prior consideration (Q0A), primary
+use (Q3), outdoor recreation (Q25) and club membership (Q26). Real answers then reach the prompt,
+so these runs are labelled hybrid end to end:
+
+1. The persona file carries `driver_prior_consideration`, `driver_outdoor_recreation`,
+   `driver_outdoor_club` and `driver_likely_use`; the runner refuses it without `--hybrid`, and
+   `--hybrid` needs `hybrid` in the run tag (`phase2/README.md`).
+2. `make_mixed_panel.py` deals personas to arms that must share the persona file, seed, answer
+   mode, persona kind and style mix (`--allow-mismatch trait_mix` to mix styled and unstyled on
+   purpose); `probabilities.csv` is carried for `--answer-mode distribution` arms.
+3. `compare_real.py` refuses a hybrid run without `--real-ids` or with any of the four driver
+   items in the scored set (`item_sets.LIN_DRIVERS`).
+
+Pre-registered: R020 (unstyled four-model mix) and R020b (styled), in `registry.csv`.
