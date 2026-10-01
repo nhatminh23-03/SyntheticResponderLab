@@ -146,3 +146,26 @@ def test_bad_items_or_ids_stop_before_writing(tmp_path: Path, fake_real_csv: Pat
         out = tmp_path / ("out_" + extra[0].strip("-"))
         assert compare_real.main(["--real", str(fake_real_csv), "--runs", str(fake_run_dir), "--out", str(out), *extra]) == 2
         assert not out.exists()
+
+
+def _mark_hybrid(run_dir: Path) -> Path:
+    manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
+    manifest["persona_kind"] = "hybrid"
+    (run_dir / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    return run_dir
+
+
+def test_hybrid_runs_are_scored_only_on_held_out_respondents_and_never_on_drivers(tmp_path: Path, fake_real_csv: Path, fake_run_dir: Path, capsys) -> None:
+    _mark_hybrid(fake_run_dir)
+    ids = tmp_path / "score_ids.txt"
+    ids.write_text("\n".join(str(1000 + i) for i in range(6)) + "\n", encoding="utf-8")
+    drivers = tmp_path / "with_driver.txt"
+    drivers.write_text("Q1\nQ0A\n", encoding="utf-8")
+    for extra, message in ((["--items", "lin13-validation"], "--real-ids"),
+                           (["--real-ids", str(ids)], "driver"),
+                           (["--real-ids", str(ids), "--items", str(drivers)], "Q0A")):
+        out = tmp_path / ("out_" + "_".join(e.strip("-") for e in extra[::2]))
+        assert compare_real.main(["--real", str(fake_real_csv), "--runs", str(fake_run_dir), "--out", str(out), *extra]) == 2
+        assert message in capsys.readouterr().err and not out.exists()
+    out = _run(tmp_path, fake_real_csv, [fake_run_dir], "--real-ids", str(ids), "--items", "lin13-validation")
+    assert _read(out / "comparison_summary.csv")[0]["n_real_respondents"] == "6"

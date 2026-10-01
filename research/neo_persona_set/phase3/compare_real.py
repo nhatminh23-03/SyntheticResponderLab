@@ -551,6 +551,29 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def hybrid_problem(run_dirs: List[Path], item_ids: List[str], real_ids: Optional[Path]) -> Optional[str]:
+    """Why hybrid runs cannot be scored this way, or None.
+
+    A hybrid persona carries four answers copied from a real respondent in the calibration half, so
+    its runs are scored only against the held-out respondents (--real-ids) and never on the driver
+    items, which would be graded on the answers they were given.
+    """
+    hybrid = []
+    for run_dir in run_dirs:
+        path = Path(run_dir) / "manifest.json"
+        manifest = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+        if manifest.get("persona_kind") == "hybrid":
+            hybrid.append(Path(run_dir).name)
+    if not hybrid:
+        return None
+    if real_ids is None:
+        return f"hybrid runs {hybrid[:3]} must be scored on the held-out respondents only: pass --real-ids (the score half)"
+    drivers = [item for item in item_ids if item in item_sets.LIN_DRIVERS]
+    if drivers:
+        return f"hybrid runs {hybrid[:3]} cannot be scored on the driver items {drivers}: their answers were copied in; pass --items without them"
+    return None
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     args = build_parser().parse_args(argv)
     real_path = Path(args.real).expanduser().resolve()
@@ -570,6 +593,10 @@ def main(argv: Optional[List[str]] = None) -> int:
             real = realdata.subset_by_response_id(real, realdata.read_id_file(args.real_ids))
     except ValueError as error:
         print(f"compare_real: {error}", file=sys.stderr)
+        return 2
+    problem = hybrid_problem(run_dirs, args.item_ids, args.real_ids)
+    if problem:
+        print(f"compare_real: {problem}", file=sys.stderr)
         return 2
     runs = [load_run(path, require_outdoor_space=args.require_outdoor_space, exclude_fallback=args.exclude_fallback) for path in run_dirs]
     assign_labels(runs)
