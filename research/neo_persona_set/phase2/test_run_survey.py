@@ -840,7 +840,7 @@ def _with_columns(src: Path, dst: Path, extra: dict) -> Path:
 
 @pytest.fixture
 def hybrid_csv(tmp_path: Path, persona_csv: Path) -> Path:
-    return _with_columns(persona_csv, tmp_path / "hybrid_personas.csv", {**DRIVERS, "driver_donor_id": "191182081"})
+    return _with_columns(persona_csv, tmp_path / "hybrid_personas.csv", {**DRIVERS, "driver_donor_id": "DONOR-0042"})
 
 
 def test_driver_columns_reach_the_prompt_as_customer_facts_and_nothing_else(hybrid_csv: Path) -> None:
@@ -848,7 +848,7 @@ def test_driver_columns_reach_the_prompt_as_customer_facts_and_nothing_else(hybr
         persona = run_survey.load_personas(hybrid_csv, limit=1, prompt_variant=variant)[0]
         assert list(persona.customer_facts.values()) == list(DRIVERS.values()), variant
         dumped = json.dumps(persona.model_dump())
-        assert "Seriously considered".lower() in dumped.lower() and "191182081" not in dumped
+        assert "Seriously considered".lower() in dumped.lower() and "DONOR-0042" not in dumped
 
 
 def test_synthetic_personas_have_no_customer_facts(persona_csv: Path) -> None:
