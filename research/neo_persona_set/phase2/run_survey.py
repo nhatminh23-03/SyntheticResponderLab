@@ -110,6 +110,10 @@ PRICE_TABLE: Dict[str, Tuple[float, float]] = {
     "qwen/qwen3.7-plus": (0.32, 1.28),
     "qwen/qwen3.7-flash": (0.03, 0.13),
     "openai/gpt-4.1-mini": (0.40, 1.60),
+    # The other three arms of the four-model mixed panel; OpenRouter list prices on 2026-09-30.
+    "google/gemini-3-flash-preview": (0.50, 3.00),
+    "mistralai/mistral-medium-3.1": (0.40, 2.00),
+    "openai/gpt-5-mini": (0.25, 2.00),
 }
 
 # Substrings that identify the withheld real-respondent material. Any input or output path
