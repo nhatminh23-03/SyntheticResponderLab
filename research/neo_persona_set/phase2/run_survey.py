@@ -166,6 +166,15 @@ CENSUS_INT_COLUMNS = {
     "housing_cost_pct_of_income",
 }
 STORY_PREFIX = "story_"
+# Hybrid personas (Dr. Lin's driver method): four answers copied from a real respondent in the
+# calibration half. Column -> the key the model sees under customer_facts. Any other driver_* column
+# (a donor id, say) is bookkeeping and never reaches the prompt. --hybrid must be passed to run them.
+DRIVER_COLUMNS: Dict[str, str] = OrderedDict([
+    ("driver_prior_consideration", "has_considered_a_backyard_unit"),
+    ("driver_outdoor_recreation", "outdoor_recreation_frequency"),
+    ("driver_outdoor_club", "member_of_an_outdoor_club"),
+    ("driver_likely_use", "most_likely_use_for_a_backyard_unit"),
+])
 STORY_LIST_FIELDS = {"priorities"}
 
 PROMPT_VARIANTS = ("full", "census", "buckets")
@@ -248,6 +257,8 @@ class RichPersonaProfile(schemas.PersonaProfile):  # type: ignore[misc,name-defi
     # the response-style instruction, which reaches the model through model_dump().
     trait: Optional[str] = None
     response_style: Optional[str] = None
+    # Set only for hybrid personas: the copied driver answers (DRIVER_COLUMNS).
+    customer_facts: Optional[Dict[str, Any]] = None
 
     def model_dump(self, **kwargs: Any) -> Dict[str, Any]:  # type: ignore[override]
         kwargs.setdefault("exclude_none", True)
@@ -345,6 +356,8 @@ def build_persona(
     fields["lifestyle_tags"] = [tag.strip() for tag in (row.get("lifestyle_tags") or "").split(";") if tag.strip()]
     for column in CLASSIFIER_COLUMNS:
         fields[column] = _clean(row.get(column))
+    facts = OrderedDict((key, _clean(row.get(column))) for column, key in DRIVER_COLUMNS.items())
+    fields["customer_facts"] = OrderedDict((key, value) for key, value in facts.items() if value is not None) or None
 
     if prompt_variant in ("full", "census"):
         fields["name"] = _clean(row.get("name"))
@@ -375,6 +388,24 @@ def build_persona(
         fields["story"] = story or None
 
     return RichPersonaProfile(**fields)
+
+
+def check_persona_kind(header: List[str], *, hybrid: bool, run_tag: Optional[str]) -> Optional[str]:
+    """None when the persona file and --hybrid agree; otherwise why the run must not start.
+
+    A file with driver columns carries real respondents' answers, which the Aug 27 rule keeps out of
+    prompts unless the run is declared hybrid, so the flag and a 'hybrid' run tag are both required.
+    """
+    present = [column for column in DRIVER_COLUMNS if column in header]
+    if present and not hybrid:
+        return (f"the persona file carries driver columns {present}, answers copied from real respondents. "
+                "Pass --hybrid (with 'hybrid' in --run-tag) to run it as a hybrid panel.")
+    if hybrid and len(present) != len(DRIVER_COLUMNS):
+        missing = [column for column in DRIVER_COLUMNS if column not in header]
+        return f"--hybrid needs all four driver columns; missing {missing}"
+    if hybrid and "hybrid" not in (run_tag or "").lower():
+        return "--hybrid runs need 'hybrid' in --run-tag, so every run folder carries the label"
+    return None
 
 
 def read_persona_ids(path: Path) -> List[str]:
@@ -1692,6 +1723,7 @@ def run_one(
         "reason_per_answer": bool(getattr(args, "reason_per_answer", False)),
         "respondent_note": INTEREST_NOTE if getattr(args, "interest_note", False) else None,
         "answer_mode": getattr(args, "answer_mode", "single"),
+        "persona_kind": "hybrid" if getattr(args, "hybrid", False) else "synthetic",
         "questions_per_call": per_call,
         "calls_per_persona": len(chunks),
         "max_tokens": args.max_tokens,
@@ -2046,6 +2078,7 @@ def dry_run(*, personas: List[Any], survey: Any, contexts: Tuple[Any, Any], args
     print(f"questions with a preamble: {len(with_preamble)} ({', '.join(q.id for q in with_preamble) or 'none'})")
     print(f"survey description sent: {survey.description is not None}")
     print(f"interest note in the system message: {bool(getattr(args, 'interest_note', False))}")
+    print(f"persona kind: {'hybrid (customer_facts copied from real respondents)' if getattr(args, 'hybrid', False) else 'synthetic'}")
     print(f"answer mode: {getattr(args, 'answer_mode', 'single')}" + (" (likert items answered as odds; one answer drawn per persona and item)" if getattr(args, "answer_mode", "single") == "distribution" else ""))
     print(f"calls per persona: {len(chunks)}" + ("" if len(chunks) == 1 else f" ({per_call} questions per call; the prompt below is slice 1)"))
     print(f"sponsor context removed: {bool(getattr(args, 'no_sponsor_context', False))}  temperature jitter: {float(getattr(args, 'temperature_jitter', 0.0) or 0.0)}  "
@@ -2183,6 +2216,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--temperature", type=float, default=0.2)
     parser.add_argument("--answer-mode", choices=ANSWER_MODES, default="single",
                         help="single: one answer per item (default). distribution: likert items are answered as odds over the scale and one answer is drawn at those odds; writes probabilities.csv")
+    parser.add_argument("--hybrid", action="store_true",
+                        help="run a hybrid persona file (driver_* columns copied from real respondents); required for such files, "
+                             "and the run tag must contain 'hybrid'")
     parser.add_argument("--interest-note", action="store_true", help="tell the respondent that interest/appeal questions and likelihood questions are different questions (see INTEREST_NOTE)")
     parser.add_argument("--questions-per-call", type=int, default=0, help="send the survey in slices of N questions per call instead of all at once (0 = one call)")
     parser.add_argument("--reason-per-answer", action="store_true", help="ask for a one-sentence reason with every answer and keep it in answers_long.csv (raises max_tokens to 9000)")
@@ -2263,6 +2299,11 @@ def main(argv: Optional[List[str]] = None) -> int:
         print(text)
         (args.out_dir / "cross_run_summary.md").write_text(text, encoding="utf-8")
         return 0
+
+    problem = check_persona_kind(header, hybrid=args.hybrid, run_tag=args.run_tag)
+    if problem:
+        print(f"ERROR: {problem}", file=sys.stderr)
+        return 2
 
     persona_ids = read_persona_ids(args.persona_ids) if args.persona_ids else None
     personas = load_personas(

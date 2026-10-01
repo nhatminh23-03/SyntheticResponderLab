@@ -816,3 +816,79 @@ def test_distribution_mode_works_with_the_survey_split_into_calls(tmp_path: Path
     n_likert = sum(1 for q in survey.questions if q.question_type == "likert")
     assert manifest["status"] == "completed" and manifest["calls_per_persona"] == 4
     assert manifest["counts"]["distributions"]["drawn"] == 3 * n_likert and manifest["counts"]["fallback_answers"] == 0
+
+
+# --- hybrid personas: driver answers copied from real respondents (Dr. Lin's method) ----------
+
+DRIVERS = {
+    "driver_prior_consideration": "Yes, I have seriously considered it",
+    "driver_outdoor_recreation": "Weekly",
+    "driver_outdoor_club": "Yes",
+    "driver_likely_use": "Home office",
+}
+
+
+def _with_columns(src: Path, dst: Path, extra: dict) -> Path:
+    with open(src, newline="", encoding="utf-8") as handle, open(dst, "w", newline="", encoding="utf-8") as out:
+        reader = csv.DictReader(handle)
+        writer = csv.DictWriter(out, fieldnames=list(reader.fieldnames) + list(extra))
+        writer.writeheader()
+        for row in reader:
+            writer.writerow({**row, **extra})
+    return dst
+
+
+@pytest.fixture
+def hybrid_csv(tmp_path: Path, persona_csv: Path) -> Path:
+    return _with_columns(persona_csv, tmp_path / "hybrid_personas.csv", {**DRIVERS, "driver_donor_id": "191182081"})
+
+
+def test_driver_columns_reach_the_prompt_as_customer_facts_and_nothing_else(hybrid_csv: Path) -> None:
+    for variant in run_survey.PROMPT_VARIANTS:
+        persona = run_survey.load_personas(hybrid_csv, limit=1, prompt_variant=variant)[0]
+        assert list(persona.customer_facts.values()) == list(DRIVERS.values()), variant
+        dumped = json.dumps(persona.model_dump())
+        assert "Seriously considered".lower() in dumped.lower() and "191182081" not in dumped
+
+
+def test_synthetic_personas_have_no_customer_facts(persona_csv: Path) -> None:
+    persona = run_survey.load_personas(persona_csv, limit=1, prompt_variant="full")[0]
+    assert persona.customer_facts is None and "customer_facts" not in persona.model_dump()
+
+
+@pytest.mark.parametrize("columns, hybrid, tag, message", [
+    (list(DRIVERS), False, None, "Pass --hybrid"),
+    ([], True, "s1-hybrid", "needs all four driver columns"),
+    (list(DRIVERS)[:2], True, "s1-hybrid", "missing"),
+    (list(DRIVERS), True, "s1-mixed", "'hybrid' in --run-tag"),
+    (list(DRIVERS), True, None, "'hybrid' in --run-tag"),
+])
+def test_persona_kind_must_match_the_hybrid_flag(columns, hybrid, tag, message) -> None:
+    problem = run_survey.check_persona_kind(["persona_id", *columns], hybrid=hybrid, run_tag=tag)
+    assert problem is not None and message in problem
+
+
+def test_persona_kind_agrees() -> None:
+    assert run_survey.check_persona_kind(["persona_id", *DRIVERS], hybrid=True, run_tag="s1-HYBRID-draw") is None
+    assert run_survey.check_persona_kind(["persona_id"], hybrid=False, run_tag=None) is None
+
+
+def test_main_refuses_a_hybrid_file_without_the_flag_and_labels_it_with_one(hybrid_csv: Path, capsys) -> None:
+    assert run_survey.main(["--personas", str(hybrid_csv), "--dry-run", "--repeats", "1"]) == 2
+    assert "Pass --hybrid" in capsys.readouterr().err
+    assert run_survey.main(["--personas", str(hybrid_csv), "--dry-run", "--repeats", "1", "--hybrid", "--run-tag", "s1-hybrid"]) == 0
+    out = capsys.readouterr().out
+    assert "persona kind: hybrid" in out and "customer_facts" in out
+
+
+def test_manifest_records_the_persona_kind(tmp_path: Path, hybrid_csv: Path, persona_csv: Path, survey) -> None:
+    for path, hybrid, kind in ((persona_csv, False, "synthetic"), (hybrid_csv, True, "hybrid")):
+        personas = run_survey.load_personas(path, limit=None, prompt_variant="full")
+        args = _args(tmp_path, path, hybrid=hybrid, run_tag="s1-hybrid" if hybrid else None)
+        args.out_dir.mkdir(parents=True, exist_ok=True)
+        manifest = run_survey.run_one(
+            model="stub/model", repeat=1, seed=202609091, personas=personas, survey=survey, contexts=run_survey.load_contexts(),
+            args=args, client=StubClient(survey), census_lookup=run_survey.persona_census_lookup(path),
+        )
+        assert manifest["persona_kind"] == kind
+        assert json.loads((Path(manifest["run_dir"]) / "manifest.json").read_text(encoding="utf-8"))["persona_kind"] == kind
