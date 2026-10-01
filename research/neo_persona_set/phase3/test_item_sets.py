@@ -62,3 +62,32 @@ def test_rejects_duplicates_empty_files_and_unknown_names(tmp_path: Path) -> Non
         item_sets.load_item_set(str(tmp_path / "empty.txt"))
     with pytest.raises(ValueError, match="neither a named set"):
         item_sets.load_item_set("lin13-validaton")
+
+
+# Dr. Lin's item_split.csv (registered 2026-09-20, shared 2026-09-30), copied by hand: item names only.
+LIN_FILE_VALIDATION = ["Q0b", "Q1", "Q2", "Q9a", "Q9b", "Q10a", "Q10b", "Q11a", "Q11b", "Q12a", "Q12b", "Q13a", "Q13b"]
+LIN_FILE_CALIBRATION = ["Q5_cost", "Q5_hoa", "Q5_permit", "Q5_space", "Q5_financing", "Q5_quality", "Q5_resale",
+                        "Q15", "Q16", "Q17", "Q17b", "Q17c", "Q19"]
+
+
+def test_lin_item_split_file_translates_to_our_sets() -> None:
+    assert [item_sets.LIN_ITEM_NAMES[name] for name in LIN_FILE_VALIDATION] == item_sets.LIN_VALIDATION
+    ours = [item_sets.LIN_ITEM_NAMES.get(name) for name in LIN_FILE_CALIBRATION]
+    assert [name for name, our in zip(LIN_FILE_CALIBRATION, ours) if our is None] == sorted(item_sets.LIN_NOT_ON_OUR_SURVEY)
+    kept = [our for our in ours if our is not None and our not in item_sets.SET_ASIDE]
+    assert kept == item_sets.LIN_CALIBRATION
+    assert "Q15" in ours and "Q15" in item_sets.SET_ASIDE  # hers includes Q15; Dr. Wang set it aside
+
+
+def test_barrier_names_follow_the_crosswalk_rows() -> None:
+    rows = dict(zip(["Q5_cost", "Q5_hoa", "Q5_permit", "Q5_space", "Q5_financing", "Q5_quality", "Q5_resale"],
+                    ["total cost", "hoa", "permit", "backyard space", "financing", "build quality", "resale"]))
+    for name, keyword in rows.items():
+        real_key = crosswalk.BY_OUR_ID[item_sets.LIN_ITEM_NAMES[name]].real_key
+        assert keyword in real_key.lower(), (name, real_key)
+
+
+def test_drivers_are_never_scored_in_lins_sets() -> None:
+    assert item_sets.LIN_DRIVERS == ["Q0A", "Q3", "Q25", "Q26"]
+    for name in ("lin13-validation", "lin13-calibration"):
+        assert not set(item_sets.NAMED_SETS[name]) & set(item_sets.LIN_DRIVERS)
