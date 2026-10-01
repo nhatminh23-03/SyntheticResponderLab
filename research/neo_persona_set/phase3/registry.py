@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -36,14 +37,18 @@ def write_entries(path: Path, rows: List[Dict[str, str]]) -> None:
 
 
 def next_id(rows: List[Dict[str, str]]) -> str:
-    return f"R{len(rows) + 1:03d}"
+    """One past the highest number in use; ids such as R019b and rows added out of order are allowed."""
+    numbers = [int(m.group(1)) for m in (re.match(r"^R(\d+)", row["registry_id"]) for row in rows) if m]
+    return f"R{max(numbers, default=0) + 1:03d}"
 
 
 def add_entry(path: Path, **fields: str) -> str:
     rows = read_entries(path)
     entry = {c: "" for c in COLUMNS}
     entry.update({k: v for k, v in fields.items() if k in COLUMNS and v is not None})
-    entry["registry_id"] = next_id(rows)
+    if any(row["registry_id"] == entry["registry_id"] for row in rows):
+        raise ValueError(f"registry id {entry['registry_id']} is already in {path}")
+    entry["registry_id"] = entry["registry_id"] or next_id(rows)
     entry["date"] = entry["date"] or datetime.now(timezone.utc).date().isoformat()
     rows.append(entry)
     write_entries(path, rows)
@@ -83,6 +88,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--registry", type=Path, default=DEFAULT_REGISTRY)
     sub = parser.add_subparsers(dest="command", required=True)
     add = sub.add_parser("add")
+    add.add_argument("--registry-id", default="", help="an explicit id such as R020b (default: the next number)")
+    add.add_argument("--date", default="", help="YYYY-MM-DD (default: today, UTC)")
     add.add_argument("--hypothesis", required=True)
     add.add_argument("--condition", required=True)
     add.add_argument("--flags", dest="runner_flags", default="")
@@ -101,7 +108,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             break
     args = parser.parse_args(argv)
     if args.command == "add":
-        print(add_entry(args.registry, hypothesis=args.hypothesis, condition=args.condition, runner_flags=args.runner_flags,
+        print(add_entry(args.registry, registry_id=args.registry_id, date=args.date, hypothesis=args.hypothesis, condition=args.condition, runner_flags=args.runner_flags,
                         runs=args.runs, panel_file=args.panel_file, survey_file=args.survey_file, notes=args.notes))
     elif args.command == "fill":
         print(fill_metrics(args.registry, args.registry_id, args.summary))

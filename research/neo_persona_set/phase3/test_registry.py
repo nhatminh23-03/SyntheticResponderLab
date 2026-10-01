@@ -34,3 +34,21 @@ def test_add_fill_show(tmp_path: Path) -> None:
     assert registry.main(["--registry", str(reg), "add", "--hypothesis", "h3", "--condition", "c3", "--flags", "-x"]) == 0
     assert registry.main(["--registry", str(reg), "show"]) == 0
     assert registry.main(["--registry", str(reg), "fill", "--registry-id", "R002", "--summary", str(tmp_path / "comparison_summary.csv")]) == 0
+
+
+def test_next_id_follows_the_highest_number_and_explicit_ids_are_unique(tmp_path: Path) -> None:
+    reg = tmp_path / "registry.csv"
+    for rid in ("R001", "R019a", "R019b", "R017b", "R010"):
+        registry.add_entry(reg, registry_id=rid, hypothesis=rid, condition="c")
+    assert registry.add_entry(reg, hypothesis="next", condition="c") == "R020"
+    assert registry.add_entry(reg, registry_id="R020b", hypothesis="variant", condition="c") == "R020b"
+    try:
+        registry.add_entry(reg, registry_id="R020b", hypothesis="again", condition="c")
+    except ValueError as error:
+        assert "R020b" in str(error)
+    else:
+        raise AssertionError("a duplicate registry id was accepted")
+    assert registry.main(["--registry", str(reg), "add", "--registry-id", "R021", "--date", "2026-09-30",
+                          "--hypothesis", "h", "--condition", "c", "--flags", "--hybrid"]) == 0
+    row = list(csv.DictReader(open(reg, newline="", encoding="utf-8-sig")))[-1]
+    assert (row["registry_id"], row["date"], row["runner_flags"]) == ("R021", "2026-09-30", "--hybrid")

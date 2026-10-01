@@ -2,7 +2,7 @@
 
 For each arm (a set of run folders, ideally two repeats on the same personas) it reports:
   q1_ne_q2_share    share of personas whose Q1 (interest) and Q2 (likelihood) answers differ
-  mean_sd           mean within-question standard deviation over the 25 likert items (real ~1.3)
+  mean_sd           mean within-question standard deviation over the 25 likert items (compare with the real survey's in the comparison folders)
   top2_share        share of likert answers that are 4 or 5
   repeat_agreement  share of answers identical between repeat 1 and repeat 2 (same persona)
   q1_concept_corr   Pearson r between Q1 and the mean of Q9B..Q13B (concept purchase likelihood):
@@ -144,7 +144,7 @@ def _fmt(value: Any, pct: bool = False) -> str:
 
 
 def render(arms: List[Dict[str, Any]]) -> str:
-    header = "| arm | n | Q1 != Q2 | likert SD (real ~1.3) | answers 4-5 | repeat agreement | r(Q1, concept likelihood) | rho(income, Q1) (real ~0.10) |"
+    header = "| arm | n | Q1 != Q2 | likert SD | answers 4-5 | repeat agreement | r(Q1, concept likelihood) | rho(income, Q1) |"
     lines = [header, "| --- | --- | --- | --- | --- | --- | --- | --- |"]
     for a in arms:
         lines.append(f"| {a['arm']} | {a['n_personas']} | {_fmt(a['q1_ne_q2_share'], True)} | {_fmt(a['mean_sd'])} | {_fmt(a['top2_share'], True)} | "
