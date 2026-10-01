@@ -45,7 +45,8 @@ a two-proportion z-test.
 
 `lint_personas.py` (checks a persona CSV), `select_panel.py` (stratified 150-persona panel),
 `add_bom.py` (Excel-safe rewrite of old run CSVs), `registry.py` (hypothesis registry),
-`write_start_here.py` (START_HERE.md for the shared folder), `make_mixed_panel.py` (one persona per
+`write_start_here.py` (START_HERE.md for the shared folder), `import_driver_personas.py` (Dr. Lin's driver
+files onto the team's persona file), `make_mixed_panel.py` (one persona per
 arm across several runs), `spread_diagnostics.py` (spread and the income gradient), `judge_reasons.py` (a third model
 picks the better-reasoned answer between two `--reason-per-answer` runs; needs the API). Tests:
 `apps/api/.venv/bin/python -m pytest research/neo_persona_set/phase3 -q`.
@@ -91,11 +92,15 @@ calibration half with the same income band, age group and kids: prior considerat
 use (Q3), outdoor recreation (Q25) and club membership (Q26). Real answers then reach the prompt,
 so these runs are labelled hybrid end to end:
 
-1. Dr. Lin's persona files (`DrLinSplit/personas_S*_drv.csv`) are the team's persona file plus
-   `prior_consideration_of_backyard_unit`, `outdoor_recreation_frequency`,
+1. Dr. Lin's persona files (`DrLinSplit/Regenerated Persona Files/personas_S*_drv.csv`) are the
+   team's persona file plus `prior_consideration_of_backyard_unit`, `outdoor_recreation_frequency`,
    `member_of_outdoor_club`, `most_likely_use_for_a_backyard_unit` and `driver_donor_id` (an
-   `aytm_N` row id, never sent to the model). The runner refuses such a file without `--hybrid`,
-   and `--hybrid` needs `hybrid` in the run tag (`phase2/README.md`).
+   `aytm_N` row id, never sent to the model). `import_driver_personas.py` checks them (persona
+   columns equal the team file, drivers filled, every donor in the cal half) and writes a
+   run-ready copy to `Assets/hybrid_personas/` that keeps the team file's columns and P001-P100
+   numbering, so a hybrid prompt differs from the synthetic one only by `customer_facts` and the
+   mixed-panel deal matches the baselines. The runner refuses such a file without `--hybrid`, and
+   `--hybrid` needs `hybrid` in the run tag (`phase2/README.md`).
 2. `make_mixed_panel.py` deals personas to arms that must share the persona file, seed, answer
    mode, persona kind and style mix (`--allow-mismatch trait_mix` to mix styled and unstyled on
    purpose); `probabilities.csv` is carried for `--answer-mode distribution` arms.
