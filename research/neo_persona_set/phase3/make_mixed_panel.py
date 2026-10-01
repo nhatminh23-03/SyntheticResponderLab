@@ -99,6 +99,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--run-tag", default="s1-R018-mixed")
     parser.add_argument("--repeat", type=int, default=1)
     parser.add_argument("--seed", type=int, default=20260924)
+    parser.add_argument("--keep-arm-order", action="store_true",
+                        help="deal in the order the --arm flags are given rather than sorted by folder name; give the arms in "
+                             "an earlier panel's model order to reproduce its persona -> model deal")
     parser.add_argument("--allow-mismatch", action="append", default=[], choices=MAY_DIFFER,
                         help="let this setting differ between arms (repeat for both); recorded in the manifest")
     args = parser.parse_args(argv)
@@ -112,7 +115,10 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     arms = {d.name: read_wide(d) for d in args.arm}
     by_arm_persona = {name: {r["persona_id"]: r for r in rows} for name, rows in arms.items()}
-    names = sorted(arms)
+    # The deal walks a seeded shuffle of the persona ids and hands them out over `names` in turn, so
+    # the same ids, seed and arm order give the same persona -> arm deal. Folder names start with a
+    # timestamp, so sorting them puts later reruns of the same models in a different order.
+    names = [d.name for d in args.arm] if args.keep_arm_order else sorted(arms)
     # Only personas every arm answered, so the panel is the same 100 people as each arm.
     shared = sorted(set.intersection(*(set(v) for v in by_arm_persona.values())))
 
@@ -156,7 +162,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         "started_at": started.isoformat(),
         "script": {"path": "research/neo_persona_set/phase3/make_mixed_panel.py"},
         "model": {"requested": "mixed panel", "arms": names, "personas_per_arm": counts},
-        "panel": {"n_personas": len(shared), "seed": args.seed, "repeat": args.repeat},
+        "panel": {"n_personas": len(shared), "seed": args.seed, "repeat": args.repeat,
+                  "arm_order": "as given" if args.keep_arm_order else "sorted by folder name"},
         "answer_mode": _common(settings, "answer_mode"),
         "persona_kind": _common(settings, "persona_kind"),
         "trait_mix": _common(settings, "trait_mix"),

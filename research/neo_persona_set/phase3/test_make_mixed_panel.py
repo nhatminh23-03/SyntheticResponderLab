@@ -110,3 +110,18 @@ def test_distribution_arms_carry_their_odds_and_labels(tmp_path: Path) -> None:
     wide = {r["persona_id"]: r["Q1"] for r in csv.DictReader((run / "answers_wide.csv").open(encoding="utf-8-sig"))}
     assert len(odds) == len(PIDS) * 5
     assert all(row["drawn"] == wide[row["persona_id"]] and row["run_id"] == manifest["run_id"] for row in odds)
+
+
+def test_keep_arm_order_reproduces_another_panels_deal_whatever_the_folder_names(tmp_path: Path) -> None:
+    # Two arms of an earlier panel, and the same two models rerun later under folder names that sort the other way.
+    old = [_arm(tmp_path / "old", "a_qwen", answer="1"), _arm(tmp_path / "old", "b_gemini", answer="2")]
+    new = [_arm(tmp_path / "new", "z_qwen", answer="1"), _arm(tmp_path / "new", "y_gemini", answer="2")]
+    assert _mix(tmp_path / "m_old", old) == 0
+    assert _mix(tmp_path / "m_sorted", new) == 0
+    assert _mix(tmp_path / "m_kept", new, "--keep-arm-order") == 0
+    def answers(root: Path):
+        return {r["persona_id"]: r["Q1"] for r in csv.DictReader((_only_run(root) / "answers_wide.csv").open(encoding="utf-8-sig"))}
+    assert answers(tmp_path / "m_kept") == answers(tmp_path / "m_old")
+    assert answers(tmp_path / "m_sorted") != answers(tmp_path / "m_old")
+    manifest = json.loads((_only_run(tmp_path / "m_kept") / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["model"]["arms"] == ["z_qwen", "y_gemini"] and manifest["panel"]["arm_order"] == "as given"
