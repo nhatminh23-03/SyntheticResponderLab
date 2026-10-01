@@ -171,14 +171,15 @@ CENSUS_INT_COLUMNS = {
 }
 STORY_PREFIX = "story_"
 # Hybrid personas (Dr. Lin's driver method): four answers copied from a real respondent in the
-# calibration half. Column -> the key the model sees under customer_facts. Any other driver_* column
-# (a donor id, say) is bookkeeping and never reaches the prompt. --hybrid must be passed to run them.
-DRIVER_COLUMNS: Dict[str, str] = OrderedDict([
-    ("driver_prior_consideration", "has_considered_a_backyard_unit"),
-    ("driver_outdoor_recreation", "outdoor_recreation_frequency"),
-    ("driver_outdoor_club", "member_of_an_outdoor_club"),
-    ("driver_likely_use", "most_likely_use_for_a_backyard_unit"),
-])
+# calibration half, in the columns her persona files use (personas_S*_drv.csv, 2026-09-30). They
+# reach the model under customer_facts with these names as keys. Her driver_donor_id column (and any
+# other extra column) is bookkeeping and never reaches the prompt. --hybrid must be passed to run them.
+DRIVER_COLUMNS: List[str] = [
+    "prior_consideration_of_backyard_unit",
+    "outdoor_recreation_frequency",
+    "member_of_outdoor_club",
+    "most_likely_use_for_a_backyard_unit",
+]
 STORY_LIST_FIELDS = {"priorities"}
 
 PROMPT_VARIANTS = ("full", "census", "buckets")
@@ -360,7 +361,7 @@ def build_persona(
     fields["lifestyle_tags"] = [tag.strip() for tag in (row.get("lifestyle_tags") or "").split(";") if tag.strip()]
     for column in CLASSIFIER_COLUMNS:
         fields[column] = _clean(row.get(column))
-    facts = OrderedDict((key, _clean(row.get(column))) for column, key in DRIVER_COLUMNS.items())
+    facts = OrderedDict((column, _clean(row.get(column))) for column in DRIVER_COLUMNS)
     fields["customer_facts"] = OrderedDict((key, value) for key, value in facts.items() if value is not None) or None
 
     if prompt_variant in ("full", "census"):
@@ -2221,7 +2222,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--answer-mode", choices=ANSWER_MODES, default="single",
                         help="single: one answer per item (default). distribution: likert items are answered as odds over the scale and one answer is drawn at those odds; writes probabilities.csv")
     parser.add_argument("--hybrid", action="store_true",
-                        help="run a hybrid persona file (driver_* columns copied from real respondents); required for such files, "
+                        help="run a hybrid persona file (Dr. Lin's four driver columns, copied from real respondents); required for such files, "
                              "and the run tag must contain 'hybrid'")
     parser.add_argument("--interest-note", action="store_true", help="tell the respondent that interest/appeal questions and likelihood questions are different questions (see INTEREST_NOTE)")
     parser.add_argument("--questions-per-call", type=int, default=0, help="send the survey in slices of N questions per call instead of all at once (0 = one call)")

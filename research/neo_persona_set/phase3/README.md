@@ -91,9 +91,11 @@ calibration half with the same income band, age group and kids: prior considerat
 use (Q3), outdoor recreation (Q25) and club membership (Q26). Real answers then reach the prompt,
 so these runs are labelled hybrid end to end:
 
-1. The persona file carries `driver_prior_consideration`, `driver_outdoor_recreation`,
-   `driver_outdoor_club` and `driver_likely_use`; the runner refuses it without `--hybrid`, and
-   `--hybrid` needs `hybrid` in the run tag (`phase2/README.md`).
+1. Dr. Lin's persona files (`DrLinSplit/personas_S*_drv.csv`) are the team's persona file plus
+   `prior_consideration_of_backyard_unit`, `outdoor_recreation_frequency`,
+   `member_of_outdoor_club`, `most_likely_use_for_a_backyard_unit` and `driver_donor_id` (an
+   `aytm_N` row id, never sent to the model). The runner refuses such a file without `--hybrid`,
+   and `--hybrid` needs `hybrid` in the run tag (`phase2/README.md`).
 2. `make_mixed_panel.py` deals personas to arms that must share the persona file, seed, answer
    mode, persona kind and style mix (`--allow-mismatch trait_mix` to mix styled and unstyled on
    purpose); `probabilities.csv` is carried for `--answer-mode distribution` arms.

@@ -820,11 +820,12 @@ def test_distribution_mode_works_with_the_survey_split_into_calls(tmp_path: Path
 
 # --- hybrid personas: driver answers copied from real respondents (Dr. Lin's method) ----------
 
+# The columns of Dr. Lin's personas_S*_drv.csv files.
 DRIVERS = {
-    "driver_prior_consideration": "Yes, I have seriously considered it",
-    "driver_outdoor_recreation": "Weekly",
-    "driver_outdoor_club": "Yes",
-    "driver_likely_use": "Home office",
+    "prior_consideration_of_backyard_unit": "Yes, I have actively researched or priced options",
+    "outdoor_recreation_frequency": "Weekly or more",
+    "member_of_outdoor_club": "Yes",
+    "most_likely_use_for_a_backyard_unit": "Home office / remote workspace",
 }
 
 
@@ -848,7 +849,7 @@ def test_driver_columns_reach_the_prompt_as_customer_facts_and_nothing_else(hybr
         persona = run_survey.load_personas(hybrid_csv, limit=1, prompt_variant=variant)[0]
         assert list(persona.customer_facts.values()) == list(DRIVERS.values()), variant
         dumped = json.dumps(persona.model_dump())
-        assert "Seriously considered".lower() in dumped.lower() and "DONOR-0042" not in dumped
+        assert "actively researched" in dumped and "DONOR-0042" not in dumped and "driver_donor_id" not in dumped
 
 
 def test_synthetic_personas_have_no_customer_facts(persona_csv: Path) -> None:
