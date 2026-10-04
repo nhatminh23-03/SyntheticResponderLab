@@ -5,12 +5,12 @@ group of items is scored on the other, so no result is graded on the items it wa
 
 - Validation (13): category interest, purchase interest, 24-month likelihood and the ten concept
   items. These map one-to-one onto our ids.
-- Calibration: her 13 are the 7 barriers, 5 value drivers and sponsorship. Our survey carries only
+- Calibration: his 13 are the 7 barriers, 5 value drivers and sponsorship. Our survey carries only
   3 of the 5 value drivers (the AYTM rows Smart Technology and Showroom have no synthetic
   counterpart) and Q15 is set aside, so on our survey the calibration set has 10 items.
 
-Both lists were checked against her item_split.csv (registered 2026-09-20, shared 2026-09-30):
-LIN_ITEM_NAMES translates her names (Q5_cost .. Q5_resale, Q9a ..) to ours. Her calibration list
+Both lists were checked against his item_split.csv (registered 2026-09-20, shared 2026-09-30):
+LIN_ITEM_NAMES translates his names (Q5_cost .. Q5_resale, Q9a ..) to ours. His calibration list
 also carries Q15, which stays out here because Dr. Wang set it aside. The four driver questions
 (LIN_DRIVERS) are never scored: in a hybrid run their answers are copied from real respondents.
 
@@ -39,7 +39,7 @@ SET_ASIDE: Dict[str, str] = {
 LIN_VALIDATION: List[str] = ["Q0B", "Q1", "Q2", "Q9A", "Q9B", "Q10A", "Q10B", "Q11A", "Q11B", "Q12A", "Q12B", "Q13A", "Q13B"]
 LIN_CALIBRATION: List[str] = ["Q5_1", "Q5_2", "Q5_3", "Q5_4", "Q5_5", "Q5_6", "Q5_7", "Q16", "Q17", "Q19"]
 
-# Her item names -> ours. The barrier rows follow crosswalk.BARRIER_ROWS (cost, HOA, permit, space,
+# His item names -> ours. The barrier rows follow crosswalk.BARRIER_ROWS (cost, HOA, permit, space,
 # financing, quality, resale); the concept items differ only in case.
 LIN_ITEM_NAMES: Dict[str, str] = {
     **dict(zip(["Q5_cost", "Q5_hoa", "Q5_permit", "Q5_space", "Q5_financing", "Q5_quality", "Q5_resale"],
@@ -48,7 +48,7 @@ LIN_ITEM_NAMES: Dict[str, str] = {
     "Q11a": "Q11A", "Q11b": "Q11B", "Q12a": "Q12A", "Q12b": "Q12B", "Q13a": "Q13A", "Q13b": "Q13B",
     "Q15": "Q15", "Q16": "Q16", "Q17": "Q17", "Q19": "Q19",
 }
-# Value-driver rows Smart Technology and Showroom: in her list, not on our survey.
+# Value-driver rows Smart Technology and Showroom: in his list, not on our survey.
 LIN_NOT_ON_OUR_SURVEY = {"Q17b", "Q17c"}
 # Prior consideration, primary use, outdoor recreation, club membership.
 LIN_DRIVERS: List[str] = ["Q0A", "Q3", "Q25", "Q26"]

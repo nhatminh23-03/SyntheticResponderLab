@@ -7,9 +7,9 @@ the repository and outside the real-data folder; this script refuses either plac
 
 Two modes:
 - --from-lin converts Dr. Lin's split (aytm_respondent_split_ids.csv, shared 2026-09-30) into id
-  files. Her ids are row indexes, aytm_N = respondent row N of the raw file in file order; the
+  files. His ids are row indexes, aytm_N = respondent row N of the raw file in file order; the
   conversion looks up each row's Response ID. This is the split all scoring uses.
-- without it, a new seeded split is drawn. That was the PROVISIONAL stand-in before her file came.
+- without it, a new seeded split is drawn. That was the PROVISIONAL stand-in before his file came.
 compare_real.py --real-ids reads the id files either mode writes.
 
     apps/api/.venv/bin/python research/neo_persona_set/phase3/make_real_split.py \\
@@ -114,13 +114,13 @@ def main(argv: Optional[List[str]] = None) -> int:
             print(f"ERROR: {error}", file=sys.stderr)
             return 2
         label, method = args.label or f"lin-seed{seed}", LIN_METHOD
-        note = "Dr. Lin's split, converted from her row indexes (aytm_N = row N; confirmation pending)."
+        note = "Dr. Lin's split, converted from his row indexes (aytm_N = row N; confirmation pending)."
         source = {"path": str(lin_path), "sha256": filter_qualified.sha256_of_file(lin_path)}
     else:
         seed = args.seed
         fit, score = split_ids(ids, seed, args.fit_share)
         label, method = args.label or "provisional", METHOD
-        note = "PROVISIONAL: not Dr. Lin's split; replace with her id lists when shared." if label == "provisional" else f"label: {label}"
+        note = "PROVISIONAL: not Dr. Lin's split; replace with his id lists when shared." if label == "provisional" else f"label: {label}"
 
     out.mkdir(parents=True, exist_ok=True)
     for name, half, use in (("fit_ids.txt", fit, "fit half: may be used for fitting (driver donors, model adjustments)"),

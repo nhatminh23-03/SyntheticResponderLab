@@ -50,7 +50,7 @@ def test_driver_columns_match_the_runner() -> None:
 def test_merge_keeps_the_team_columns_and_numbering_and_adds_the_drivers() -> None:
     merged = imp.merge(_lin(), _team(), SPLIT, "team_s1_id")
     assert [row["persona_id"] for row in merged] == ["P001", "P002", "P003"]
-    assert merged[0]["hours_worked_per_week"] == "40"  # the team's string, not her 40.0
+    assert merged[0]["hours_worked_per_week"] == "40"  # the team's string, not his 40.0
     assert merged[0]["member_of_outdoor_club"] == "No" and merged[2]["driver_donor_id"] == "aytm_3"
     assert "team_s1_id" not in merged[0]
 

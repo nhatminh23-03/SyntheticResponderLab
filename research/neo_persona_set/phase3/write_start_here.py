@@ -24,11 +24,11 @@ OTHER_ITEMS = OrderedDict([
     ("Sept24_real_vs_synthetic_experiments", "Yaza's Sept 23-24 S1 runs (income ablations, model families, response styles, the R018 and R018b mixed panels, the random control) with their comparisons and write-ups."),
     ("Sept25_review", "Minh's re-check of the Sept 23-24 results (`checkers.md`, `refutes.md`)."),
     ("Sept30_lin_standard_baselines", "the unstyled four-model mix (R018u) built from the Sept 23 runs, and the baselines for R020/R020b scored on Dr. Lin's standard."),
-    ("DrLinSplit", "Dr. Lin's files as she sent them: `aytm_respondent_split_ids.csv` (300 cal / 300 val, seed 42; ids are row indexes, aytm_N = respondent row N), `item_split.csv` (13 calibration, 13 validation items), and the driver persona files (use `Regenerated Persona Files/`; the Sept 30 S1 file was the wrong 100 people)."),
-    ("real_splits", "her split converted to Response IDs: `lin-seed42/` (`fit_ids.txt` = cal, `score_ids.txt` = val) is the scoring standard; `provisional-seed42/` is superseded."),
+    ("DrLinSplit", "Dr. Lin's files as he sent them: `aytm_respondent_split_ids.csv` (300 cal / 300 val, seed 42; ids are row indexes, aytm_N = respondent row N), `item_split.csv` (13 calibration, 13 validation items), and the driver persona files (use `Regenerated Persona Files/`; the Sept 30 S1 file was the wrong 100 people)."),
+    ("real_splits", "his split converted to Response IDs: `lin-seed42/` (`fit_ids.txt` = cal, `score_ids.txt` = val) is the scoring standard; `provisional-seed42/` is superseded."),
     ("Oct01_hybrid_R020", "R020 / R020b (2026-10-01): driver personas + drawn answers on the four-model mix, unstyled and styled. `survey_runs/` holds the 16 model runs, the 4 mixed panels (built with --keep-arm-order, same persona -> model deal as R018u / R018b) and the smoke tests; `real_comparison/` the scoring on Dr. Lin's standard and the spread diagnostics."),
     ("Oct02_separating_R021", "R021 (drawing only) and R021b (drivers only), 2026-10-02/03: the two halves of R020 run separately on the same four models and persona -> model deal. `real_comparison/` holds the scoring, the spread diagnostics and `attribution_R021.json`."),
-    ("hybrid_personas", "run-ready hybrid persona files: Dr. Lin's four driver answers (copied from cal-half respondents) merged onto the team's persona file by import_driver_personas.py (`s1_drv.csv` = the team's S1, `s2lin_drv.csv` = her S2), each with a `.json` record of input hashes. Run only with --hybrid."),
+    ("hybrid_personas", "run-ready hybrid persona files: Dr. Lin's four driver answers (copied from cal-half respondents) merged onto the team's persona file by import_driver_personas.py (`s1_drv.csv` = the team's S1, `s2lin_drv.csv` = his S2), each with a `.json` record of input hashes. Run only with --hybrid."),
     ("EXPERIMENT_LOG.md", "the lab notebook: every run, its result and its cost."),
     ("discussion", "`DISCUSSION_LOG.md` (week by week: what happened, decisions, next steps, the email archive), the emails and the meeting transcript."),
     ("NeoSmartLiving_App_Test_Log.xlsx", "the app test log; not an input to any run."),
@@ -105,7 +105,7 @@ def render_start_here(*, runs_by_set: Dict[str, Dict[str, List[Dict[str, Any]]]]
     top += [[f"`{name}`" if "." in name else f"`{name}/`", description] for name, description in OTHER_ITEMS.items() if name in (present or set())]
     lines += _table(["Item", "What it is"], top)
     lines += ["", "## How to score (from 2026-09-30)", "",
-              "Dr. Lin's calibration / validation split is the standard. Score on her 13 validation items against her 300 held-out respondents:",
+              "Dr. Lin's calibration / validation split is the standard. Score on his 13 validation items against his 300 held-out respondents:",
               "`compare_real.py --items lin13-validation --real-ids real_splits/lin-seed42/score_ids.txt`. Anything fitted to real answers (driver donors, adjustments) uses only `real_splits/lin-seed42/fit_ids.txt` and the calibration items.",
               "Hybrid runs (persona files with driver answers copied from real respondents) carry `hybrid` in the folder name and `persona_kind: hybrid` in the manifest; they are never scored on the four driver questions.",
               "Read rank agreement (mean_spearman) and top-answer match first, with the random control alongside; mean TV alone can be beaten by random answers."]

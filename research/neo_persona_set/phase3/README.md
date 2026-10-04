@@ -58,14 +58,14 @@ calibration items and the fit half of respondents; results are scored only on th
 items against the other 300. Every headline number from now on is on this standard.
 
 ```bash
-# 1. convert her split (DrLinSplit/aytm_respondent_split_ids.csv) into Response-ID files.
-#    Her ids are row indexes: aytm_N = respondent row N of the raw file, in file order.
+# 1. convert his split (DrLinSplit/aytm_respondent_split_ids.csv) into Response-ID files.
+#    His ids are row indexes: aytm_N = respondent row N of the raw file, in file order.
 #    Written outside the repo; the script refuses the repo and the real-data folder.
 apps/api/.venv/bin/python research/neo_persona_set/phase3/make_real_split.py --real "$REAL" \
   --from-lin ../SyntheticResponderLab-Assets/DrLinSplit/aytm_respondent_split_ids.csv \
   --out ../SyntheticResponderLab-Assets/real_splits/lin-seed42
 
-# 2. score only the 13 validation items, against only her 300 val respondents
+# 2. score only the 13 validation items, against only his 300 val respondents
 apps/api/.venv/bin/python research/neo_persona_set/phase3/compare_real.py --real "$REAL" \
   --runs <run_dir> ... --out <dir> \
   --items lin13-validation \
@@ -75,12 +75,12 @@ apps/api/.venv/bin/python research/neo_persona_set/phase3/compare_real.py --real
 - `--items` takes a named set from `item_sets.py` (`lin13-validation`, `lin13-calibration`,
   `all-scored`) or a file of question ids. Questions outside the set are still compared and
   reported, with `scored=false`. Without `--items` every comparable question counts, as before.
-- The named sets match her `item_split.csv` (`item_sets.LIN_ITEM_NAMES` translates her names).
+- The named sets match his `item_split.csv` (`item_sets.LIN_ITEM_NAMES` translates his names).
   Q15 and Q24 are set aside (Dr. Wang, 2026-09-24) and are in no named set; `all-scored` is the
   other 34. On our survey the calibration set has 10 items, not 13: our survey carries only 3 of
   the 5 value drivers and Q15 is set aside.
-- `--real-ids` takes a file of AYTM Response IDs. `real_splits/lin-seed42/` is her split;
-  `real_splits/provisional-seed42/` was a stand-in drawn before hers arrived and is superseded.
+- `--real-ids` takes a file of AYTM Response IDs. `real_splits/lin-seed42/` is his split;
+  `real_splits/provisional-seed42/` was a stand-in drawn before his arrived and is superseded.
   Without `--from-lin`, `make_real_split.py` still draws a new seeded split.
 - `comparison_summary.csv` gains `item_set` and `n_real_respondents`; `manifest.json` records the
   item list and the id file's hash.

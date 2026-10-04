@@ -76,7 +76,7 @@ def test_lin_item_split_file_translates_to_our_sets() -> None:
     assert [name for name, our in zip(LIN_FILE_CALIBRATION, ours) if our is None] == sorted(item_sets.LIN_NOT_ON_OUR_SURVEY)
     kept = [our for our in ours if our is not None and our not in item_sets.SET_ASIDE]
     assert kept == item_sets.LIN_CALIBRATION
-    assert "Q15" in ours and "Q15" in item_sets.SET_ASIDE  # hers includes Q15; Dr. Wang set it aside
+    assert "Q15" in ours and "Q15" in item_sets.SET_ASIDE  # his includes Q15; Dr. Wang set it aside
 
 
 def test_barrier_names_follow_the_crosswalk_rows() -> None:

@@ -1,17 +1,17 @@
 """Make a run-ready hybrid persona file from Dr. Lin's driver file and the team's persona file.
 
-Her personas_S*_drv.csv carry the team's persona columns plus four driver answers copied from a
+His personas_S*_drv.csv carry the team's persona columns plus four driver answers copied from a
 real respondent in the calibration half, and that respondent's row id (driver_donor_id, aytm_N).
 This keeps every persona column from the team's own file and takes only the five driver columns
-from hers, so a hybrid prompt differs from the synthetic one only by customer_facts. persona_id
+from his, so a hybrid prompt differs from the synthetic one only by customer_facts. persona_id
 stays in the team file's numbering, so the mixed-panel deal and the response-style assignment line
 up with the synthetic baselines.
 
 Nothing is written unless every check passes (exit 2 otherwise):
-- each of her personas is in the team file, matched on --lin-id-column, with no duplicates;
-- her copy of every persona column agrees with the team's (numbers compared as numbers);
+- each of his personas is in the team file, matched on --lin-id-column, with no duplicates;
+- his copy of every persona column agrees with the team's (numbers compared as numbers);
 - the four driver columns are filled;
-- every donor is a row id in her split file, in the "cal" half.
+- every donor is a row id in his split file, in the "cal" half.
 The output names a real respondent per persona, so it is refused inside the repository and
 inside the real-data folder.
 
@@ -66,7 +66,7 @@ def same_value(a: str, b: str) -> bool:
 
 
 def merge(lin: List[Dict[str, str]], team: List[Dict[str, str]], split: Dict[str, str], lin_id_column: str) -> List[Dict[str, str]]:
-    """Team rows (team order, her personas only) plus her driver columns. Raises ValueError on any check."""
+    """Team rows (team order, his personas only) plus his driver columns. Raises ValueError on any check."""
     if not lin:
         raise ValueError("the driver file is empty")
     missing_columns = [c for c in [lin_id_column, *DRIVER_COLUMNS, DONOR_COLUMN] if c not in lin[0]]
@@ -109,9 +109,9 @@ def merge(lin: List[Dict[str, str]], team: List[Dict[str, str]], split: Dict[str
 def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--lin", type=Path, required=True, help="Dr. Lin's personas_S*_drv.csv")
-    parser.add_argument("--lin-id-column", default="persona_id", help="her column holding the team file's persona_id (team_s1_id for S1)")
+    parser.add_argument("--lin-id-column", default="persona_id", help="his column holding the team file's persona_id (team_s1_id for S1)")
     parser.add_argument("--team", type=Path, required=True, help="the team's persona file those ids refer to")
-    parser.add_argument("--split", type=Path, required=True, help="her aytm_respondent_split_ids.csv")
+    parser.add_argument("--split", type=Path, required=True, help="his aytm_respondent_split_ids.csv")
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args(argv)
 

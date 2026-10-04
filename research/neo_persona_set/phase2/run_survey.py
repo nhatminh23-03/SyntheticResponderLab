@@ -171,8 +171,8 @@ CENSUS_INT_COLUMNS = {
 }
 STORY_PREFIX = "story_"
 # Hybrid personas (Dr. Lin's driver method): four answers copied from a real respondent in the
-# calibration half, in the columns her persona files use (personas_S*_drv.csv, 2026-09-30). They
-# reach the model under customer_facts with these names as keys. Her driver_donor_id column (and any
+# calibration half, in the columns his persona files use (personas_S*_drv.csv, 2026-09-30). They
+# reach the model under customer_facts with these names as keys. His driver_donor_id column (and any
 # other extra column) is bookkeeping and never reaches the prompt. --hybrid must be passed to run them.
 DRIVER_COLUMNS: List[str] = [
     "prior_consideration_of_backyard_unit",
