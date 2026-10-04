@@ -8,11 +8,11 @@ phase 3 (a test enforces it), and no output is ever written into the raw-data fo
 
 ```bash
 ASSETS=../SyntheticResponderLab-Assets
-REAL="$ASSETS/raw 600-participant dataset and a sample report from aytm/survey-760085-2026-03-25-raw-data.csv"
-RUNS=$ASSETS/match_600_persona/survey_runs
+REAL="$ASSETS/2_real_data_aytm/survey-760085-2026-03-25-raw-data.csv"
+RUNS=$ASSETS/5_experiments/2026-09-10_first_full_600_runs/matched_600_v1/survey_runs
 apps/api/.venv/bin/python research/neo_persona_set/phase3/filter_qualified.py --runs $RUNS/*_matched
 apps/api/.venv/bin/python research/neo_persona_set/phase3/compare_real.py --real "$REAL" \
-  --runs $RUNS/*_matched --out $ASSETS/match_600_persona/real_comparison/$(date -u +%Y%m%dT%H%MZ)
+  --runs $RUNS/*_matched --out $ASSETS/5_experiments/2026-09-10_first_full_600_runs/matched_600_v1/real_comparison/$(date -u +%Y%m%dT%H%MZ)
 ```
 
 Flags: `--require-outdoor-space` (default; drops synthetic personas whose S3 starts with "No", about
@@ -58,18 +58,18 @@ calibration items and the fit half of respondents; results are scored only on th
 items against the other 300. Every headline number from now on is on this standard.
 
 ```bash
-# 1. convert his split (DrLinSplit/aytm_respondent_split_ids.csv) into Response-ID files.
+# 1. convert his split (3_scoring_standard/DrLin_split/aytm_respondent_split_ids.csv) into Response-ID files.
 #    His ids are row indexes: aytm_N = respondent row N of the raw file, in file order.
 #    Written outside the repo; the script refuses the repo and the real-data folder.
 apps/api/.venv/bin/python research/neo_persona_set/phase3/make_real_split.py --real "$REAL" \
-  --from-lin ../SyntheticResponderLab-Assets/DrLinSplit/aytm_respondent_split_ids.csv \
-  --out ../SyntheticResponderLab-Assets/real_splits/lin-seed42
+  --from-lin ../SyntheticResponderLab-Assets/3_scoring_standard/DrLin_split/aytm_respondent_split_ids.csv \
+  --out ../SyntheticResponderLab-Assets/3_scoring_standard/real_splits/lin-seed42
 
 # 2. score only the 13 validation items, against only his 300 val respondents
 apps/api/.venv/bin/python research/neo_persona_set/phase3/compare_real.py --real "$REAL" \
   --runs <run_dir> ... --out <dir> \
   --items lin13-validation \
-  --real-ids ../SyntheticResponderLab-Assets/real_splits/lin-seed42/score_ids.txt
+  --real-ids ../SyntheticResponderLab-Assets/3_scoring_standard/real_splits/lin-seed42/score_ids.txt
 ```
 
 - `--items` takes a named set from `item_sets.py` (`lin13-validation`, `lin13-calibration`,
@@ -79,8 +79,8 @@ apps/api/.venv/bin/python research/neo_persona_set/phase3/compare_real.py --real
   Q15 and Q24 are set aside (Dr. Wang, 2026-09-24) and are in no named set; `all-scored` is the
   other 34. On our survey the calibration set has 10 items, not 13: our survey carries only 3 of
   the 5 value drivers and Q15 is set aside.
-- `--real-ids` takes a file of AYTM Response IDs. `real_splits/lin-seed42/` is his split;
-  `real_splits/provisional-seed42/` was a stand-in drawn before his arrived and is superseded.
+- `--real-ids` takes a file of AYTM Response IDs. `3_scoring_standard/real_splits/lin-seed42/` is his split;
+  `3_scoring_standard/real_splits/provisional-seed42/` was a stand-in drawn before his arrived and is superseded.
   Without `--from-lin`, `make_real_split.py` still draws a new seeded split.
 - `comparison_summary.csv` gains `item_set` and `n_real_respondents`; `manifest.json` records the
   item list and the id file's hash.
@@ -92,12 +92,12 @@ calibration half with the same income band, age group and kids: prior considerat
 use (Q3), outdoor recreation (Q25) and club membership (Q26). Real answers then reach the prompt,
 so these runs are labelled hybrid end to end:
 
-1. Dr. Lin's persona files (`DrLinSplit/Regenerated Persona Files/personas_S*_drv.csv`) are the
+1. Dr. Lin's persona files (`4_persona_sets/hybrid_drivers/from_DrLin_2026-10-01/personas_S*_drv.csv`) are the
    team's persona file plus `prior_consideration_of_backyard_unit`, `outdoor_recreation_frequency`,
    `member_of_outdoor_club`, `most_likely_use_for_a_backyard_unit` and `driver_donor_id` (an
    `aytm_N` row id, never sent to the model). `import_driver_personas.py` checks them (persona
    columns equal the team file, drivers filled, every donor in the cal half) and writes a
-   run-ready copy to `Assets/hybrid_personas/` that keeps the team file's columns and P001-P100
+   run-ready copy to `4_persona_sets/hybrid_drivers/run_ready/` that keeps the team file's columns and P001-P100
    numbering, so a hybrid prompt differs from the synthetic one only by `customer_facts` and the
    mixed-panel deal matches the baselines. The runner refuses such a file without `--hybrid`, and
    `--hybrid` needs `hybrid` in the run tag (`phase2/README.md`).

@@ -96,11 +96,11 @@ prompt_builder = load_module("backend.simulation.prompt_builder", LEGACY_ROOT)
 llm_client = load_module("backend.simulation.llm_client", LEGACY_ROOT)
 presets = load_module("backend.presets", LEGACY_ROOT)
 
-DEFAULT_PERSONAS = (
-    REPO_ROOT.parent / "SyntheticResponderLab-Assets" / "600_persona" / "phase1_interview_survey600owners.csv"
-)
+ASSETS = REPO_ROOT.parent / "SyntheticResponderLab-Assets"
+DEFAULT_PERSONAS = ASSETS / "4_persona_sets" / "plain_600_2026-08-25" / "phase1_interview_survey600owners.csv"
 DEFAULT_SURVEY = LEGACY_ROOT / "Provided Info" / "Neo Smart Living — Survey_HighMedPriority.md"
-DEFAULT_OUT_DIR = REPO_ROOT.parent / "SyntheticResponderLab-Assets" / "600_persona" / "survey_runs"
+# New runs land here unless --out-dir says otherwise, never inside an earlier experiment's folder.
+DEFAULT_OUT_DIR = ASSETS / "5_experiments" / "new_runs" / "survey_runs"
 DEFAULT_MODELS = ["deepseek/deepseek-v4-pro-0813", "qwen/qwen3.7-plus"]
 DEFAULT_SEED_BASE = 20260909
 

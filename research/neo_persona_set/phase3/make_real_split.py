@@ -14,7 +14,7 @@ compare_real.py --real-ids reads the id files either mode writes.
 
     apps/api/.venv/bin/python research/neo_persona_set/phase3/make_real_split.py \\
         --real "<AYTM raw-data csv>" --from-lin <aytm_respondent_split_ids.csv> \\
-        --out ../SyntheticResponderLab-Assets/real_splits/lin-seed42
+        --out ../SyntheticResponderLab-Assets/3_scoring_standard/real_splits/lin-seed42
 """
 
 from __future__ import annotations

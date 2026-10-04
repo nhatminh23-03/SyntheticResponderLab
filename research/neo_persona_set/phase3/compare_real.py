@@ -1,8 +1,8 @@
 """Compare synthetic survey runs with the real AYTM survey, question by question. Fully offline.
 
     apps/api/.venv/bin/python research/neo_persona_set/phase3/compare_real.py \\
-        --real "../SyntheticResponderLab-Assets/raw 600-participant dataset and a sample report from aytm/survey-760085-2026-03-25-raw-data.csv" \\
-        --runs <run_dir> [<run_dir> ...] --out ../SyntheticResponderLab-Assets/match_600_persona/real_comparison/<stamp>
+        --real "../SyntheticResponderLab-Assets/2_real_data_aytm/survey-760085-2026-03-25-raw-data.csv" \\
+        --runs <run_dir> [<run_dir> ...] --out ../SyntheticResponderLab-Assets/5_experiments/2026-09-10_first_full_600_runs/matched_600_v1/real_comparison/<stamp>
 
 For every run x mapped question the answer categories are aligned through crosswalk.CROSSWALK, the
 real and synthetic distributions are computed on the shared categories (off-list answers on either

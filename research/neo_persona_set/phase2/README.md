@@ -31,9 +31,9 @@ think for roughly 3,000 tokens per persona, which quadruples cost, multiplies la
 answers at 4,000 tokens in the smoke test; with it off they answer in 650 to 1,050 tokens with no
 fabricated answers. Pass `--reasoning-effort default` to leave the provider default in place.
 
-Defaults: personas `SyntheticResponderLab-Assets/600_persona/phase1_interview_survey600owners.csv`,
+Defaults: personas `SyntheticResponderLab-Assets/4_persona_sets/plain_600_2026-08-25/phase1_interview_survey600owners.csv`,
 survey `apps/api/legacy_runtime/Provided Info/Neo Smart Living — Survey_HighMedPriority.md`,
-output `SyntheticResponderLab-Assets/600_persona/survey_runs/`, temperature 0.2, max_tokens 6000,
+output `SyntheticResponderLab-Assets/5_experiments/new_runs/survey_runs/`, temperature 0.2, max_tokens 6000,
 seed `seed_base*10 + repeat`, prompt variant `full` (exact Census record + story). Results are
 written to the shared folder and are not committed.
 
@@ -43,10 +43,10 @@ with the bands of the screened pool (a matched draw with a $31,980 income arrive
 "$100k-$150k"). The manifest counts how many rows changed; `--keep-file-buckets` sends the
 file's labels unchanged.
 
-For a second persona set, point `--personas` at its CSV and give it its own `--out-dir` and
-`--run-tag` so its runs never mix with the plain draw, e.g.
-`--personas ../SyntheticResponderLab-Assets/match_600_persona/phase1_interview_matched600.csv
---out-dir ../SyntheticResponderLab-Assets/match_600_persona/survey_runs --run-tag matched`.
+Give every experiment round its own dated folder under `5_experiments/` (the Assets folder layout
+is described in its START_HERE.md), e.g.
+`--personas ../SyntheticResponderLab-Assets/4_persona_sets/matched_600_v2_S1-S6_2026-09-16/phase1_interview_matched600_s1.csv
+--out-dir ../SyntheticResponderLab-Assets/5_experiments/2026-10-10_<what>/survey_runs --run-tag s1-<what>`.
 
 Useful flags: `--prompt-variant census|buckets`, `--provider-order together,fireworks`
 `--no-provider-fallbacks` (pin DeepSeek to US hosts, ~2x price), `--price-in/--price-out`,

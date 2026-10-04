@@ -16,11 +16,11 @@ The output names a real respondent per persona, so it is refused inside the repo
 inside the real-data folder.
 
     apps/api/.venv/bin/python research/neo_persona_set/phase3/import_driver_personas.py \\
-        --lin "../SyntheticResponderLab-Assets/DrLinSplit/Regenerated Persona Files/personas_S1_drv.csv" \\
+        --lin "../SyntheticResponderLab-Assets/4_persona_sets/hybrid_drivers/from_DrLin_2026-10-01/personas_S1_drv.csv" \\
         --lin-id-column team_s1_id \\
-        --team ../SyntheticResponderLab-Assets/6_subset_of_dataset_plus_the_all_600_persona_data/phase1_interview_matched600_s1.csv \\
-        --split ../SyntheticResponderLab-Assets/DrLinSplit/aytm_respondent_split_ids.csv \\
-        --out ../SyntheticResponderLab-Assets/hybrid_personas/s1_drv.csv
+        --team ../SyntheticResponderLab-Assets/4_persona_sets/matched_600_v2_S1-S6_2026-09-16/phase1_interview_matched600_s1.csv \\
+        --split ../SyntheticResponderLab-Assets/3_scoring_standard/DrLin_split/aytm_respondent_split_ids.csv \\
+        --out ../SyntheticResponderLab-Assets/4_persona_sets/hybrid_drivers/run_ready/s1_drv.csv
 """
 
 from __future__ import annotations
