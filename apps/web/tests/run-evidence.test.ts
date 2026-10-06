@@ -75,3 +75,31 @@ test("genuinely grounded persona generation is reported as grounded", () => {
   assert.equal(evidence.personaGrounding.isGrounded, true);
   assert.match(evidence.personaGrounding.label, /grounded/i);
 });
+
+test("a preloaded demo is a preloaded panel, not a failed grounding", () => {
+  const evidence = describeRunEvidence({}, "preloaded_s1", "demo_preloaded");
+
+  assert.equal(evidence.personaGrounding.isGrounded, false);
+  assert.equal(evidence.personaGrounding.label, "Preloaded panel (100 synthetic personas, S1)");
+  assert.doesNotMatch(evidence.personaGrounding.detail, /unavailable|heuristic/i);
+});
+
+test("a preloaded demo never reads as live answers or an empty live run", () => {
+  const evidence = describeRunEvidence({}, "preloaded_s1", "demo_preloaded");
+
+  assert.equal(evidence.available, false);
+  assert.equal(evidence.headline, "Preloaded demo answers");
+  assert.doesNotMatch(`${evidence.headline} ${evidence.detail}`, /live model|not reported|fabricat/i);
+  assert.match(evidence.detail, /No AI was called/);
+});
+
+test("a demo with fewer personas than the panel says how many of the 100 it used", () => {
+  const some = describeRunEvidence({}, "preloaded_s1", "demo_preloaded", 20);
+  assert.equal(some.personaGrounding.label, "Preloaded panel (first 20 of 100 synthetic personas, S1)");
+
+  const all = describeRunEvidence({}, "preloaded_s1", "demo_preloaded", 100);
+  assert.equal(all.personaGrounding.label, "Preloaded panel (100 synthetic personas, S1)");
+
+  const unknown = describeRunEvidence({}, "preloaded_s1", "demo_preloaded");
+  assert.equal(unknown.personaGrounding.label, "Preloaded panel (100 synthetic personas, S1)");
+});

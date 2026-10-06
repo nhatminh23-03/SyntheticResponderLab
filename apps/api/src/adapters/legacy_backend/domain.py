@@ -9,6 +9,7 @@ import inspect
 import json
 from pathlib import Path
 import re
+import time
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlsplit
 
@@ -17,6 +18,7 @@ import requests
 from pydantic import ValidationError
 
 from src.api.errors import serializable_validation_errors
+from src.adapters.legacy_backend import jev_engine
 from src.adapters.legacy_backend.runtime import load_module, load_service_account_info, temporary_env
 from src.adapters.legacy_backend.survey_docx_fallback import parse_aytm_style_docx_to_validated_schema
 from src.config.settings import AppSettings
@@ -148,16 +150,41 @@ def validate_market(payload: dict, legacy_root: Path) -> dict:
         raise ValidationApiError("Market validation failed.", {"errors": serializable_validation_errors(exc)}) from exc
 
 
+def _build_experiment_plan(schemas: Any, payload: dict) -> Any:
+    """Build the legacy ExperimentPlan, letting Jev (which runs on its own) be the only selected model.
+
+    The legacy plan insists on two or more models for split and mirror runs. Jev is never compared with
+    another model, so a lone Jev entry is validated as if listed twice and then restored to one entry.
+    """
+    models = [str(model).strip() for model in (payload.get("selected_models") or []) if model is not None and str(model).strip()]
+    if models == [jev_engine.JEV_MODEL_ID] and payload.get("experiment_mode") in {"split", "mirror"}:
+        plan = schemas.ExperimentPlan(**{**payload, "selected_models": models * 2})
+        return plan.model_copy(update={"selected_models": models})
+    return schemas.ExperimentPlan(**payload)
+
+
 def validate_experiment(payload: dict, legacy_root: Path) -> dict:
     schemas = load_module("backend.schemas", legacy_root)
     try:
-        return schemas.ExperimentPlan(**payload).model_dump()
+        return _build_experiment_plan(schemas, payload).model_dump()
     except ValidationError as exc:
         raise ValidationApiError("Experiment validation failed.", {"errors": serializable_validation_errors(exc)}) from exc
 
 
+JEV_CATALOG_ENTRY = {
+    "id": jev_engine.JEV_MODEL_ID,
+    "name": "Jev — fast, approximate (answers drawn from its probabilities)",
+    "prompt_price_per_million": None,
+    "completion_price_per_million": None,
+}
+
+
 def list_model_catalog(*, settings: AppSettings) -> dict:
     llm_client = load_module("backend.simulation.llm_client", settings.legacy_app_root)
+
+    def with_jev(models: List[dict]) -> List[dict]:
+        return ([dict(JEV_CATALOG_ENTRY)] if settings.typesafe_api_key else []) + models
+
     fallback_models = [
         {
             "id": "openai/gpt-4o-mini",
@@ -184,20 +211,20 @@ def list_model_catalog(*, settings: AppSettings) -> dict:
     except Exception as exc:
         return {
             "source": "fallback",
-            "models": fallback_models,
+            "models": with_jev(fallback_models),
             "warning": f"Unable to load OpenRouter catalog: {exc}",
         }
 
     if bool(result.get("ok")) and result.get("models"):
         return {
             "source": "openrouter",
-            "models": list(result.get("models") or []),
+            "models": with_jev(list(result.get("models") or [])),
             "warning": None,
         }
 
     return {
         "source": "fallback",
-        "models": fallback_models,
+        "models": with_jev(fallback_models),
         "warning": result.get("error") or "OpenRouter model catalog unavailable.",
     }
 
@@ -1024,7 +1051,7 @@ def execute_simulation_run(
 
     audience = schemas.AudienceFilter(**audience_payload)
     survey_schema = schemas.SurveySchema(**survey_payload)
-    experiment = schemas.ExperimentPlan(**experiment_payload)
+    experiment = _build_experiment_plan(schemas, experiment_payload)
     business_product_context = (
         schemas.BusinessProductContext(**product_payload) if product_payload else None
     )
@@ -1041,22 +1068,35 @@ def execute_simulation_run(
     except Exception:
         affordability_priors_available = False
 
-    with temporary_env(
-        {
-            "OPENROUTER_API_KEY": settings.openrouter_api_key,
-            "OPENROUTER_BASE_URL": settings.openrouter_base_url,
-        }
-    ):
-        try:
-            openrouter_available = bool(llm_client.openrouter_api_key_available())
-        except Exception:
-            openrouter_available = False
+    selected_models = list(experiment.selected_models or [])
+    uses_jev = jev_engine.JEV_MODEL_ID in selected_models
+    if uses_jev:
+        if len(selected_models) > 1:
+            raise ValidationApiError("Jev runs on its own: remove the other models or untick Jev.")
+        if experiment.experiment_mode == "stability":
+            raise ValidationApiError("Jev runs use split or mirror mode, not stability.")
+        if not settings.typesafe_api_key:
+            raise ProviderUnavailableApiError("TYPESAFE_API_KEY is required for live Jev runs.")
+    else:
+        with temporary_env(
+            {
+                "OPENROUTER_API_KEY": settings.openrouter_api_key,
+                "OPENROUTER_BASE_URL": settings.openrouter_base_url,
+            }
+        ):
+            try:
+                openrouter_available = bool(llm_client.openrouter_api_key_available())
+            except Exception:
+                openrouter_available = False
+        if not openrouter_available:
+            raise ProviderUnavailableApiError("OPENROUTER_API_KEY is required for live OpenRouter survey generation.")
 
-    if not openrouter_available:
-        raise ProviderUnavailableApiError("OPENROUTER_API_KEY is required for live OpenRouter survey generation.")
-
-    generation_mode = "openrouter_live"
-    provider_model_name = experiment.selected_models[0] if len(experiment.selected_models) == 1 else None
+    generation_mode = "jev_live" if uses_jev else "openrouter_live"
+    answer_probabilities = None
+    if uses_jev:
+        provider_model_name = jev_engine.JEV_MODEL_ID
+    else:
+        provider_model_name = experiment.selected_models[0] if len(experiment.selected_models) == 1 else None
     run_id = f"RUN_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
 
     config = schemas.SimulationRunConfig(
@@ -1085,33 +1125,50 @@ def execute_simulation_run(
         raise LegacyModuleApiError(f"Simulation persona generation failed: {exc}") from exc
 
     try:
-        with temporary_env(
-            {
-                "OPENROUTER_API_KEY": settings.openrouter_api_key,
-                "OPENROUTER_BASE_URL": settings.openrouter_base_url,
-            }
-        ):
-            records, generation_debug, record_is_fallback = _generate_live_response_records_with_debug(
+        if uses_jev:
+            # Ruling R16: one monotonic deadline for the whole run, shared by the engine and every HTTP attempt.
+            jev_deadline = time.monotonic() + jev_engine.JEV_RUN_DEADLINE_SECONDS
+            records, generation_debug, record_is_fallback, answer_probabilities = jev_engine.generate_jev_records(
                 schemas=schemas,
-                run_manager=run_manager,
-                llm_client=llm_client,
-                prompt_builder=prompt_builder,
                 config=config,
                 survey_schema=survey_schema,
-                audience_filter=audience,
                 persona_profiles=personas,
                 business_product_context=business_product_context,
                 market_context=market_context,
-                prompt_user_template_override=prompt_user_template_override,
+                transport=jev_engine.http_transport(
+                    settings.typesafe_api_key, settings.typesafe_base_url, timeout=30, deadline=jev_deadline
+                ),
                 max_concurrency=settings.simulation_max_concurrency,
+                deadline=jev_deadline,
             )
-            result = _run_simulation_compat(
-                run_manager,
-                config=config,
-                generation_mode=generation_mode,
-                provider_model_name=provider_model_name,
-                records=records,
-            )
+        else:
+            with temporary_env(
+                {
+                    "OPENROUTER_API_KEY": settings.openrouter_api_key,
+                    "OPENROUTER_BASE_URL": settings.openrouter_base_url,
+                }
+            ):
+                records, generation_debug, record_is_fallback = _generate_live_response_records_with_debug(
+                    schemas=schemas,
+                    run_manager=run_manager,
+                    llm_client=llm_client,
+                    prompt_builder=prompt_builder,
+                    config=config,
+                    survey_schema=survey_schema,
+                    audience_filter=audience,
+                    persona_profiles=personas,
+                    business_product_context=business_product_context,
+                    market_context=market_context,
+                    prompt_user_template_override=prompt_user_template_override,
+                    max_concurrency=settings.simulation_max_concurrency,
+                )
+        result = _run_simulation_compat(
+            run_manager,
+            config=config,
+            generation_mode=generation_mode,
+            provider_model_name=provider_model_name,
+            records=records,
+        )
     except ApiError:
         # Already-classified failures (provider unavailable, validation, auth) carry their own status
         # and message; re-wrapping them as a 500 would hide an actionable cause behind a crash.
@@ -1125,24 +1182,26 @@ def execute_simulation_run(
     request_errors = int(generation_debug.get("request_errors", 0) or 0)
     provider_error_count = int(generation_debug.get("provider_error_count", 0) or 0)
     malformed_json_count = int(generation_debug.get("malformed_json_count", 0) or 0)
-    if provider_error_count > 0:
-        warnings.append(
-            f"OpenRouter returned {provider_error_count} provider-level error(s); temporary deterministic fallback filled the missing answers."
-        )
-    if malformed_json_count > 0:
-        warnings.append(
-            f"OpenRouter returned malformed JSON for {malformed_json_count} respondent request(s); temporary fallback filled the missing answers."
-        )
-    if request_errors > 0 and provider_error_count == 0 and malformed_json_count == 0:
-        warnings.append(
-            "OpenRouter live generation hit provider or parsing errors; temporary deterministic fallback filled the missing answers."
-        )
-    if fallback_count > 0:
-        warnings.append(
-            f"Temporary migration fallback was used for {fallback_count} question(s); {parsed_count} question(s) were parsed from live model output."
-        )
-    if fallback_count > 0 and parsed_count == 0:
-        warnings.append("This run completed with temporary deterministic fallback for every saved answer because no usable live answers were parsed.")
+    if not uses_jev:
+        if provider_error_count > 0:
+            warnings.append(
+                f"OpenRouter returned {provider_error_count} provider-level error(s); temporary deterministic fallback filled the missing answers."
+            )
+        if malformed_json_count > 0:
+            warnings.append(
+                f"OpenRouter returned malformed JSON for {malformed_json_count} respondent request(s); temporary fallback filled the missing answers."
+            )
+        if request_errors > 0 and provider_error_count == 0 and malformed_json_count == 0:
+            warnings.append(
+                "OpenRouter live generation hit provider or parsing errors; temporary deterministic fallback filled the missing answers."
+            )
+        if fallback_count > 0:
+            warnings.append(
+                f"Temporary migration fallback was used for {fallback_count} question(s); {parsed_count} question(s) were parsed from live model output."
+            )
+        if fallback_count > 0 and parsed_count == 0:
+            warnings.append("This run completed with temporary deterministic fallback for every saved answer because no usable live answers were parsed.")
+    warnings.extend(generation_debug.get("jev_warnings", []))
     if persona_generation_mode == "heuristic_fallback":
         warnings.append("Grounded priors unavailable; personas used heuristic fallback.")
     if geography_context and not geography_context.get("puma"):
@@ -1172,7 +1231,13 @@ def execute_simulation_run(
         "answer_records": len(records),
     }
 
-    return {
+    # The legacy run summary words every non-mock mode as "OpenRouter live path"; a Jev run says what it was.
+    notes = (
+        f"Simulation result using the Jev live path (answers drawn from its probabilities) with model={jev_engine.JEV_MODEL_ID}."
+        if uses_jev
+        else result.notes
+    )
+    payload = {
         "run_id": result.run_id,
         "status": result.status,
         "run_counts": run_counts,
@@ -1182,7 +1247,7 @@ def execute_simulation_run(
         "experiment_mode": result.experiment_mode,
         "survey_title": result.survey_title,
         "question_count": result.question_count,
-        "notes": result.notes,
+        "notes": notes,
         "created_at": result.created_at,
         "generation_mode": generation_mode,
         "provider_model_name": provider_model_name,
@@ -1249,6 +1314,9 @@ def execute_simulation_run(
         ],
         "survey_parse_warnings": list(survey_payload.get("parse_warnings", [])),
     }
+    if answer_probabilities is not None:
+        payload["answer_probabilities"] = answer_probabilities
+    return payload
 
 
 def execute_stability_check(
@@ -1274,7 +1342,9 @@ def execute_stability_check(
 
     audience = schemas.AudienceFilter(**audience_payload)
     survey_schema = schemas.SurveySchema(**survey_payload)
-    experiment = schemas.ExperimentPlan(**experiment_payload)
+    experiment = _build_experiment_plan(schemas, experiment_payload)
+    if jev_engine.JEV_MODEL_ID in experiment.selected_models:
+        raise ValidationApiError("Stability checks repeat OpenRouter runs; they are not available for Jev runs.")
     business_product_context = (
         schemas.BusinessProductContext(**product_payload) if product_payload else None
     )
@@ -1563,6 +1633,7 @@ def build_analysis_view(
             "models_used": list(latest_run_payload.get("models_used") or []),
             "requested_responses": latest_run_payload.get("total_requested_responses"),
             "generated_responses": latest_run_payload.get("total_generated_responses"),
+            "generation_mode": latest_run_payload.get("generation_mode"),
         },
         "summary": {
             **summary,
@@ -1754,6 +1825,7 @@ def build_insights_view(
             "models_used": list(latest_run_payload.get("models_used") or []),
             "requested_responses": latest_run_payload.get("total_requested_responses"),
             "generated_responses": latest_run_payload.get("total_generated_responses"),
+            "generation_mode": latest_run_payload.get("generation_mode"),
         },
         "executive_summary": executive_summary,
         "trust_snapshot": trust_snapshot,
@@ -2004,7 +2076,7 @@ def _build_run_debug_summary(
     malformed_json_count = int(generation_debug.get("malformed_json_count", 0) or 0)
 
     return {
-        "primary_live_path": generation_debug.get("generation_mode") == "openrouter_live",
+        "primary_live_path": generation_debug.get("generation_mode") in {"openrouter_live", "jev_live"},
         "total_answers": total_answers,
         "truly_live_answers": live_answers,
         "fallback_answers": fallback_answers,

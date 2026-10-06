@@ -6,7 +6,14 @@
 
 :root {
   color-scheme: dark;
+  /* The menu bar's own height (it also changes at 640px and 1024px below). On the workflow
+     page AppShell overwrites it with the measured compact menu bar below lg (about 210px). */
   --nav-height: 8.25rem;
+  /* The app-wide Demo (no AI) strip, pinned above the menu bar on every page. */
+  --demo-bar-height: 2.5rem;
+  /* Everything pinned at the top of the viewport: the Demo strip plus the menu bar.
+     Use this, not --nav-height, wherever content must clear the top chrome. */
+  --top-chrome: calc(var(--nav-height) + var(--demo-bar-height));
   --font-display: "Manrope";
   --font-body: "Plus Jakarta Sans";
   --color-background: #0a0f13;

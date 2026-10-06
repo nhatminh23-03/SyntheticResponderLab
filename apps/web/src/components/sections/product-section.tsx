@@ -9,7 +9,9 @@ import {
   runProductUrlAutofill,
   saveProduct,
 } from "@/lib/api";
+import { useDemoMode } from "@/lib/demo-mode";
 import { resolveSetupSeedSource } from "@/lib/setup-flow-utils";
+import { DEMO_AI_ACTION_NOTE, demoSwitchOn, isSurveyActionLocked, refuseIfDemoLocked } from "@/lib/survey-demo-lock";
 import { describeProductReset } from "@/lib/product-reset";
 import { cn } from "@/lib/utils";
 import { useStudy } from "@/providers/study-provider";
@@ -148,6 +150,10 @@ export function ProductSection() {
     refreshStudy,
   } = useStudy();
   const { scrollToSection } = useSectionRegistry();
+  const [demoOn] = useDemoMode();
+  // Both enrichments call an AI provider, so the Demo (no AI) switch locks them; saving the form stays open.
+  const urlAutofillLocked = isSurveyActionLocked("product_url_autofill", demoOn);
+  const imageAnalysisLocked = isSurveyActionLocked("product_image_analysis", demoOn);
   const [draft, setDraft] = useState<ProductDraft>(EMPTY_PRODUCT_DRAFT);
   const [savedSnapshot, setSavedSnapshot] = useState<string>("");
   const [isProductReset, setIsProductReset] = useState(false);
@@ -364,6 +370,12 @@ export function ProductSection() {
   }
 
   async function handleRunUrlAutofill() {
+    const refused = refuseIfDemoLocked("product_url_autofill", demoSwitchOn(demoOn));
+    if (refused) {
+      setStatus({ tone: "warning", message: refused });
+      return;
+    }
+
     if (!urlInput.trim()) {
       setStatus({
         tone: "error",
@@ -382,6 +394,13 @@ export function ProductSection() {
       const resolvedStudyId = (await createOrLoadStudy()) ?? studyId;
       if (!resolvedStudyId) {
         throw new Error("No study is available yet.");
+      }
+
+      // The switch can be turned on while the study save is in flight: read it again before the provider is called.
+      const refusedAfterSave = refuseIfDemoLocked("product_url_autofill", demoSwitchOn(demoOn));
+      if (refusedAfterSave) {
+        setStatus({ tone: "warning", message: refusedAfterSave });
+        return;
       }
 
       const result = await runProductUrlAutofill(resolvedStudyId, urlInput.trim());
@@ -491,6 +510,12 @@ export function ProductSection() {
   }
 
   async function handleAnalyzeImage() {
+    const refused = refuseIfDemoLocked("product_image_analysis", demoSwitchOn(demoOn));
+    if (refused) {
+      setStatus({ tone: "warning", message: refused });
+      return;
+    }
+
     if (!uploadedImageFile) {
       setStatus({
         tone: "error",
@@ -510,6 +535,12 @@ export function ProductSection() {
       const resolvedStudyId = (await createOrLoadStudy()) ?? studyId;
       if (!resolvedStudyId) {
         throw new Error("No study is available yet.");
+      }
+
+      const refusedAfterSave = refuseIfDemoLocked("product_image_analysis", demoSwitchOn(demoOn));
+      if (refusedAfterSave) {
+        setStatus({ tone: "warning", message: refusedAfterSave });
+        return;
       }
 
       const result = await runProductImageAnalysis(resolvedStudyId, uploadedImageFile);
@@ -608,10 +639,13 @@ export function ProductSection() {
                     onChange={setUrlInput}
                     placeholder="https://example.com/product"
                   />
-                  <Button onClick={handleRunUrlAutofill} disabled={isRunningUrlAutofill}>
+                  <Button onClick={handleRunUrlAutofill} disabled={isRunningUrlAutofill || urlAutofillLocked}>
                     {isRunningUrlAutofill ? "Generating..." : "Autofill from URL"}
                   </Button>
                 </div>
+                {urlAutofillLocked ? (
+                  <p className="mt-3 text-sm leading-6 text-app-muted">{DEMO_AI_ACTION_NOTE}</p>
+                ) : null}
 
                 {urlAutofillPreview ? (
                   <div className="mt-5 rounded-[1.3rem] border border-app-border [background:var(--status-neutral-bg)] p-4">
@@ -910,11 +944,14 @@ export function ProductSection() {
                             <Button
                               variant="secondary"
                               onClick={handleAnalyzeImage}
-                              disabled={!uploadedImageFile || isAnalyzingImage}
+                              disabled={!uploadedImageFile || isAnalyzingImage || imageAnalysisLocked}
                             >
                               {isAnalyzingImage ? "Analyzing..." : "Analyze Image"}
                             </Button>
                           </div>
+                          {imageAnalysisLocked ? (
+                            <p className="text-sm leading-6 text-app-muted">{DEMO_AI_ACTION_NOTE}</p>
+                          ) : null}
 
                           {imageSignals ? (
                             <div className="space-y-4">

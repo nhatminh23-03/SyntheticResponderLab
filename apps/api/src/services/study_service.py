@@ -12,6 +12,7 @@ import requests
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from src.adapters.legacy_backend.jev_engine import JEV_MODEL_ID, JevUnavailableError
 from src.adapters.legacy_backend.runtime import load_module
 from src.adapters.legacy_backend.domain import (
     build_geography_context,
@@ -62,10 +63,12 @@ from src.services.exceptions import (
     ConflictApiError,
     ForbiddenApiError,
     NotFoundApiError,
+    ProviderUnavailableApiError,
     UnsupportedMediaTypeApiError,
     ValidationApiError,
 )
 from src.services.demo_interview_fixtures import ensure_demo_interview_run
+from src.services.demo_survey_run import NOT_COVERED_MESSAGE, build_demo_run_result
 from src.services.ids import make_public_id
 from src.services.interview_service import save_research_brief
 from src.services.url_security import validate_public_http_url
@@ -89,6 +92,8 @@ INSIGHTS_SUMMARY_MODEL = "openai/gpt-4o-mini"
 INSIGHTS_SUMMARY_TIMEOUT_SECONDS = 30
 INSIGHTS_SUMMARY_MAX_ATTEMPTS = 2
 INSIGHTS_SUMMARY_CACHE_VERSION = "v3"
+# The web's Demo (no AI) switch lives in the browser; it reaches the insights read only as `ai=false`.
+DEMO_SWITCH_NO_AI_SUMMARY = "Demo (no AI) is on: no AI summary was generated. Turn Demo off to get one."
 
 NEO_BOOTSTRAP_PERSONA_PREVIEW_SAMPLE_SIZE = 12
 NEO_BOOTSTRAP_AUDIENCE = {
@@ -631,6 +636,13 @@ DEMO_PRESETS: Dict[str, DemoPreset] = {
 }
 
 
+def _class_default_experiment(experiment: Dict[str, Any], settings: AppSettings) -> Dict[str, Any]:
+    """The Neo class study answers with Jev by default whenever a TypeSafe key is configured."""
+    if settings.typesafe_api_key:
+        return {**experiment, "selected_models": [JEV_MODEL_ID], "experiment_mode": "split"}
+    return experiment
+
+
 def bootstrap_demo_study(
     session: Session,
     settings: AppSettings,
@@ -658,11 +670,14 @@ def bootstrap_demo_study(
         raise ValidationApiError(f"{preset.label} bootstrap market payload is invalid.")
     _save_section(session, study, "market", validated_market)
 
+    experiment = preset.experiment
+    if preset.key == NEO_DEMO_PRESET.key:
+        experiment = _class_default_experiment(experiment, settings)
     _save_section(
         session,
         study,
         "experiment",
-        _prepare_bootstrap_experiment(legacy_available, settings, preset.experiment),
+        _prepare_bootstrap_experiment(legacy_available, settings, experiment),
     )
 
     if preset.survey_filename is None:
@@ -989,6 +1004,107 @@ def accept_generated_survey(
     }
 
 
+STUDENT_QUESTION_PREFIX = "SQ"
+STUDENT_OPTION_MAX_CHARS = 120
+DEFAULT_LIKERT_ANCHORS = [
+    "Not at all interested",
+    "Slightly interested",
+    "Moderately interested",
+    "Very interested",
+    "Extremely interested",
+]
+
+
+def _saved_survey(session: Session, study: Study) -> StudySectionState:
+    section = _get_sections(session, study)["survey"]
+    if section.status != "saved" or not section.value_json:
+        raise ConflictApiError("Save a survey before adding questions.")
+    return section
+
+
+def _persist_survey(
+    session: Session,
+    settings: AppSettings,
+    study: Study,
+    section: StudySectionState,
+    value: Dict[str, Any],
+) -> Dict[str, Any]:
+    validator = load_module("backend.survey.validator", settings.legacy_app_root)
+    try:
+        validated = validator.validate_survey_schema(value).model_dump()
+    except ValueError as exc:
+        raise ValidationApiError(f"Survey is not valid: {exc}") from exc
+    _save_section(session, study, "survey", validated, source_asset=section.source_asset)
+    _recompute_lifecycle_status(session, study)
+    session.commit()
+    session.refresh(study)
+    study_view = serialize_study(session, study)
+    return {
+        "survey": study_view.survey.model_dump(mode="json", by_alias=True),
+        "workflow": study_view.derived.workflow.model_dump(mode="json"),
+    }
+
+
+def add_survey_question(
+    session: Session,
+    settings: AppSettings,
+    study: Study,
+    *,
+    text: str,
+    question_type: str,
+    options: List[str],
+) -> Dict[str, Any]:
+    """Append a student-written 1-5 scale or single-choice question (ids SQ1, SQ2, ...)."""
+    text = " ".join((text or "").split())
+    if len(text) < 5 or len(text) > 300:
+        raise ValidationApiError("Question text must be at least 5 characters (and at most 300).")
+    cleaned = [o.strip() for o in options or []]
+    if question_type == "likert":
+        if not cleaned:
+            cleaned = list(DEFAULT_LIKERT_ANCHORS)
+        if len(cleaned) != 5 or not all(cleaned):
+            raise ValidationApiError("A 1–5 scale needs five labels, one per point.")
+        question = {"text": text, "question_type": "likert", "options": cleaned, "min_value": 1, "max_value": 5, "required": True}
+    elif question_type == "single_choice":
+        if not 2 <= len(cleaned) <= 8 or not all(cleaned) or len(set(cleaned)) != len(cleaned):
+            raise ValidationApiError("A single-choice question needs 2 to 8 different options.")
+        question = {"text": text, "question_type": "single_choice", "options": cleaned, "required": True}
+    else:
+        raise ValidationApiError("Jev answers only questions with listed options: use a 1–5 scale or single choice.")
+    if any(len(option) > STUDENT_OPTION_MAX_CHARS for option in question["options"]):
+        raise ValidationApiError("Each option or label can be at most 120 characters.")
+    section = _saved_survey(session, study)
+    value = dict(section.value_json)
+    existing = [q.get("id", "") for q in value.get("questions", [])]
+    numbers = [
+        int(i[len(STUDENT_QUESTION_PREFIX):])
+        for i in existing
+        if _is_student_question(i) and i.isascii()
+    ]
+    question["id"] = f"{STUDENT_QUESTION_PREFIX}{max(numbers, default=0) + 1}"
+    value["questions"] = list(value.get("questions", [])) + [question]
+    return _persist_survey(session, settings, study, section, value)
+
+
+def remove_survey_question(
+    session: Session,
+    settings: AppSettings,
+    study: Study,
+    *,
+    question_id: str,
+) -> Dict[str, Any]:
+    """Remove a student-added question; the original survey questions can never be removed."""
+    if not _is_student_question(question_id):
+        raise ValidationApiError("Only questions you added (SQ1, SQ2, ...) can be removed.")
+    section = _saved_survey(session, study)
+    value = dict(section.value_json)
+    kept = [q for q in value.get("questions", []) if q.get("id") != question_id]
+    if len(kept) == len(value.get("questions", [])):
+        raise NotFoundApiError(f"Question {question_id} is not in this survey.")
+    value["questions"] = kept
+    return _persist_survey(session, settings, study, section, value)
+
+
 def get_workflow(session: Session, study: Study) -> Dict[str, Any]:
     study_view = serialize_study(session, study)
     return study_view.derived.workflow.model_dump(mode="json")
@@ -1162,12 +1278,33 @@ def get_prompt_preview(
     return {"prompt_preview": prompt_preview.model_dump(mode="json")}
 
 
+JEV_DOWN_WITH_STUDENT_QUESTIONS = ("Jev is temporarily unavailable. Your new question requires a live run. "
+                                   "You can retry or view the preloaded demo of the original survey.")
+NO_KEY_WITH_STUDENT_QUESTIONS = ("No AI key is configured on this server. Your new question requires a live run. "
+                                 "You can view the preloaded demo of the original survey.")
+JEV_DOWN_DEMO_NOT_COVERED = ("Jev is temporarily unavailable, and the preloaded demo does not cover this survey. "
+                             "Please retry in a minute.")
+
+
+def _live_engine_configured(settings: AppSettings) -> bool:
+    return bool(settings.openrouter_api_key or settings.typesafe_api_key)
+
+
+def _is_student_question(question_id: str) -> bool:
+    return question_id.startswith(STUDENT_QUESTION_PREFIX) and question_id[len(STUDENT_QUESTION_PREFIX):].isdigit()
+
+
+def _has_student_questions(survey: Dict[str, Any]) -> bool:
+    return any(_is_student_question(q.get("id", "")) for q in survey.get("questions", []))
+
+
 def start_simulation_run(
     session: Session,
     settings: AppSettings,
     study: Study,
     *,
     prompt_user_template_override: Optional[str] = None,
+    source: str = "live",
 ) -> Dict[str, Any]:
     sections = _get_sections(session, study)
     audience = sections["audience"].value_json
@@ -1183,25 +1320,33 @@ def start_simulation_run(
     if not experiment:
         raise ConflictApiError("Experiment plan must be saved before running the study.")
 
-    assert_no_in_flight_provider_job(session, owner_user_id=study.owner_user_id)
-    if study.owner_user_id:
-        consume_daily_quota(
-            session,
-            settings,
-            owner_user_id=study.owner_user_id,
-            metric_key=METRIC_SIMULATION_RUN,
-        )
+    if source not in {"live", "demo"}:
+        raise ValidationApiError("source must be 'live' or 'demo'.")
+    demo_reason = "requested" if source == "demo" else (None if _live_engine_configured(settings) else "no_key")
+    if demo_reason == "no_key" and _has_student_questions(survey):
+        # Only an explicit source="demo" may serve saved answers when a student's own question is in the survey.
+        raise ProviderUnavailableApiError(NO_KEY_WITH_STUDENT_QUESTIONS, details={"retry": False, "demo_available": True})
 
     normalized_prompt_override = (prompt_user_template_override or "").strip() or None
 
     geography_context = None
     geography_warning = None
-    zip_code = audience.get("zip_code")
-    if zip_code:
-        try:
-            geography_context = build_geography_context(zip_code, settings)
-        except Exception as exc:
-            geography_warning = f"Geography lookup degraded: {exc}"
+    if demo_reason is None:
+        assert_no_in_flight_provider_job(session, owner_user_id=study.owner_user_id)
+        if study.owner_user_id:
+            consume_daily_quota(
+                session,
+                settings,
+                owner_user_id=study.owner_user_id,
+                metric_key=METRIC_SIMULATION_RUN,
+            )
+
+        zip_code = audience.get("zip_code")
+        if zip_code:
+            try:
+                geography_context = build_geography_context(zip_code, settings)
+            except Exception as exc:
+                geography_warning = f"Geography lookup degraded: {exc}"
 
     job = Job(
         public_id=make_public_id("job"),
@@ -1213,6 +1358,7 @@ def start_simulation_run(
             "survey_title": survey.get("survey_title"),
             "experiment": experiment,
             "prompt_user_template_override": normalized_prompt_override,
+            "source": source,
         },
         result_json=None,
         error_json=None,
@@ -1222,20 +1368,49 @@ def start_simulation_run(
     session.add(job)
     session.commit()
     session.refresh(job)
+    job_id = job.id
+    # Ruling R17: end the transaction before the provider call, so this request holds no pooled connection while
+    # the provider runs (a class may start many runs at once). Everything the call needs is in locals; the Job is
+    # loaded again afterwards.
+    session.commit()
 
     try:
-        result = execute_simulation_run(
-            settings=settings,
-            audience_payload=audience,
-            survey_payload=survey,
-            experiment_payload=experiment,
-            product_payload=product,
-            market_payload=market,
-            geography_context=geography_context,
-            prompt_user_template_override=normalized_prompt_override,
-        )
-        if geography_warning:
-            result.setdefault("warnings", []).append(geography_warning)
+        if demo_reason is not None:
+            result = build_demo_run_result(survey_payload=survey, experiment_payload=experiment, reason=demo_reason)
+        else:
+            try:
+                result = execute_simulation_run(
+                    settings=settings,
+                    audience_payload=audience,
+                    survey_payload=survey,
+                    experiment_payload=experiment,
+                    product_payload=product,
+                    market_payload=market,
+                    geography_context=geography_context,
+                    prompt_user_template_override=normalized_prompt_override,
+                )
+            except JevUnavailableError as exc:
+                if _has_student_questions(survey):
+                    # A student's own question cannot be answered from saved demo data: stop, don't substitute.
+                    raise ProviderUnavailableApiError(
+                        JEV_DOWN_WITH_STUDENT_QUESTIONS, details={"retry": True, "demo_available": True}
+                    ) from exc
+                try:
+                    result = build_demo_run_result(
+                        survey_payload=survey, experiment_payload=experiment, reason="jev_unavailable", detail=exc.message
+                    )
+                except ConflictApiError as not_covered:
+                    if not_covered.message != NOT_COVERED_MESSAGE:
+                        raise
+                    # Say that Jev is down, not only that the demo does not fit this survey.
+                    raise ProviderUnavailableApiError(
+                        JEV_DOWN_DEMO_NOT_COVERED, details={"retry": True, "demo_available": False}
+                    ) from exc
+            if geography_warning:
+                result.setdefault("warnings", []).append(geography_warning)
+        job = session.get(Job, job_id)
+        if job is None:
+            raise ConflictApiError("This run was cleared while it was running. Please start it again.")
         job.status = "completed"
         job.result_json = result
         job.error_json = None
@@ -1243,11 +1418,14 @@ def start_simulation_run(
         _touch_study(study)
         session.commit()
     except Exception as exc:
-        job.status = "failed"
-        job.error_json = {"message": str(exc)}
-        job.completed_at = utcnow()
-        _touch_study(study)
-        session.commit()
+        session.rollback()
+        job = session.get(Job, job_id)
+        if job is not None:
+            job.status = "failed"
+            job.error_json = {"message": str(exc)}
+            job.completed_at = utcnow()
+            _touch_study(study)
+            session.commit()
         raise
 
     study_view = serialize_study(session, study)
@@ -1395,7 +1573,10 @@ def get_insights_view(
     session: Session,
     settings: AppSettings,
     study: Study,
+    *,
+    allow_ai: bool = True,
 ) -> Dict[str, Any]:
+    """The insights for the latest run. With allow_ai False no summary is generated; a cached one is still served."""
     latest_run = _latest_job(session, study.id, "simulation_run")
     latest_run_payload = latest_run.result_json if latest_run and latest_run.status == "completed" else None
 
@@ -1412,6 +1593,16 @@ def get_insights_view(
         or getattr(latest_run, "public_id", "")
         or "latest_simulation_run"
     ).strip()
+    if (latest_run_payload or {}).get("generation_mode") == "demo_preloaded":
+        # The preloaded demo says "No AI was called": its insights never reach a provider or a cached AI summary.
+        insights["llm_summary"] = {
+            "available": False,
+            "message": "Preloaded demo: no executive AI summary was generated. No AI was called. Run live to get one.",
+            "model": None,
+            "from_run_id": run_id,
+            "cached": False,
+        }
+        return insights
     evidence_package = insights.get("evidence_package") or {}
     insights["llm_summary"] = _load_or_generate_insights_summary(
         session=session,
@@ -1419,6 +1610,7 @@ def get_insights_view(
         study=study,
         run_id=run_id,
         evidence_package=evidence_package,
+        allow_ai=allow_ai,
     )
     return insights
 
@@ -1556,10 +1748,20 @@ def _load_or_generate_insights_summary(
     study: Study,
     run_id: str,
     evidence_package: Dict[str, Any],
+    allow_ai: bool = True,
 ) -> Dict[str, Any]:
     cached_summary = _get_cached_insights_summary(session, study, run_id)
     if cached_summary is not None:
         return cached_summary
+
+    if not allow_ai:
+        return {
+            "available": False,
+            "message": DEMO_SWITCH_NO_AI_SUMMARY,
+            "model": None,
+            "from_run_id": run_id,
+            "cached": False,
+        }
 
     if not settings.openrouter_api_key:
         return {

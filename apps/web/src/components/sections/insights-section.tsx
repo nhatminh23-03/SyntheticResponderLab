@@ -8,6 +8,9 @@ import { HorizontalBarChart } from "@/components/charts/horizontal-bar-chart";
 import { LadderChart } from "@/components/charts/ladder-chart";
 import { ModelDifferenceChart as InsightsModelDifferenceChart } from "@/components/charts/model-difference-chart";
 import { formatAnswerSourcing } from "@/lib/answer-sourcing";
+import { useDemoMode } from "@/lib/demo-mode";
+import { insightsHeader } from "@/lib/demo-run";
+import { aiReadOptions, demoSwitchOn, isAiSummaryWithheld } from "@/lib/survey-demo-lock";
 import { BadgeChip } from "@/components/ui/badge-chip";
 import { Button } from "@/components/ui/button";
 import { GlassPanel } from "@/components/ui/glass-panel";
@@ -31,6 +34,7 @@ import { useStudy } from "@/providers/study-provider";
 export function InsightsSection() {
   const { studyId, study } = useStudy();
   const { scrollToSection } = useSectionRegistry();
+  const [demoOn] = useDemoMode();
   const [insights, setInsights] = useState<InsightsPayload | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -56,7 +60,8 @@ export function InsightsSection() {
       }
 
       try {
-        const result = await getInsights(studyId);
+        // The read can generate an AI summary; with the Demo (no AI) switch on it asks for a cached one only.
+        const result = await getInsights(studyId, aiReadOptions(demoSwitchOn(demoOn)));
         if (cancelled) {
           return;
         }
@@ -83,7 +88,7 @@ export function InsightsSection() {
     return () => {
       cancelled = true;
     };
-  }, [studyId, study?.updated_at]);
+  }, [studyId, study?.updated_at, demoOn]);
 
   const summary = insights?.executive_summary;
   const charts = insights?.charts;
@@ -116,6 +121,10 @@ export function InsightsSection() {
     [insights]
   );
   const llmSummary = insights?.llm_summary;
+  // With the Demo (no AI) switch on and no cached summary, nothing here was summarized by the LLM.
+  const header = insightsHeader(insights?.run?.generation_mode, {
+    aiSummaryWithheld: isAiSummaryWithheld(demoOn, llmSummary?.available),
+  });
   const evidenceCount = insights?.evidence_package?.items?.length ?? 0;
 
   return (
@@ -126,8 +135,8 @@ export function InsightsSection() {
             <SectionHeader
               index={9}
               eyebrow="Insights"
-              title="LLM-Summarized Insights"
-              description="These insights are summarized by the LLM from the synthetic survey responses and include a reliability confidence read, while the detailed view below shows the supporting signals, segments, and confidence context."
+              title={header.title}
+              description={header.description}
             />
           </RevealOnScroll>
 

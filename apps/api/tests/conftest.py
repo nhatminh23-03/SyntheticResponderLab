@@ -76,6 +76,16 @@ def app(monkeypatch: pytest.MonkeyPatch, test_settings: AppSettings):
 
 
 @pytest.fixture
+def live_engine_configured(monkeypatch: pytest.MonkeyPatch):
+    """Route run requests to the (monkeypatched) live engine even though the test settings carry no AI key.
+
+    Without a key, ``start_simulation_run`` serves the preloaded demo; tests that expect
+    ``execute_simulation_run`` to be called opt in with this fixture.
+    """
+    monkeypatch.setattr("src.services.study_service._live_engine_configured", lambda settings: True)
+
+
+@pytest.fixture
 def client(app):
     with TestClient(app) as test_client:
         yield test_client

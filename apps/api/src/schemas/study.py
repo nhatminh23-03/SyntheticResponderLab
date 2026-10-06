@@ -148,6 +148,12 @@ class SurveyGenerationAcceptRequest(BaseModel):
     survey_schema: Dict[str, Any]
 
 
+class SurveyQuestionAddRequest(BaseModel):
+    text: str
+    question_type: str
+    options: List[str] = Field(default_factory=list)
+
+
 class PersonaPreviewRequest(BaseModel):
     sample_size: int = 12
     use_grounded_priors: bool = True
@@ -162,6 +168,7 @@ class StabilityCheckRequest(BaseModel):
 
 class SimulationRunRequest(BaseModel):
     prompt_user_template: Optional[str] = None
+    source: Literal["live", "demo"] = "live"
 
 
 class InterviewChatMessage(BaseModel):

@@ -247,7 +247,7 @@ def test_product_image_analysis_counts_against_daily_upload_limit(client, monkey
     assert upload_rows[0].count == 1
 
 
-def test_simulation_run_counts_against_daily_provider_limit(client, monkeypatch):
+def test_simulation_run_counts_against_daily_provider_limit(client, monkeypatch, live_engine_configured):
     study_id = _create_ready_to_run_study(client)
     client.app.state.settings.daily_provider_run_limit = 1
 
@@ -332,7 +332,7 @@ def test_interview_run_counts_against_daily_provider_limit(client, monkeypatch):
     assert second.json()["error"]["code"] == "quota_exceeded"
 
 
-def test_in_flight_provider_job_blocks_second_start(client):
+def test_in_flight_provider_job_blocks_second_start(client, live_engine_configured):
     study_id = _create_ready_to_run_study(client)
     session = client.app.state.session_factory()
     try:
@@ -360,7 +360,7 @@ def test_in_flight_provider_job_blocks_second_start(client):
     assert "run in progress" in payload["message"]
 
 
-def test_completed_or_failed_jobs_do_not_block_future_provider_runs(client, monkeypatch):
+def test_completed_or_failed_jobs_do_not_block_future_provider_runs(client, monkeypatch, live_engine_configured):
     study_id = _create_ready_to_run_study(client)
     session = client.app.state.session_factory()
     try:

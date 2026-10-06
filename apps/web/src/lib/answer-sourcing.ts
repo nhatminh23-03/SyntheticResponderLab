@@ -18,12 +18,18 @@ export type FormattedAnswerSourcing = {
   totalAnswers: number;
   ratePercent: number | null;
   summary: string;
+  /** True for the preloaded demo, whose answers were saved from an earlier run and never came from a live model. */
+  isDemo: boolean;
 };
 
-export function formatAnswerSourcing(payload: AnswerSourcingPayload): FormattedAnswerSourcing {
+export function formatAnswerSourcing(
+  payload: AnswerSourcingPayload,
+  options: { demo?: boolean } = {}
+): FormattedAnswerSourcing {
   if (!payload) {
     return {
       shown: false,
+      isDemo: false,
       liveAnswers: 0,
       excluded: 0,
       totalAnswers: 0,
@@ -35,6 +41,20 @@ export function formatAnswerSourcing(payload: AnswerSourcingPayload): FormattedA
   const liveAnswers = payload.live_answers_used ?? 0;
   const excluded = payload.fallback_answers_excluded ?? 0;
   const totalAnswers = payload.total_answers ?? liveAnswers + excluded;
+
+  if (options.demo) {
+    // The API counts every saved demo answer as "live" because none is flagged as filler. Saying so
+    // would present answers saved on 2026-10-03 as a live model's, so the demo gets its own wording.
+    return {
+      shown: true,
+      isDemo: true,
+      liveAnswers: 0,
+      excluded,
+      totalAnswers,
+      ratePercent: null,
+      summary: `Preloaded demo answers: ${totalAnswers} answers saved from an earlier synthetic run. No AI was called.`,
+    };
+  }
   const rate = payload.live_answer_rate;
   const ratePercent = typeof rate === "number" ? Math.round(rate * 1000) / 10 : null;
 
@@ -53,5 +73,5 @@ export function formatAnswerSourcing(payload: AnswerSourcingPayload): FormattedA
     } excluded — they remain in the saved records, flagged.`;
   }
 
-  return { shown: true, liveAnswers, excluded, totalAnswers, ratePercent, summary };
+  return { shown: true, isDemo: false, liveAnswers, excluded, totalAnswers, ratePercent, summary };
 }

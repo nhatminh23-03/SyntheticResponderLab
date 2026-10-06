@@ -28,6 +28,8 @@ type BaseInputProps = {
   onChange: (value: string) => void;
   placeholder?: string;
   inputMode?: React.HTMLAttributes<HTMLInputElement>["inputMode"];
+  /** For inputs that have no visible label of their own. */
+  ariaLabel?: string;
 };
 
 export function TextInput({
@@ -35,6 +37,7 @@ export function TextInput({
   onChange,
   placeholder,
   inputMode,
+  ariaLabel,
 }: BaseInputProps) {
   return (
     <input
@@ -42,6 +45,7 @@ export function TextInput({
       value={value}
       onChange={(event) => onChange(event.target.value)}
       placeholder={placeholder}
+      aria-label={ariaLabel}
       inputMode={inputMode}
       className="w-full rounded-2xl border px-4 py-3 text-sm text-app-text outline-none transition placeholder:text-app-muted/50 [background:var(--control-bg)] [border-color:var(--control-border)] focus:[border-color:var(--color-border-strong)] focus:[background:var(--control-bg-hover)] focus:[box-shadow:var(--focus-ring-shadow)]"
     />

@@ -40,7 +40,7 @@ export function MainHeroSection() {
       className="overflow-hidden"
       contentClassName="relative lg:justify-center"
     >
-      <div className="grid gap-8 lg:min-h-[min(calc(100svh-var(--nav-height)-2rem),46rem)] lg:items-center xl:grid-cols-[minmax(0,0.98fr)_minmax(24rem,0.92fr)] xl:gap-10">
+      <div className="grid gap-8 lg:min-h-[min(calc(100svh-var(--top-chrome)-2rem),46rem)] lg:items-center xl:grid-cols-[minmax(0,0.98fr)_minmax(24rem,0.92fr)] xl:gap-10">
         <RevealOnScroll className="relative z-10 min-w-0 max-w-2xl">
           <div className="min-w-0 max-w-[42rem]">
             <h1 className="text-balance font-display text-[2.7rem] font-medium leading-[0.94] tracking-[-0.065em] text-app-text sm:text-[3.35rem] md:text-[4rem] xl:text-[5rem]">

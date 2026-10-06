@@ -133,3 +133,19 @@ def test_non_health_endpoints_require_deployment_secret_when_configured(monkeypa
             },
         )
         assert allowed_response.status_code == 200
+
+
+def test_health_reports_providers_and_demo(client):
+    body = client.get("/api/v1/health").json()["data"]
+    assert body["providers"] == {"jev": False, "openrouter": False}
+    assert body["demo_available"] is True
+    assert body["checks"]["jev"]["status"] == "warn"
+
+
+def test_health_reports_jev_when_key_set(test_settings):
+    settings = test_settings.model_copy(update={"typesafe_api_key": "test-key"})
+    session_factory = create_session_factory(settings)
+    Base.metadata.create_all(bind=session_factory.kw["bind"])
+    payload = build_health_payload(settings, session_factory)
+    assert payload.providers == {"jev": True, "openrouter": False}
+    assert "test-key" not in payload.model_dump_json()

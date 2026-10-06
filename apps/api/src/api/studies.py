@@ -28,10 +28,12 @@ from src.schemas.study import (
     StudyModeUpdateRequest,
     SurveyGenerationAcceptRequest,
     SurveyGenerationRequest,
+    SurveyQuestionAddRequest,
 )
 from src.services.study_service import (
     DEMO_PRESETS,
     accept_generated_survey,
+    add_survey_question,
     bootstrap_demo_study,
     bootstrap_neo_demo_study,
     clear_latest_simulation_runs,
@@ -50,6 +52,7 @@ from src.services.study_service import (
     handle_product_image_analysis,
     handle_product_url_autofill,
     handle_survey_upload,
+    remove_survey_question,
     save_audience_section,
     save_experiment_section,
     save_market_section,
@@ -415,6 +418,41 @@ def accept_generated_survey_endpoint(
     return response_envelope(request, result)
 
 
+@router.post("/api/v1/studies/{study_id}/survey/questions")
+def add_survey_question_endpoint(
+    study_id: str,
+    payload: SurveyQuestionAddRequest,
+    request: Request,
+    db: Session = Depends(get_db_session),
+    settings: AppSettings = Depends(get_settings),
+    current_user: AuthUser = Depends(get_current_user),
+):
+    study = get_owned_study_or_404(db, study_id, current_user)
+    result = add_survey_question(
+        db,
+        settings,
+        study,
+        text=payload.text,
+        question_type=payload.question_type,
+        options=payload.options,
+    )
+    return response_envelope(request, result)
+
+
+@router.delete("/api/v1/studies/{study_id}/survey/questions/{question_id}")
+def remove_survey_question_endpoint(
+    study_id: str,
+    question_id: str,
+    request: Request,
+    db: Session = Depends(get_db_session),
+    settings: AppSettings = Depends(get_settings),
+    current_user: AuthUser = Depends(get_current_user),
+):
+    study = get_owned_study_or_404(db, study_id, current_user)
+    result = remove_survey_question(db, settings, study, question_id=question_id)
+    return response_envelope(request, result)
+
+
 @router.patch("/api/v1/studies/{study_id}/experiment")
 def patch_experiment_endpoint(
     study_id: str,
@@ -483,6 +521,8 @@ def analysis_endpoint(
 def insights_endpoint(
     study_id: str,
     request: Request,
+    # ai=false (sent by the web's Demo (no AI) switch): serve a cached summary, never generate one.
+    ai: bool = Query(default=True),
     db: Session = Depends(get_db_session),
     settings: AppSettings = Depends(get_settings),
     current_user: AuthUser = Depends(get_current_user),
@@ -495,6 +535,7 @@ def insights_endpoint(
                 db,
                 settings,
                 study,
+                allow_ai=ai,
             )
         },
     )
@@ -557,6 +598,7 @@ def start_simulation_run_endpoint(
         settings,
         study,
         prompt_user_template_override=(payload.prompt_user_template if payload else None),
+        source=(payload.source if payload else "live"),
     )
     return response_envelope(request, result)
 
@@ -702,12 +744,14 @@ def patch_research_brief_endpoint(
 def interview_insights_endpoint(
     study_id: str,
     request: Request,
+    # ai=false (sent by the web's Demo (no AI) switch): serve cached themes, never extract new ones.
+    ai: bool = Query(default=True),
     db: Session = Depends(get_db_session),
     settings: AppSettings = Depends(get_settings),
     current_user: AuthUser = Depends(get_current_user),
 ):
     study = get_owned_study_or_404(db, study_id, current_user)
-    result = get_interview_insights(db, settings, study)
+    result = get_interview_insights(db, settings, study, allow_ai=ai)
     return response_envelope(request, {"interview_insights": result})
 
 

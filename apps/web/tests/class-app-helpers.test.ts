@@ -1,0 +1,188 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+
+import { JEV_MODEL_ID, normalizeSelectedModels, selectedModelsProblem, toggleModel } from "../src/lib/experiment-models";
+import { DEFAULT_LIKERT_ANCHORS, isStudentQuestion, toAddQuestionPayload, validateAddedQuestion } from "../src/lib/survey-question-form";
+import { demoBannerLines, describeDemoRun, insightsHeader, isDemoGenerationMode, runErrorNote } from "../src/lib/demo-run";
+import {
+  DEMO_NEEDS_UPDATED_API,
+  READINESS_RECHECK_INTERVAL_MS,
+  READINESS_RECHECK_WINDOW_MS,
+  STUDY_MODELS_NEED_A_KEY,
+  WAKING_SERVER_HINT,
+  demoRunControl,
+  liveEngineAvailable,
+  liveRunControl,
+  shouldRecheckReadiness,
+  toBackendReadinessPayload,
+} from "../src/lib/backend-readiness";
+
+test("Jev and other models are mutually exclusive", () => {
+  assert.deepEqual(toggleModel(["openai/gpt-4o-mini"], JEV_MODEL_ID), [JEV_MODEL_ID]);
+  assert.deepEqual(toggleModel([JEV_MODEL_ID], "openai/gpt-4o-mini"), ["openai/gpt-4o-mini"]);
+  assert.deepEqual(toggleModel([JEV_MODEL_ID], JEV_MODEL_ID), []);
+});
+
+test("Jev alone survives normalization; otherwise two models are required", () => {
+  assert.deepEqual(normalizeSelectedModels([JEV_MODEL_ID], ["a", "b"], true), [JEV_MODEL_ID]);
+  assert.deepEqual(normalizeSelectedModels([], ["a", "b"], true), [JEV_MODEL_ID]);
+  assert.deepEqual(normalizeSelectedModels([], ["a", "b"], false), ["a", "b"]);
+  assert.deepEqual(normalizeSelectedModels(["x", JEV_MODEL_ID, "y"], ["a", "b"], true), ["x", "y"]);
+});
+
+test("added-question validation matches the API rules", () => {
+  assert.equal(validateAddedQuestion({ text: "Rate the solar roof", questionType: "likert", options: [...DEFAULT_LIKERT_ANCHORS] }), null);
+  assert.match(validateAddedQuestion({ text: "Hi", questionType: "likert", options: [...DEFAULT_LIKERT_ANCHORS] }) ?? "", /5 characters/);
+  assert.match(validateAddedQuestion({ text: "Pick a colour", questionType: "single_choice", options: ["Oak"] }) ?? "", /2 to 8/);
+  assert.deepEqual(toAddQuestionPayload({ text: " Pick  a colour ", questionType: "single_choice", options: [" Oak", "Slate ", ""] }),
+    { text: "Pick a colour", question_type: "single_choice", options: ["Oak", "Slate"] });
+  assert.equal(isStudentQuestion("SQ3"), true);
+  assert.equal(isStudentQuestion("Q1"), false);
+});
+
+test("demo runs are described, live runs are not", () => {
+  assert.equal(describeDemoRun({ generation_mode: "jev_live", warnings: [] }), null);
+  const demo = describeDemoRun({ generation_mode: "demo_preloaded", warnings: ["Preloaded demo: ...", "No AI key is configured ..."], demo: { reason: "no_key" } });
+  assert.equal(demo?.reason, "no_key");
+  assert.match(demo?.message ?? "", /No AI key/);
+});
+
+test("readiness passes providers through", () => {
+  const ready = toBackendReadinessPayload(200, { data: { status: "degraded", providers: { jev: true, openrouter: false } } });
+  assert.deepEqual(ready.providers, { jev: true, openrouter: false });
+  assert.equal(liveEngineAvailable(ready), true);
+  assert.equal(liveEngineAvailable(toBackendReadinessPayload(200, { data: { status: "ok" } })), false);
+});
+
+test("Jev is not kept when the server has no Jev key", () => {
+  assert.deepEqual(normalizeSelectedModels([JEV_MODEL_ID], ["a", "b"], false), ["a", "b"]);
+  assert.deepEqual(normalizeSelectedModels([JEV_MODEL_ID], ["a", "b"], true), [JEV_MODEL_ID]);
+});
+
+test("a lone Jev passes the client model rule in split and mirror, but not stability", () => {
+  assert.equal(selectedModelsProblem([JEV_MODEL_ID], "split"), null);
+  assert.equal(selectedModelsProblem([JEV_MODEL_ID], "mirror"), null);
+  assert.match(selectedModelsProblem([JEV_MODEL_ID], "stability") ?? "", /split or mirror/);
+  assert.equal(selectedModelsProblem(["a"], "split"), "Select at least 2 models.");
+  assert.equal(selectedModelsProblem([], "mirror"), "Select at least 2 models.");
+  assert.equal(selectedModelsProblem(["a", "b"], "split"), null);
+});
+
+test("the demo banner lists the message and every remaining warning on its own line", () => {
+  const lines = demoBannerLines({
+    generation_mode: "demo_preloaded",
+    warnings: ["Preloaded demo: x.", "You chose the preloaded demo.", "Detail: boom", "Run live to answer these: SQ1"],
+    demo: { reason: "requested" },
+  });
+  assert.deepEqual(lines, ["Preloaded demo: x. You chose the preloaded demo.", "Detail: boom", "Run live to answer these: SQ1"]);
+  assert.deepEqual(demoBannerLines({ generation_mode: "jev_live", warnings: ["a", "b", "c"] }), []);
+  assert.deepEqual(demoBannerLines(null), []);
+});
+
+test("only a message that needs a live run gets the added-questions note", () => {
+  assert.equal(
+    runErrorNote("Jev is temporarily unavailable. Your new question requires a live run. You can view the preloaded demo of the original survey."),
+    "Your added questions are not in the preloaded demo."
+  );
+  assert.equal(runErrorNote("Jev answered only 70 of 100 respondents."), null);
+  assert.equal(runErrorNote("The preloaded demo covers the Tahoe Mini survey; use a live run for this survey."), null);
+});
+
+test("a run is a preloaded demo only when its generation_mode says so", () => {
+  assert.equal(isDemoGenerationMode("demo_preloaded"), true);
+  for (const mode of ["jev_live", "openrouter_live", "mock", "", null, undefined]) {
+    assert.equal(isDemoGenerationMode(mode), false);
+  }
+});
+
+test("an option or label longer than 120 characters is refused, like the API", () => {
+  const message = "Each option or label can be at most 120 characters.";
+  assert.equal(validateAddedQuestion({ text: "Pick a colour", questionType: "single_choice", options: ["Oak", "x".repeat(121)] }), message);
+  assert.equal(
+    validateAddedQuestion({ text: "Rate the roof", questionType: "likert", options: ["a", "b", "y".repeat(121), "d", "e"] }),
+    message
+  );
+  // Counted after trimming, as the API does.
+  assert.equal(validateAddedQuestion({ text: "Pick a colour", questionType: "single_choice", options: ["  " + "z".repeat(120) + "  ", "Oak"] }), null);
+});
+
+const READY = (providers?: { jev: boolean; openrouter: boolean }) =>
+  toBackendReadinessPayload(200, { data: { status: "ok", ...(providers ? { providers } : {}) } });
+
+test("Run live says (Jev) only when the study is saved to run on Jev alone", () => {
+  const both = READY({ jev: true, openrouter: true });
+  assert.equal(liveRunControl([JEV_MODEL_ID], both).label, "Run live (Jev)");
+  assert.equal(liveRunControl(["openai/gpt-4o-mini", "anthropic/claude-sonnet-4.5"], both).label, "Run live");
+  assert.equal(liveRunControl([JEV_MODEL_ID, "openai/gpt-4o-mini"], both).label, "Run live");
+  assert.equal(liveRunControl(undefined, both).label, "Run live");
+});
+
+test("Run live is enabled only when the server has the key the study's plan needs", () => {
+  assert.deepEqual(liveRunControl([JEV_MODEL_ID], READY({ jev: true, openrouter: false })), { label: "Run live (Jev)", enabled: true, hint: null });
+  assert.deepEqual(liveRunControl(["a", "b"], READY({ jev: false, openrouter: true })), { label: "Run live", enabled: true, hint: null });
+  for (const [models, providers] of [
+    [[JEV_MODEL_ID], { jev: false, openrouter: true }],
+    [["a", "b"], { jev: true, openrouter: false }],
+  ] as const) {
+    const control = liveRunControl([...models], READY(providers));
+    assert.equal(control.enabled, false);
+    assert.equal(control.hint, STUDY_MODELS_NEED_A_KEY);
+  }
+  assert.equal(
+    STUDY_MODELS_NEED_A_KEY,
+    "This study's models need a key this server does not have — use the preloaded demo or switch models in the Experiment step."
+  );
+  assert.deepEqual(liveRunControl(["a", "b"], READY({ jev: false, openrouter: false })), {
+    label: "Run live", enabled: false, hint: "No AI key on this server — use the preloaded demo.",
+  });
+});
+
+test("Run live stays off while the backend is unknown, not ready, or too old to report its engines", () => {
+  assert.equal(liveRunControl([JEV_MODEL_ID], null).enabled, false);
+  assert.match(liveRunControl([JEV_MODEL_ID], null).hint ?? "", /Could not check/);
+  const waking = toBackendReadinessPayload(503, null);
+  assert.equal(liveRunControl([JEV_MODEL_ID], waking).enabled, false);
+  assert.match(liveRunControl([JEV_MODEL_ID], waking).hint ?? "", /not ready yet/);
+  const failedButNew = toBackendReadinessPayload(200, { data: { status: "failed", providers: { jev: true, openrouter: true } } });
+  assert.equal(liveRunControl([JEV_MODEL_ID], failedButNew).enabled, false);
+  assert.equal(liveRunControl(["a", "b"], READY()).enabled, false);
+});
+
+test("the demo button needs an API that reports its engines (new enough to honour source)", () => {
+  assert.deepEqual(demoRunControl(READY({ jev: false, openrouter: false })), { enabled: true, hint: null });
+  assert.deepEqual(demoRunControl(READY({ jev: true, openrouter: true })), { enabled: true, hint: null });
+  assert.deepEqual(demoRunControl(READY()), { enabled: false, hint: "Demo needs the updated API." });
+  assert.equal(DEMO_NEEDS_UPDATED_API, "Demo needs the updated API.");
+  // Not ready yet, but the (new) API reported its engines: the demo still works.
+  assert.equal(demoRunControl(toBackendReadinessPayload(200, { data: { status: "failed", providers: { jev: false, openrouter: false } } })).enabled, true);
+  // Unknown or waking: off, and the Run live hint explains why.
+  assert.equal(demoRunControl(null).enabled, false);
+  assert.equal(demoRunControl(toBackendReadinessPayload(503, null)).enabled, false);
+});
+
+test("the Insights header never says the LLM summarized a preloaded demo", () => {
+  const demo = insightsHeader("demo_preloaded");
+  assert.equal(demo.description, "Rule-based insights from the preloaded demo answers (no AI).");
+  assert.doesNotMatch(`${demo.title} ${demo.description}`, /LLM/);
+  for (const mode of ["jev_live", "openrouter_live", null, undefined]) {
+    assert.match(insightsHeader(mode).description, /summarized by the LLM/);
+  }
+});
+
+test("the run step re-checks readiness every 5 s for up to 2 minutes while the server wakes up", () => {
+  assert.equal(READINESS_RECHECK_INTERVAL_MS, 5000);
+  assert.equal(READINESS_RECHECK_WINDOW_MS, 120000);
+  assert.equal(WAKING_SERVER_HINT, "Waking the server — buttons turn on in a moment.");
+  const waking = toBackendReadinessPayload(503, null);
+  const failedButNew = toBackendReadinessPayload(200, { data: { status: "failed", providers: { jev: true, openrouter: true } } });
+  // Missing, not ready, or no providers: check again while the window is open...
+  for (const readiness of [null, undefined, waking, failedButNew, READY()]) {
+    assert.equal(shouldRecheckReadiness(readiness, 0), true);
+    assert.equal(shouldRecheckReadiness(readiness, 119_999), true);
+    // ...and stop after 2 minutes, so the page does not poll forever.
+    assert.equal(shouldRecheckReadiness(readiness, 120_000), false);
+  }
+  // Ready with providers: stop, even when this server has no AI key (the demo works, Run live explains itself).
+  assert.equal(shouldRecheckReadiness(READY({ jev: true, openrouter: false }), 0), false);
+  assert.equal(shouldRecheckReadiness(READY({ jev: false, openrouter: false }), 0), false);
+});

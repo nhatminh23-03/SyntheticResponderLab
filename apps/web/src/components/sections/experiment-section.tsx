@@ -10,6 +10,13 @@ import {
   saveExperiment,
   WorkflowReadiness,
 } from "@/lib/api";
+import {
+  JEV_MODEL_ID,
+  JEV_MODEL_LABEL,
+  normalizeSelectedModels,
+  selectedModelsProblem,
+  toggleModel,
+} from "@/lib/experiment-models";
 import { cn } from "@/lib/utils";
 import { useStudy } from "@/providers/study-provider";
 import { useSectionRegistry } from "@/providers/section-registry-provider";
@@ -37,7 +44,10 @@ type ExperimentStatusState = {
   message: string;
 };
 
+// The allowed model ids. Jev is allowed here but is only offered once the model catalog lists it: the API
+// lists it only when the server has a TypeSafe key, so without one it is never selectable.
 const DEFAULT_MODEL_OPTIONS: ModelCatalogEntry[] = [
+  { id: JEV_MODEL_ID, name: JEV_MODEL_LABEL },
   { id: "openai/gpt-4o-mini", name: "openai/gpt-4o-mini" },
   { id: "anthropic/claude-sonnet-4.5", name: "anthropic/claude-sonnet-4.5" },
   { id: "google/gemini-2.5-flash", name: "google/gemini-2.5-flash" },
@@ -45,6 +55,11 @@ const DEFAULT_MODEL_OPTIONS: ModelCatalogEntry[] = [
   { id: "google/gemini-2.5-pro", name: "google/gemini-2.5-pro" },
   { id: "openai/gpt-5", name: "openai/gpt-5" },
 ];
+
+// What is offered before the catalog loads, or when it cannot be loaded: no Jev.
+const FALLBACK_MODEL_OPTIONS: ModelCatalogEntry[] = DEFAULT_MODEL_OPTIONS.filter(
+  (model) => model.id !== JEV_MODEL_ID
+);
 
 const DEFAULT_SELECTED_MODEL_IDS = [
   "openai/gpt-4o-mini",
@@ -108,7 +123,7 @@ export function ExperimentSection() {
   const [modelSearch, setModelSearch] = useState("");
   const [isAddModelControlsOpen, setIsAddModelControlsOpen] = useState(false);
   const [isModelPickerOpen, setIsModelPickerOpen] = useState(false);
-  const [catalogModels, setCatalogModels] = useState<ModelCatalogEntry[]>(DEFAULT_MODEL_OPTIONS);
+  const [catalogModels, setCatalogModels] = useState<ModelCatalogEntry[]>(FALLBACK_MODEL_OPTIONS);
   const [catalogSource, setCatalogSource] = useState<"openrouter" | "fallback">("fallback");
   const [catalogWarning, setCatalogWarning] = useState<string | null>(null);
   const [isLoadingCatalog, setIsLoadingCatalog] = useState(false);
@@ -116,6 +131,7 @@ export function ExperimentSection() {
   const [isGeneratingPreview, setIsGeneratingPreview] = useState(false);
   const [isRerunsInfoOpen, setIsRerunsInfoOpen] = useState(false);
   const latestPreview = study?.derived?.latest_persona_preview ?? null;
+  const jevAvailable = catalogModels.some((model) => model.id === JEV_MODEL_ID);
 
   const loadModelCatalog = useCallback(async () => {
     setIsLoadingCatalog(true);
@@ -125,7 +141,7 @@ export function ExperimentSection() {
       setCatalogSource(result.source);
       setCatalogWarning(result.warning);
     } catch (error) {
-      setCatalogModels(DEFAULT_MODEL_OPTIONS);
+      setCatalogModels(FALLBACK_MODEL_OPTIONS);
       setCatalogSource("fallback");
       setCatalogWarning(
         error instanceof Error
@@ -165,7 +181,7 @@ export function ExperimentSection() {
 
       const hasSaved = study.experiment?.status === "saved" && !!study.experiment?.value;
       const nextDraft = hasSaved
-        ? experimentPayloadToDraft(study.experiment?.value)
+        ? experimentPayloadToDraft(study.experiment?.value, jevAvailable)
         : DEFAULT_DRAFT;
       const latestPreview = study.derived?.latest_persona_preview ?? null;
 
@@ -194,11 +210,13 @@ export function ExperimentSection() {
     return () => {
       cancelled = true;
     };
+    // jevAvailable: a saved Jev plan can only be read back once the catalog has said Jev is offered.
   }, [
     studyId,
     study?.experiment?.updated_at,
     study?.experiment?.status,
     study?.derived?.latest_persona_preview?.completed_at,
+    jevAvailable,
   ]);
 
   const draftPayload = useMemo(() => experimentDraftToPayload(draft), [draft]);
@@ -213,7 +231,7 @@ export function ExperimentSection() {
     Math.max(draft.sample_size, 1),
     PERSONA_PREVIEW_SAMPLE_CAP
   );
-  const availableModels = catalogModels.length > 0 ? catalogModels : DEFAULT_MODEL_OPTIONS;
+  const availableModels = catalogModels.length > 0 ? catalogModels : FALLBACK_MODEL_OPTIONS;
   const showExperimentSidebar =
     SHOW_EXPERIMENT_SUMMARY_CARD || SHOW_LATEST_PERSONA_PREVIEW_CARD;
   const rerunsCap = useMemo(
@@ -299,21 +317,20 @@ export function ExperimentSection() {
     if (
       !nextModel ||
       draft.selected_models.includes(nextModel) ||
-      !DEFAULT_MODEL_OPTIONS.some((entry) => entry.id === nextModel)
+      !DEFAULT_MODEL_OPTIONS.some((entry) => entry.id === nextModel) ||
+      (nextModel === JEV_MODEL_ID && !jevAvailable)
     ) {
       return;
     }
 
-    updateDraft("selected_models", [...draft.selected_models, nextModel]);
+    // Jev runs on its own: choosing it replaces the others, and choosing another model replaces Jev.
+    updateDraft("selected_models", toggleModel(draft.selected_models, nextModel));
     setModelSearch("");
     setIsModelPickerOpen(false);
   }
 
   function handleRemoveModel(model: string) {
-    updateDraft(
-      "selected_models",
-      draft.selected_models.filter((entry) => entry !== model)
-    );
+    updateDraft("selected_models", toggleModel(draft.selected_models, model));
   }
 
   function handleSampleSizeStep(delta: number) {
@@ -506,9 +523,12 @@ export function ExperimentSection() {
                                 key={model}
                                 type="button"
                                 onClick={() => handleRemoveModel(model)}
-                                className="inline-flex w-full items-center justify-between gap-2 rounded-full border border-app-cyan/20 bg-[rgba(15,216,255,0.08)] px-4 py-3 text-sm text-app-cyan transition hover:border-app-cyan/35"
+                                className={cn(
+                                  "inline-flex w-full items-center justify-between gap-2 rounded-full border border-app-cyan/20 bg-[rgba(15,216,255,0.08)] px-4 py-3 text-sm text-app-cyan transition hover:border-app-cyan/35",
+                                  model === JEV_MODEL_ID && "xl:col-span-3"
+                                )}
                               >
-                                <span>{model}</span>
+                                <span>{model === JEV_MODEL_ID ? JEV_MODEL_LABEL : model}</span>
                                 <span className="text-app-text/70">×</span>
                               </button>
                             ))
@@ -530,6 +550,12 @@ export function ExperimentSection() {
                             Add Model
                           </Button>
                         </div>
+
+                        {draft.selected_models.includes(JEV_MODEL_ID) ? (
+                          <p className="mt-3 text-sm leading-6 text-app-muted">
+                            Jev runs on its own
+                          </p>
+                        ) : null}
 
                         {isAddModelControlsOpen ? (
                           <div
@@ -606,7 +632,7 @@ export function ExperimentSection() {
                                           onClick={() => handleAddModel(model.id)}
                                           className="rounded-full border border-white/8 bg-white/[0.03] px-3 py-2 text-sm text-app-muted transition hover:border-app-cyan/25 hover:text-app-text"
                                         >
-                                          {model.id}
+                                          {model.id === JEV_MODEL_ID ? JEV_MODEL_LABEL : model.id}
                                         </button>
                                       ))
                                     ) : (
@@ -904,14 +930,19 @@ function dedupeModels(models: ModelCatalogEntry[]) {
 function resolveAllowedModelOptions(models: ModelCatalogEntry[]) {
   const dedupedModels = dedupeModels(models);
 
-  return DEFAULT_MODEL_OPTIONS.map((fallbackModel) => {
+  return DEFAULT_MODEL_OPTIONS.flatMap((fallbackModel) => {
     const matchedModel = dedupedModels.find((model) => model.id === fallbackModel.id);
-    return matchedModel ?? fallbackModel;
+    if (fallbackModel.id === JEV_MODEL_ID) {
+      // Offered only when the API lists it, which it does only when the server has a TypeSafe key.
+      return matchedModel ? [{ ...matchedModel, name: JEV_MODEL_LABEL }] : [];
+    }
+    return [matchedModel ?? fallbackModel];
   });
 }
 
 function experimentPayloadToDraft(
-  value?: ExperimentPayload | null
+  value: ExperimentPayload | null | undefined,
+  jevAvailable: boolean
 ): ExperimentDraft {
   const allowedModelIds = new Set(DEFAULT_MODEL_OPTIONS.map((model) => model.id));
   const selectedModels = Array.isArray(value?.selected_models)
@@ -928,8 +959,11 @@ function experimentPayloadToDraft(
     value?.experiment_mode === "stability"
       ? value.experiment_mode
       : DEFAULT_DRAFT.experiment_mode;
-  const normalizedSelectedModels =
-    selectedModels.length >= 2 ? selectedModels : DEFAULT_SELECTED_MODEL_IDS;
+  const normalizedSelectedModels = normalizeSelectedModels(
+    selectedModels,
+    DEFAULT_SELECTED_MODEL_IDS,
+    jevAvailable
+  );
 
   return {
     sample_size:
@@ -969,8 +1003,9 @@ function validateExperimentDraft(draft: ExperimentDraft) {
     return "Sample size must be at least 1.";
   }
 
-  if (draft.selected_models.length < 2) {
-    return "Select at least 2 models.";
+  const modelsProblem = selectedModelsProblem(draft.selected_models, draft.experiment_mode);
+  if (modelsProblem) {
+    return modelsProblem;
   }
 
   const minimumSampleSize = getMinimumSampleSizeForDraft(

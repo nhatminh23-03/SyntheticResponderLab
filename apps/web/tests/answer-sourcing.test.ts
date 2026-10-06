@@ -58,3 +58,22 @@ test("a run with no live answers says so instead of reporting what it was built 
   assert.match(sourcing.summary, /No live model answers/);
   assert.match(sourcing.summary, /remain in the saved records/);
 });
+
+test("a preloaded demo is never described as live model answers", () => {
+  const s = formatAnswerSourcing(
+    { live_answers_used: 3900, fallback_answers_excluded: 0, total_answers: 3900, live_answer_rate: 1 },
+    { demo: true }
+  );
+
+  assert.equal(s.shown, true);
+  assert.equal(s.isDemo, true);
+  assert.equal(s.ratePercent, null);
+  assert.match(s.summary, /Preloaded demo answers/);
+  assert.doesNotMatch(s.summary, /live model/i);
+});
+
+test("without the demo flag the live wording is unchanged", () => {
+  const s = formatAnswerSourcing({ live_answers_used: 30, fallback_answers_excluded: 0, total_answers: 30, live_answer_rate: 1 });
+  assert.equal(s.isDemo, false);
+  assert.match(s.summary, /live model/);
+});

@@ -14,3 +14,5 @@ class HealthCheckResult(BaseModel):
 class HealthPayload(BaseModel):
     status: str
     checks: dict[str, HealthCheckResult]
+    providers: dict[str, bool] = Field(default_factory=dict)
+    demo_available: bool = True

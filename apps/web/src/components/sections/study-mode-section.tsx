@@ -181,7 +181,7 @@ export function StudyModeSection() {
       className="overflow-hidden"
       contentClassName="relative"
     >
-      <div className="grid gap-8 lg:min-h-[calc(100svh-var(--nav-height)-1rem)] xl:grid-cols-[minmax(0,0.7fr)_minmax(0,1.3fr)] xl:items-center">
+      <div className="grid gap-8 lg:min-h-[calc(100svh-var(--top-chrome)-1rem)] xl:grid-cols-[minmax(0,0.7fr)_minmax(0,1.3fr)] xl:items-center">
         <RevealOnScroll>
           <SectionHeader
             index={1}

@@ -449,6 +449,8 @@ export type SimulationRunResultPayload = {
   response_record_preview?: Array<Record<string, unknown>>;
   response_records?: Array<Record<string, unknown>>;
   survey_parse_warnings?: string[];
+  /** Present only on a preloaded demo run (generation_mode "demo_preloaded"). */
+  demo?: { reason?: string; source?: Record<string, unknown> } | null;
 };
 
 export type SimulationStabilityResultPayload = {
@@ -557,6 +559,8 @@ export type AnalysisPayload = {
     models_used?: string[];
     requested_responses?: number;
     generated_responses?: number;
+    /** "demo_preloaded" for the preloaded demo; the web decides demo vs live from this alone. */
+    generation_mode?: string | null;
   };
   summary?: {
     total_records?: number;
@@ -655,7 +659,8 @@ export type InsightsLlmSummary = {
   };
   recommended_next_steps?: string[];
   researcher_note?: string;
-  model?: string;
+  /** Null for the preloaded demo, which no model wrote. */
+  model?: string | null;
   from_run_id?: string;
   generated_at?: string;
   cached?: boolean;
@@ -683,6 +688,7 @@ export type InsightsPayload = {
     models_used?: string[];
     requested_responses?: number;
     generated_responses?: number;
+    generation_mode?: string | null;
   };
   executive_summary?: {
     top_use_case?: {
@@ -1757,6 +1763,20 @@ export async function acceptGeneratedSurvey(
   };
 }
 
+export async function addSurveyQuestion(studyId: string, payload: { text: string; question_type: string; options: string[] }) {
+  const response = await fetch(`${getApiBaseUrl()}/api/v1/studies/${studyId}/survey/questions`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw new Error(await readApiErrorMessage(response, `Adding the question failed (${response.status})`));
+  return (await response.json()).data;
+}
+
+export async function removeSurveyQuestion(studyId: string, questionId: string) {
+  const response = await fetch(`${getApiBaseUrl()}/api/v1/studies/${studyId}/survey/questions/${encodeURIComponent(questionId)}`, { method: "DELETE" });
+  if (!response.ok) throw new Error(await readApiErrorMessage(response, `Removing the question failed (${response.status})`));
+  return (await response.json()).data;
+}
+
 export async function saveExperiment(studyId: string, payload: ExperimentPayload) {
   const apiBaseUrl = getApiBaseUrl();
 
@@ -1860,11 +1880,13 @@ export async function getPromptPreview(studyId: string, personaIndex = 0) {
   return result.data?.prompt_preview ?? null;
 }
 
-export async function startSimulationRun(studyId: string) {
+export async function startSimulationRun(studyId: string, source: "live" | "demo" = "live") {
   const apiBaseUrl = getApiBaseUrl();
 
   const response = await fetch(`${apiBaseUrl}/api/v1/studies/${studyId}/simulation-runs`, {
     method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ source }),
   });
 
   if (!response.ok) {
@@ -2039,10 +2061,15 @@ export async function getAnalysis(
   return result.data?.analysis ?? { available: false };
 }
 
-export async function getInsights(studyId: string) {
+/** Adds `?ai=false` for the Demo (no AI) switch; without it the request is exactly as before. */
+function aiQuery(options?: { ai?: boolean }) {
+  return options?.ai === false ? "?ai=false" : "";
+}
+
+export async function getInsights(studyId: string, options?: { ai?: boolean }) {
   const apiBaseUrl = getApiBaseUrl();
 
-  const response = await fetch(`${apiBaseUrl}/api/v1/studies/${studyId}/insights`, {
+  const response = await fetch(`${apiBaseUrl}/api/v1/studies/${studyId}/insights${aiQuery(options)}`, {
     method: "GET",
     headers: {
       Accept: "application/json",
@@ -2226,11 +2253,12 @@ export async function saveResearchBrief(
 }
 
 export async function getInterviewInsights(
-  studyId: string
+  studyId: string,
+  options?: { ai?: boolean }
 ): Promise<InterviewInsightsPayload> {
   const apiBaseUrl = getApiBaseUrl();
   const response = await fetch(
-    `${apiBaseUrl}/api/v1/studies/${studyId}/interview/insights`,
+    `${apiBaseUrl}/api/v1/studies/${studyId}/interview/insights${aiQuery(options)}`,
     { method: "GET", headers: { Accept: "application/json" }, cache: "no-store" }
   );
   if (!response.ok) {

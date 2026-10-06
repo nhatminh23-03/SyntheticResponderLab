@@ -11,6 +11,22 @@ import {
   SimulationStabilityResultPayload,
   startSimulationRun,
 } from "@/lib/api";
+import {
+  demoRunControl,
+  liveRunControl,
+  READINESS_RECHECK_INTERVAL_MS,
+  shouldRecheckReadiness,
+  WAKING_SERVER_HINT,
+  type BackendReadinessPayload,
+} from "@/lib/backend-readiness";
+import { demoBannerLines, describeDemoRun, runErrorNote } from "@/lib/demo-run";
+import { useDemoMode } from "@/lib/demo-mode";
+import {
+  applyDemoLockToRunControls,
+  DEMO_RUN_LIVE_NOTE,
+  demoSwitchOn,
+  refuseIfDemoLocked,
+} from "@/lib/survey-demo-lock";
 import { describeRunEvidence } from "@/lib/run-evidence";
 import { describeRunCounts } from "@/lib/run-counts";
 import { cn } from "@/lib/utils";
@@ -28,7 +44,11 @@ type StatusTone = "neutral" | "success" | "warning" | "error";
 type StatusState = {
   tone: StatusTone;
   message: string;
+  /** A second line shown under the message (the message itself is never reworded). */
+  note?: string | null;
 };
+
+type RunSource = "live" | "demo";
 
 const EXECUTION_PHASES = [
   "Validating setup",
@@ -40,6 +60,16 @@ const EXECUTION_PHASES = [
 ] as const;
 
 const RESPONSE_RECORDS_PER_PAGE = 5;
+
+/** One readiness check; null when the check itself failed (network error or unreadable reply). */
+async function fetchReadiness(): Promise<BackendReadinessPayload | null> {
+  try {
+    const response = await fetch("/api/readiness", { cache: "no-store" });
+    return (await response.json()) as BackendReadinessPayload;
+  } catch {
+    return null;
+  }
+}
 
 const EMPTY_STATUS: StatusState = {
   tone: "neutral",
@@ -57,12 +87,19 @@ export function RunSimulationSection() {
     refreshStudy,
   } = useStudy();
   const { scrollToSection, setNavigationLocked } = useSectionRegistry();
+  const [demoOn] = useDemoMode();
   const [latestRun, setLatestRun] =
     useState<SimulationJobPayload<SimulationRunResultPayload> | null>(null);
   const [latestStabilityCheck, setLatestStabilityCheck] =
     useState<SimulationJobPayload<SimulationStabilityResultPayload> | null>(null);
   const [status, setStatus] = useState<StatusState>(EMPTY_STATUS);
   const [isRunning, setIsRunning] = useState(false);
+  const [activeSource, setActiveSource] = useState<RunSource | null>(null);
+  const [readiness, setReadiness] = useState<BackendReadinessPayload | null>(null);
+  const [readinessChecked, setReadinessChecked] = useState(false);
+  const [isWaitingForServer, setIsWaitingForServer] = useState(false);
+  // Bumped to start a new re-check window (e.g. a click found the server asleep again).
+  const [readinessRound, setReadinessRound] = useState(0);
   const [isClearing, setIsClearing] = useState(false);
   const [executionPhaseIndex, setExecutionPhaseIndex] = useState(0);
   const [responseRecordPage, setResponseRecordPage] = useState(0);
@@ -125,6 +162,31 @@ export function RunSimulationSection() {
     study?.derived?.latest_persona_preview?.completed_at,
   ]);
 
+  // Ruling R19: while the server is waking (no payload, not ready, or no providers), check again every 5 s for up
+  // to 2 minutes, so a cold start does not leave both buttons off until a reload.
+  useEffect(() => {
+    let cancelled = false;
+    let timer: number | null = null;
+    const startedAt = Date.now();
+
+    async function check() {
+      const payload = await fetchReadiness();
+      if (cancelled) return;
+      setReadiness(payload);
+      setReadinessChecked(true);
+      const again = shouldRecheckReadiness(payload, Date.now() - startedAt);
+      setIsWaitingForServer(again);
+      if (again) timer = window.setTimeout(() => void check(), READINESS_RECHECK_INTERVAL_MS);
+    }
+
+    void check();
+
+    return () => {
+      cancelled = true;
+      if (timer !== null) window.clearTimeout(timer);
+    };
+  }, [readinessRound]);
+
   useEffect(() => {
     setNavigationLocked(isRunning);
 
@@ -145,9 +207,24 @@ export function RunSimulationSection() {
   const readinessBanner = useMemo(() => buildReadinessBanner(study), [study]);
   const runEvidence = describeRunEvidence(
     latestRun?.result?.run_debug_summary ?? null,
-    latestRun?.result?.persona_generation_mode ?? null
+    latestRun?.result?.persona_generation_mode ?? null,
+    latestRun?.result?.generation_mode ?? null,
+    latestRun?.result?.personas?.length ?? null
   );
-  const latestRunWarnings = latestRun?.result?.warnings ?? [];
+  const demoRun = describeDemoRun(latestRun?.result);
+  const demoLines = demoBannerLines(latestRun?.result);
+  // The demo banner already shows every warning of a demo run, so the warnings panel would repeat them.
+  const latestRunWarnings = demoRun ? [] : latestRun?.result?.warnings ?? [];
+  // Label and enablement follow the study's saved models and the key each plan needs; the demo needs an API new
+  // enough to honour `source` (it reports `providers`). The app-wide Demo (no AI) switch locks Run live on top of that.
+  const { live: liveControl, demo: demoControl } = applyDemoLockToRunControls(
+    demoOn,
+    liveRunControl(study?.experiment?.value?.selected_models, readiness),
+    demoRunControl(readiness)
+  );
+  const runHints = isWaitingForServer
+    ? [WAKING_SERVER_HINT]
+    : [liveControl.hint, demoControl.hint].filter((hint): hint is string => Boolean(hint));
   const latestParseWarnings = latestRun?.result?.survey_parse_warnings ?? [];
   const allPersonas = latestRun?.result?.personas ?? [];
   const runCounts = useMemo(
@@ -205,17 +282,54 @@ export function RunSimulationSection() {
     setExecutionPhaseIndex(finalIndex);
   }
 
-  async function handleRunStudy() {
+  async function handleRunStudy(source: RunSource = "live") {
+    // The Demo (no AI) switch refuses a live run here too, not only through the disabled button. The demo still runs.
+    // The switch can also be turned on while this click waits on the server, so it is read again (from its store)
+    // after each wait, right before the request that would reach a provider.
+    const refuseLiveRun = () => (source === "live" ? refuseIfDemoLocked("run_live", demoSwitchOn(demoOn)) : null);
+    const locked = refuseLiveRun();
+    if (locked) {
+      setStatus({ tone: "warning", message: locked });
+      return;
+    }
+
     if (!runReady) {
       setStatus(readinessBanner);
       return;
     }
 
     setIsRunning(true);
+    setActiveSource(source);
+
+    // Ruling R19: check readiness once more right before acting on the click; the server may have restarted or
+    // been replaced since the last check (an older API would turn a demo click into a paid live run).
+    const fresh = await fetchReadiness();
+    setReadiness(fresh);
+    setReadinessChecked(true);
+    const lockedAfterCheck = refuseLiveRun();
+    if (lockedAfterCheck) {
+      setStatus({ tone: "warning", message: lockedAfterCheck });
+      setIsRunning(false);
+      setActiveSource(null);
+      return;
+    }
+    const control =
+      source === "demo" ? demoRunControl(fresh) : liveRunControl(study?.experiment?.value?.selected_models, fresh);
+    if (!control.enabled) {
+      const waking = shouldRecheckReadiness(fresh, 0);
+      if (waking) setReadinessRound((round) => round + 1);
+      setStatus({ tone: "warning", message: waking ? WAKING_SERVER_HINT : control.hint ?? WAKING_SERVER_HINT });
+      setIsRunning(false);
+      setActiveSource(null);
+      return;
+    }
+
     setStatus({
       tone: "neutral",
       message:
-        "Run started. The backend currently returns the completed result in one response, while the UI maps progress phases locally for a stronger launch experience.",
+        source === "demo"
+          ? "Loading the preloaded demo. No AI is called."
+          : "Run started. The backend currently returns the completed result in one response, while the UI maps progress phases locally for a stronger launch experience.",
     });
     startProgressAnimation();
 
@@ -225,22 +339,30 @@ export function RunSimulationSection() {
         throw new Error("No study is available yet.");
       }
 
-      const result = await startSimulationRun(resolvedStudyId);
+      const lockedAfterSave = refuseLiveRun();
+      if (lockedAfterSave) {
+        stopProgressAnimation(0);
+        setStatus({ tone: "warning", message: lockedAfterSave });
+        return;
+      }
+
+      const result = await startSimulationRun(resolvedStudyId, source);
       await refreshStudy(resolvedStudyId);
       setLatestRun(result.simulationRun);
       stopProgressAnimation(EXECUTION_PHASES.length - 1);
       setStatus(buildRunStatus(result.simulationRun, study));
     } catch (error) {
       stopProgressAnimation(Math.max(executionPhaseIndex, 1));
-      setStatus({
-        tone: "error",
-        message:
-          error instanceof Error
-            ? error.message
-            : "Unable to run the study right now.",
-      });
+      // The message is shown as the API wrote it. Both buttons stay enabled: "Run live" is the retry,
+      // and the preloaded demo is the way to the original survey's answers.
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Unable to run the study right now.";
+      setStatus({ tone: "error", message, note: runErrorNote(message) });
     } finally {
       setIsRunning(false);
+      setActiveSource(null);
     }
   }
 
@@ -304,10 +426,23 @@ export function RunSimulationSection() {
 
               <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
                 <Button
-                  onClick={handleRunStudy}
-                  disabled={!runReady || isRunning || isCreatingStudy || isHydratingStudy}
+                  onClick={() => handleRunStudy("live")}
+                  disabled={
+                    !runReady || isRunning || isCreatingStudy || isHydratingStudy || !liveControl.enabled
+                  }
                 >
-                  {isRunning ? "Running Study..." : "Run Study"}
+                  {isRunning && activeSource === "live" ? "Running live..." : liveControl.label}
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() => handleRunStudy("demo")}
+                  disabled={
+                    !runReady || isRunning || isCreatingStudy || isHydratingStudy || !demoControl.enabled
+                  }
+                >
+                  {isRunning && activeSource === "demo"
+                    ? "Loading demo..."
+                    : "Show preloaded demo (no AI)"}
                 </Button>
                 <Button
                   variant="secondary"
@@ -318,8 +453,27 @@ export function RunSimulationSection() {
                 </Button>
               </div>
 
+              {demoOn ? (
+                <p className="mt-3 text-sm leading-6 text-app-muted">{DEMO_RUN_LIVE_NOTE}</p>
+              ) : null}
+
+              {readinessChecked && runHints.length > 0 ? (
+                <div className="mt-3 space-y-1">
+                  {runHints.map((hint) => (
+                    <p key={hint} className="text-sm leading-6 text-app-muted">
+                      {hint}
+                    </p>
+                  ))}
+                </div>
+              ) : null}
+
               <div className="mt-5">
-                <StatusBanner tone={status.tone} message={status.message} compact />
+                <StatusBanner
+                  tone={status.tone}
+                  message={status.message}
+                  note={status.note}
+                  compact
+                />
               </div>
 
               {isRunning ? (
@@ -370,6 +524,22 @@ export function RunSimulationSection() {
 
                 {latestRun.result ? (
                   <>
+                    {demoRun ? (
+                      <div
+                        role="status"
+                        className={cn(
+                          "mt-5 space-y-2 rounded-xl p-4 leading-6",
+                          demoRun.reason === "jev_unavailable"
+                            ? "border-2 border-red-500 bg-red-500/15 text-base font-bold [color:var(--status-error-text)]"
+                            : "border [border-color:var(--status-warning-border)] [background:var(--status-warning-bg)] text-sm [color:var(--status-warning-text)]"
+                        )}
+                      >
+                        {demoLines.map((line) => (
+                          <p key={line}>{line}</p>
+                        ))}
+                      </div>
+                    ) : null}
+
                     <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                       <MetaCard
                         label={runCounts.responsesLabel}
@@ -547,6 +717,12 @@ function buildRunStatus(
   study: unknown
 ): StatusState {
   if (latestRun?.status === "completed" && latestRun.result) {
+    if (describeDemoRun(latestRun.result)) {
+      return {
+        tone: "warning",
+        message: "Showing the preloaded demo, not a live run. No AI was called. The banner below says why.",
+      };
+    }
     const warningCount = latestRun.result.warnings?.length ?? 0;
     if (warningCount > 0) {
       const warningPreview = (latestRun.result.warnings ?? [])
@@ -668,14 +844,17 @@ function formatAnswer(answer: unknown) {
 function StatusBanner({
   tone,
   message,
+  note,
   compact = false,
 }: {
   tone: StatusTone;
   message: string;
+  note?: string | null;
   compact?: boolean;
 }) {
   return (
     <div
+      role="status"
       className={cn(
         "rounded-[1.35rem] border px-4 py-3 text-sm leading-6",
         !compact && "sm:px-5 sm:py-4",
@@ -690,6 +869,7 @@ function StatusBanner({
       )}
     >
       {message}
+      {note ? <div className="mt-1">{note}</div> : null}
     </div>
   );
 }
@@ -785,7 +965,10 @@ function PersonaPreviewCard({
     "Not specified";
   const housing = toOptionalString(persona.home_type) || "Not specified";
   const workStyle = toOptionalString(persona.work_mode) || "Not specified";
-  const household = toOptionalString(persona.household_size) || "Not specified";
+  const household =
+    toOptionalString(persona.household_size) ||
+    toOptionalString(persona.household_size_bucket) ||
+    "Not specified";
   const geography =
     toOptionalString(persona.metro) ||
     toOptionalString(persona.state) ||

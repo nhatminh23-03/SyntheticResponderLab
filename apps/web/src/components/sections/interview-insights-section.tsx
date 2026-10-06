@@ -20,7 +20,15 @@ import {
   getLatestInterviewRun,
   sendInterviewChatMessage,
 } from "@/lib/api";
+import { useDemoMode } from "@/lib/demo-mode";
 import { formatMeasuredInterviewCost } from "@/lib/interview-models";
+import {
+  aiReadOptions,
+  DEMO_AI_ACTION_NOTE,
+  demoSwitchOn,
+  isSurveyActionLocked,
+  refuseIfDemoLocked,
+} from "@/lib/survey-demo-lock";
 import { cn } from "@/lib/utils";
 import { useStudy } from "@/providers/study-provider";
 
@@ -160,6 +168,9 @@ function TranscriptSourceButton({
 
 export function InterviewInsightsSection() {
   const { studyId, study } = useStudy();
+  const [demoOn] = useDemoMode();
+  // The follow-up chat always calls a model, so the Demo (no AI) switch locks it.
+  const chatLocked = isSurveyActionLocked("interview_chat", demoOn);
 
   const [insights, setInsights] = useState<InterviewInsightsPayload | null>(null);
   const [latestRun, setLatestRun] = useState<InterviewRunPayload | null>(null);
@@ -192,7 +203,8 @@ export function InterviewInsightsSection() {
       setErrorMsg(null);
 
       const [insightsResult, latestRunResult] = await Promise.allSettled([
-        getInterviewInsights(studyId),
+        // The read can extract themes with a model; with the Demo (no AI) switch on it asks for cached themes only.
+        getInterviewInsights(studyId, aiReadOptions(demoSwitchOn(demoOn))),
         getLatestInterviewRun(studyId),
       ]);
       if (cancelled) {
@@ -230,7 +242,7 @@ export function InterviewInsightsSection() {
     return () => {
       cancelled = true;
     };
-  }, [studyId, study?.updated_at]);
+  }, [studyId, study?.updated_at, demoOn]);
 
   const themes = insights?.themes ?? [];
   const pairs = latestRun?.pairs ?? [];
@@ -270,6 +282,12 @@ export function InterviewInsightsSection() {
 
   async function handleChatSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    const refused = refuseIfDemoLocked("interview_chat", demoSwitchOn(demoOn));
+    if (refused) {
+      setChatError(refused);
+      return;
+    }
 
     const prompt = chatDraft.trim();
     if (!studyId || !selectedPersonaId || !prompt) {
@@ -535,10 +553,10 @@ export function InterviewInsightsSection() {
                         </p>
                         <button
                           type="submit"
-                          disabled={!selectedPersonaId || !chatDraft.trim() || isSendingChat}
+                          disabled={!selectedPersonaId || !chatDraft.trim() || isSendingChat || chatLocked}
                           className={cn(
                             "inline-flex items-center gap-2 rounded-full px-5 py-2 text-sm font-semibold transition",
-                            !selectedPersonaId || !chatDraft.trim() || isSendingChat
+                            !selectedPersonaId || !chatDraft.trim() || isSendingChat || chatLocked
                               ? "cursor-not-allowed border border-white/[0.08] bg-[rgba(17,24,29,0.88)] text-app-muted opacity-60"
                               : "border border-app-cyan/35 bg-[linear-gradient(135deg,rgba(118,228,255,0.18),rgba(15,216,255,0.10))] text-app-text hover:-translate-y-0.5"
                           )}
@@ -548,6 +566,9 @@ export function InterviewInsightsSection() {
                       </div>
                     </form>
 
+                    {chatLocked ? (
+                      <p className="text-sm text-app-muted">{DEMO_AI_ACTION_NOTE}</p>
+                    ) : null}
                     {chatError && <p className="text-sm text-red-400">{chatError}</p>}
                   </div>
                 </div>

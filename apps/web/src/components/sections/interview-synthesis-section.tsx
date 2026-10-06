@@ -17,7 +17,9 @@ import {
   saveInterviewSynthesisConfig,
   startInterviewRun,
 } from "@/lib/api";
+import { useDemoMode } from "@/lib/demo-mode";
 import { describeInterviewProvenance } from "@/lib/interview-provenance";
+import { DEMO_AI_ACTION_NOTE, demoSwitchOn, isSurveyActionLocked, refuseIfDemoLocked } from "@/lib/survey-demo-lock";
 import { cn } from "@/lib/utils";
 import { useSectionRegistry } from "@/providers/section-registry-provider";
 import { useStudy } from "@/providers/study-provider";
@@ -244,6 +246,10 @@ function TranscriptPairCard({ pair, index }: { pair: NonNullable<InterviewRunPay
 export function InterviewSynthesisSection() {
   const { studyId, study } = useStudy();
   const { scrollToSection } = useSectionRegistry();
+  const [demoOn] = useDemoMode();
+  // A custom study's interviews call models; a Neo study's run loads seeded transcripts and stays open.
+  const studyMode = study?.study_mode?.value ?? null;
+  const runLocked = isSurveyActionLocked("interview_run", demoOn, studyMode);
 
   const [latestRun, setLatestRun] = useState<InterviewRunPayload | null>(null);
   const [isRunning, setIsRunning] = useState(false);
@@ -290,6 +296,14 @@ export function InterviewSynthesisSection() {
   }
 
   async function handleRun() {
+    // Read again after the config save: the switch can be turned on while the save is in flight.
+    const refuseRun = () => refuseIfDemoLocked("interview_run", demoSwitchOn(demoOn), studyMode);
+    const refused = refuseRun();
+    if (refused) {
+      setErrorMsg(refused);
+      return;
+    }
+
     if (!studyId) return;
     setIsRunning(true);
     setErrorMsg(null);
@@ -297,6 +311,11 @@ export function InterviewSynthesisSection() {
       const questions = customQuestionsText.trim() ? parseQuestions(customQuestionsText) : undefined;
       if (questions !== undefined && showConfig) {
         await saveInterviewSynthesisConfig(studyId, { questions });
+      }
+      const refusedAfterSave = refuseRun();
+      if (refusedAfterSave) {
+        setErrorMsg(refusedAfterSave);
+        return;
       }
       const run = await startInterviewRun(studyId, questions ? { questions } : undefined);
       setLatestRun(run);
@@ -382,11 +401,11 @@ export function InterviewSynthesisSection() {
             <div className="flex flex-wrap items-center gap-3 sm:gap-4">
               <button
                 type="button"
-                disabled={isRunning || !studyId}
+                disabled={isRunning || !studyId || runLocked}
                 onClick={handleRun}
                 className={cn(
                   "inline-flex items-center gap-2 rounded-full px-6 py-3 text-sm font-semibold tracking-[0.03em] transition",
-                  isRunning || !studyId
+                  isRunning || !studyId || runLocked
                     ? "cursor-not-allowed opacity-50 border border-white/[0.08] bg-[rgba(17,24,29,0.88)] text-app-muted"
                     : "border border-app-gold/40 bg-[linear-gradient(135deg,rgba(216,186,103,0.18),rgba(216,186,103,0.08))] text-app-gold hover:-translate-y-0.5"
                 )}
@@ -412,6 +431,9 @@ export function InterviewSynthesisSection() {
               )}
             </div>
 
+            {runLocked ? (
+              <p className="mt-2 text-sm text-app-muted">{DEMO_AI_ACTION_NOTE}</p>
+            ) : null}
             {errorMsg && (
               <p className="mt-2 text-sm text-red-400">{errorMsg}</p>
             )}

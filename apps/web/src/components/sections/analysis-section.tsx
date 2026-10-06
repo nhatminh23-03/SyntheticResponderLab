@@ -13,6 +13,7 @@ import {
   getAnalysis,
 } from "@/lib/api";
 import { formatAnswerSourcing } from "@/lib/answer-sourcing";
+import { isDemoGenerationMode } from "@/lib/demo-run";
 import { cn } from "@/lib/utils";
 import { useStudy } from "@/providers/study-provider";
 import { useSectionRegistry } from "@/providers/section-registry-provider";
@@ -149,12 +150,14 @@ export function AnalysisSection() {
                         Result Dashboard
                       </h2>
               {(() => {
-                const sourcing = formatAnswerSourcing(analysis?.answer_sourcing ?? null);
+                const sourcing = formatAnswerSourcing(analysis?.answer_sourcing ?? null, {
+                  demo: isDemoGenerationMode(analysis?.run?.generation_mode),
+                });
                 if (!sourcing.shown) return null;
                 return (
                   <p
                     className={
-                      sourcing.excluded > 0
+                      sourcing.excluded > 0 || sourcing.isDemo
                         ? "mt-3 rounded-[1.2rem] border border-amber-400/30 bg-amber-400/[0.06] px-4 py-3 text-xs leading-5 text-amber-300"
                         : "mt-3 rounded-[1.2rem] border border-app-border bg-white/[0.02] px-4 py-3 text-xs leading-5 text-app-muted"
                     }
