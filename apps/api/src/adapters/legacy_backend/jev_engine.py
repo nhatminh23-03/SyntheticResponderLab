@@ -7,6 +7,7 @@ question, so a rerun repeats and the panel keeps Jev's spread instead of its sin
 from __future__ import annotations
 
 import json
+import math
 import random
 import ssl
 import time
@@ -15,7 +16,7 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from src.services.exceptions import ProviderUnavailableApiError
+from src.services.exceptions import ProviderUnavailableApiError, ValidationApiError
 
 JEV_MODEL_ID = "typesafe/jev"
 JEV_API_MODEL = "jev-latest"
@@ -62,7 +63,11 @@ def http_transport(api_key: str, url: str, *, timeout: int = 60, retries: int = 
                 with urllib.request.urlopen(request, timeout=timeout, context=_SSL) as response:
                     return json.loads(response.read().decode())
             except urllib.error.HTTPError as error:
-                detail = error.read().decode(errors="replace")[:200].replace(api_key, "***")
+                try:
+                    raw_body = error.read().decode(errors="replace")
+                except Exception:
+                    raw_body = ""
+                detail = raw_body.replace(api_key, "***")[:200]
                 if error.code not in RETRYABLE and error.code < 500:
                     raise JevRequestError(f"Jev refused the request (HTTP {error.code}): {detail}") from None
                 last = RuntimeError(f"HTTP {error.code}")
@@ -98,10 +103,23 @@ def probabilities_for(answer: Dict[str, Any]) -> Dict[str, float]:
     return {str(k): float(v) for k, v in raw.items()}
 
 
+def usable_probabilities(stated: Dict[str, float]) -> Optional[Dict[str, float]]:
+    """Return the dict if all values are finite positive numbers and total > 0, else None."""
+    if not stated:
+        return None
+    for value in stated.values():
+        try:
+            if not isinstance(value, (int, float)) or math.isnan(value) or math.isinf(value):
+                return None
+        except (TypeError, ValueError):
+            return None
+    total = sum(max(v, 0.0) for v in stated.values())
+    return stated if total > 0 else None
+
+
 def _draw(probabilities: Dict[str, float], rng: random.Random) -> str:
+    """Draw one option from usable probabilities (assume caller validated with usable_probabilities)."""
     total = sum(max(v, 0.0) for v in probabilities.values())
-    if total <= 0:
-        return sorted(probabilities)[0]
     point, cumulative = rng.random() * total, 0.0
     for option, share in probabilities.items():
         cumulative += max(share, 0.0)
@@ -151,18 +169,44 @@ def generate_jev_records(*, schemas: Any, config: Any, survey_schema: Any, perso
     """A Jev answer is kept; a Jev failure is missing. Nothing is ever filled in."""
     questions = list(survey_schema.questions)
     jev_questions, skipped = build_questions(questions)
+    if not jev_questions:
+        raise ValidationApiError("Jev answers only questions with listed options (1–5 scale or choices); this survey has none.")
     stimulus = _stimulus(business_product_context, market_context, getattr(survey_schema, "description", None))
     respondents = [(f"RESP_{i:03d}", persona_profiles[(i - 1) % len(persona_profiles)]) for i in range(1, config.sample_size + 1)]
 
-    def ask(item: Tuple[str, Any]) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    def ask(item: Tuple[str, Any]) -> Tuple[Optional[Dict[str, Dict[str, float]]], Optional[str]]:
+        """Parse and validate the reply. Return (usable_answers, error) where usable_answers is a dict of question_id -> probabilities."""
         _rid, persona = item
         payload = {"model": JEV_API_MODEL, "state": {"respondent": _respondent(persona), "stimulus": stimulus}, "questions": jev_questions}
         try:
-            return transport(payload), None
+            reply = transport(payload)
         except JevRequestError:
             raise
         except Exception as error:  # noqa: BLE001 - one respondent failing is recorded, not fatal
             return None, f"{type(error).__name__}: {error}"
+
+        # Validate reply structure and parse probabilities
+        try:
+            if not isinstance(reply, dict):
+                return None, f"Jev returned non-dict reply: {type(reply)}"
+            answers = reply.get("answers")
+            if not isinstance(answers, dict):
+                return None, f"Jev returned non-dict answers: {type(answers)}"
+        except Exception as error:
+            return None, f"Failed to parse reply: {error}"
+
+        usable_answers: Dict[str, Dict[str, float]] = {}
+        for question_id in jev_questions:
+            try:
+                stated = probabilities_for(answers.get(question_id) or {})
+                if usable_probabilities(stated):
+                    usable_answers[question_id] = stated
+            except (ValueError, TypeError, AttributeError):
+                pass  # skip this question for this respondent
+
+        if not usable_answers:
+            return None, "Jev returned no usable answers"
+        return usable_answers, None
 
     with ThreadPoolExecutor(max_workers=max(1, min(max_concurrency, len(respondents)))) as pool:
         replies = list(pool.map(ask, respondents))
@@ -177,14 +221,15 @@ def generate_jev_records(*, schemas: Any, config: Any, survey_schema: Any, perso
     records: List[Any] = []
     probabilities_out: Dict[str, Dict[str, Dict[str, float]]] = {}
     missing_answers = 0
-    for (respondent_id, persona), (reply, _error) in zip(respondents, replies):
-        if reply is None:
+    for (respondent_id, persona), (usable_answers, _error) in zip(respondents, replies):
+        if usable_answers is None:
             continue                                   # a failed respondent stays missing
-        answers = reply.get("answers") or {}
         for question in questions:
-            stated = probabilities_for(answers.get(question.id) or {})
-            if not stated:
-                missing_answers += 1                   # an unanswered question stays missing
+            if question.id not in jev_questions:
+                continue                               # unsupported question type
+            stated = usable_answers.get(question.id)
+            if stated is None:
+                missing_answers += 1                   # an unanswered or unusable question stays missing
                 continue
             value = answer_value(question, stated, f"{config.run_id}:{respondent_id}:{question.id}")
             probabilities_out.setdefault(respondent_id, {})[question.id] = stated

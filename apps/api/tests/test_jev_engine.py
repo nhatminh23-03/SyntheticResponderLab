@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import json
+import math
 from types import SimpleNamespace
 
 import pytest
 
 from src.adapters.legacy_backend import jev_engine as jev
+from src.services.exceptions import ValidationApiError
 
 
 def Q(id, question_type, options=(), min_value=None, max_value=None):
@@ -57,14 +59,32 @@ def test_http_transport_retries_then_raises_and_never_leaks_the_key(monkeypatch)
     assert send({"model": "jev-latest"}) == {"answers": {}}
     assert len(calls) == 3
 
+    # Test that a 401 with key in body redacts the key and doesn't retry
+    calls.clear()
     def unauthorized(request, timeout, context=None):
+        calls.append(request)
         import urllib.error, io
-        raise urllib.error.HTTPError(request.full_url, 401, "no", {}, io.BytesIO(b"bad key"))
+        raise urllib.error.HTTPError(request.full_url, 401, "no", {}, io.BytesIO(b"bad key secret-key here"))
 
     monkeypatch.setattr(jev.urllib.request, "urlopen", unauthorized)
     with pytest.raises(jev.JevRequestError) as error:
         jev.http_transport("secret-key", "https://example.invalid", sleep=lambda s: None)({})
     assert "secret-key" not in error.value.message
+    assert "***" in error.value.message
+    assert len(calls) == 1
+
+    # Test that retryable 503 exhausts retries without leaking key
+    calls.clear()
+    def unavailable(request, timeout, context=None):
+        calls.append(request)
+        import urllib.error, io
+        raise urllib.error.HTTPError(request.full_url, 503, "service", {}, io.BytesIO(b"secret-key"))
+
+    monkeypatch.setattr(jev.urllib.request, "urlopen", unavailable)
+    with pytest.raises(RuntimeError) as error:
+        jev.http_transport("secret-key", "https://example.invalid", retries=4, sleep=lambda s: None)({})
+    assert "secret-key" not in str(error.value)
+    assert len(calls) == 4
 
 
 def _stub_runtime(n_personas=2):
@@ -121,3 +141,85 @@ def test_all_respondents_failing_raises_unavailable():
     with pytest.raises(jev.JevUnavailableError):
         jev.generate_jev_records(schemas=schemas, config=config, survey_schema=survey, persona_profiles=personas,
                                  business_product_context=None, market_context=None, transport=transport, max_concurrency=2)
+
+
+def test_all_zero_and_nan_probabilities_stay_missing():
+    """Unusable probabilities (all-zero, NaN, etc.) count as missing questions, not failed respondents."""
+    schemas, config, personas, survey = _stub_runtime(n_personas=2)
+    def transport(payload):
+        # All responses have Q1 but with different unusable probabilities
+        if payload["state"]["respondent"].get("age_bucket") == "30-34":
+            # All-zero probabilities
+            return {"answers": {"Q1": {"type": "score", "probabilities": {"0": 0, "1": 0, "2": 0, "3": 0, "4": 0}}}}
+        else:
+            # NaN probabilities
+            return {"answers": {"Q1": {"type": "score", "probabilities": {"0": float('nan'), "1": 0, "2": 0, "3": 0, "4": 0}}}}
+
+    # Both respondents return valid structure but no usable answers → both fail
+    with pytest.raises(jev.JevUnavailableError):
+        jev.generate_jev_records(
+            schemas=schemas, config=config, survey_schema=survey, persona_profiles=personas,
+            business_product_context=None, market_context=None, transport=transport, max_concurrency=2)
+
+
+def test_empty_answers_dict_fails_respondent():
+    """A respondent returning empty answers dict is treated as failed."""
+    schemas, config, personas, survey = _stub_runtime(n_personas=2)
+    def transport(payload):
+        return {"answers": {}}  # No answers for any question
+
+    with pytest.raises(jev.JevUnavailableError):
+        jev.generate_jev_records(schemas=schemas, config=config, survey_schema=survey, persona_profiles=personas,
+                                 business_product_context=None, market_context=None, transport=transport, max_concurrency=2)
+
+
+def test_invalid_reply_structure_fails_respondent():
+    """A respondent returning invalid reply structure (e.g. non-dict) is treated as failed."""
+    schemas, config, personas, survey = _stub_runtime(n_personas=2)
+    call_count = [0]
+    def transport(payload):
+        call_count[0] += 1
+        if call_count[0] == 1:
+            return {"error": "something went wrong"}  # Missing "answers" key
+        return {"answers": {"Q1": {"type": "score", "probabilities": {"0": 0, "1": 0, "2": 0, "3": 1, "4": 0}}}}
+
+    with pytest.raises(jev.JevTooManyFailuresError) as error:
+        jev.generate_jev_records(schemas=schemas, config=config, survey_schema=survey, persona_profiles=personas,
+                                 business_product_context=None, market_context=None, transport=transport, max_concurrency=2)
+    assert "1 of 2" in error.value.message
+
+
+def test_non_numeric_probability_key_stays_missing():
+    """A non-numeric probability key for a score question is caught and the question stays missing."""
+    schemas, config, personas, survey = _stub_runtime(n_personas=2)
+    def transport(payload):
+        # Return Q1 with a non-numeric key
+        return {"answers": {"Q1": {"type": "score", "probabilities": {"not_a_number": 0.5, "0": 0.5}}}}
+
+    # Both respondents have non-numeric keys → both fail
+    with pytest.raises(jev.JevUnavailableError):
+        jev.generate_jev_records(
+            schemas=schemas, config=config, survey_schema=survey, persona_profiles=personas,
+            business_product_context=None, market_context=None, transport=transport, max_concurrency=2)
+
+
+def test_jev_request_error_propagates():
+    """A JevRequestError from the transport is not caught and propagates out."""
+    schemas, config, personas, survey = _stub_runtime()
+    def transport(payload):
+        raise jev.JevRequestError("bad API key")
+
+    with pytest.raises(jev.JevRequestError):
+        jev.generate_jev_records(schemas=schemas, config=config, survey_schema=survey, persona_profiles=personas,
+                                 business_product_context=None, market_context=None, transport=transport, max_concurrency=2)
+
+
+def test_no_askable_questions_raises_validation_error():
+    """If the survey has no askable questions, raise ValidationApiError before calling transport."""
+    schemas, config, personas, survey = _stub_runtime()
+    survey.questions = [Q("Q8", "open_text"), Q("Q9", "numeric")]  # Only unsupported types
+
+    with pytest.raises(ValidationApiError) as error:
+        jev.generate_jev_records(schemas=schemas, config=config, survey_schema=survey, persona_profiles=personas,
+                                 business_product_context=None, market_context=None, transport=lambda x: {}, max_concurrency=2)
+    assert "Jev answers only questions with listed options" in error.value.message
