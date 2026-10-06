@@ -68,7 +68,7 @@ from src.services.exceptions import (
     ValidationApiError,
 )
 from src.services.demo_interview_fixtures import ensure_demo_interview_run
-from src.services.demo_survey_run import build_demo_run_result
+from src.services.demo_survey_run import NOT_COVERED_MESSAGE, build_demo_run_result
 from src.services.ids import make_public_id
 from src.services.interview_service import save_research_brief
 from src.services.url_security import validate_public_http_url
@@ -1003,6 +1003,7 @@ def accept_generated_survey(
 
 
 STUDENT_QUESTION_PREFIX = "SQ"
+STUDENT_OPTION_MAX_CHARS = 120
 DEFAULT_LIKERT_ANCHORS = [
     "Not at all interested",
     "Slightly interested",
@@ -1068,6 +1069,8 @@ def add_survey_question(
         question = {"text": text, "question_type": "single_choice", "options": cleaned, "required": True}
     else:
         raise ValidationApiError("Jev answers only questions with listed options: use a 1–5 scale or single choice.")
+    if any(len(option) > STUDENT_OPTION_MAX_CHARS for option in question["options"]):
+        raise ValidationApiError("Each option or label can be at most 120 characters.")
     section = _saved_survey(session, study)
     value = dict(section.value_json)
     existing = [q.get("id", "") for q in value.get("questions", [])]
@@ -1277,6 +1280,8 @@ JEV_DOWN_WITH_STUDENT_QUESTIONS = ("Jev is temporarily unavailable. Your new que
                                    "You can retry or view the preloaded demo of the original survey.")
 NO_KEY_WITH_STUDENT_QUESTIONS = ("No AI key is configured on this server. Your new question requires a live run. "
                                  "You can view the preloaded demo of the original survey.")
+JEV_DOWN_DEMO_NOT_COVERED = ("Jev is temporarily unavailable, and the preloaded demo does not cover this survey. "
+                             "Please retry in a minute.")
 
 
 def _live_engine_configured(settings: AppSettings) -> bool:
@@ -1361,6 +1366,11 @@ def start_simulation_run(
     session.add(job)
     session.commit()
     session.refresh(job)
+    job_id = job.id
+    # Ruling R17: end the transaction before the provider call, so this request holds no pooled connection while
+    # the provider runs (a class may start many runs at once). Everything the call needs is in locals; the Job is
+    # loaded again afterwards.
+    session.commit()
 
     try:
         if demo_reason is not None:
@@ -1383,11 +1393,22 @@ def start_simulation_run(
                     raise ProviderUnavailableApiError(
                         JEV_DOWN_WITH_STUDENT_QUESTIONS, details={"retry": True, "demo_available": True}
                     ) from exc
-                result = build_demo_run_result(
-                    survey_payload=survey, experiment_payload=experiment, reason="jev_unavailable", detail=exc.message
-                )
+                try:
+                    result = build_demo_run_result(
+                        survey_payload=survey, experiment_payload=experiment, reason="jev_unavailable", detail=exc.message
+                    )
+                except ConflictApiError as not_covered:
+                    if not_covered.message != NOT_COVERED_MESSAGE:
+                        raise
+                    # Say that Jev is down, not only that the demo does not fit this survey.
+                    raise ProviderUnavailableApiError(
+                        JEV_DOWN_DEMO_NOT_COVERED, details={"retry": True, "demo_available": False}
+                    ) from exc
             if geography_warning:
                 result.setdefault("warnings", []).append(geography_warning)
+        job = session.get(Job, job_id)
+        if job is None:
+            raise ConflictApiError("This run was cleared while it was running. Please start it again.")
         job.status = "completed"
         job.result_json = result
         job.error_json = None
@@ -1395,11 +1416,14 @@ def start_simulation_run(
         _touch_study(study)
         session.commit()
     except Exception as exc:
-        job.status = "failed"
-        job.error_json = {"message": str(exc)}
-        job.completed_at = utcnow()
-        _touch_study(study)
-        session.commit()
+        session.rollback()
+        job = session.get(Job, job_id)
+        if job is not None:
+            job.status = "failed"
+            job.error_json = {"message": str(exc)}
+            job.completed_at = utcnow()
+            _touch_study(study)
+            session.commit()
         raise
 
     study_view = serialize_study(session, study)

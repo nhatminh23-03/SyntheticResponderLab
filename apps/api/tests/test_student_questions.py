@@ -109,3 +109,28 @@ def test_adding_needs_a_saved_survey(client):
     response = client.post(f"/api/v1/studies/{study_id}/survey/questions", json={"text": "How appealing is a solar roof?", "question_type": "likert"})
     assert response.status_code == 409 and "Save a survey" in response.text
     assert client.delete(f"/api/v1/studies/{study_id}/survey/questions/SQ1").status_code == 409
+
+
+@pytest.mark.parametrize("question_type, options", [
+    ("likert", ["Hate it", "Dislike it", "x" * 121, "Like it", "Love it"]),
+    ("single_choice", ["Oak", "y" * 121]),
+])
+def test_an_option_or_label_longer_than_120_characters_is_refused(client, question_type, options):
+    study_id = _create_ready_to_run_study(client)
+    response = client.post(
+        f"/api/v1/studies/{study_id}/survey/questions",
+        json={"text": "How do you feel about it?", "question_type": question_type, "options": options},
+    )
+    assert response.status_code == 400
+    assert response.json()["error"]["message"] == "Each option or label can be at most 120 characters."
+    assert not any(q["id"].startswith("SQ") for q in _questions(client, study_id))
+
+
+def test_an_option_of_exactly_120_characters_after_trimming_is_accepted(client):
+    study_id = _create_ready_to_run_study(client)
+    response = client.post(
+        f"/api/v1/studies/{study_id}/survey/questions",
+        json={"text": "Pick one please", "question_type": "single_choice", "options": ["  " + "z" * 120 + "  ", "Oak"]},
+    )
+    assert response.status_code == 200
+    assert _questions(client, study_id)[-1]["options"] == ["z" * 120, "Oak"]

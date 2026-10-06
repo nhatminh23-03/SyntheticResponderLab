@@ -9,6 +9,7 @@ import inspect
 import json
 from pathlib import Path
 import re
+import time
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlsplit
 
@@ -1125,6 +1126,8 @@ def execute_simulation_run(
 
     try:
         if uses_jev:
+            # Ruling R16: one monotonic deadline for the whole run, shared by the engine and every HTTP attempt.
+            jev_deadline = time.monotonic() + jev_engine.JEV_RUN_DEADLINE_SECONDS
             records, generation_debug, record_is_fallback, answer_probabilities = jev_engine.generate_jev_records(
                 schemas=schemas,
                 config=config,
@@ -1132,8 +1135,11 @@ def execute_simulation_run(
                 persona_profiles=personas,
                 business_product_context=business_product_context,
                 market_context=market_context,
-                transport=jev_engine.http_transport(settings.typesafe_api_key, settings.typesafe_base_url, timeout=60),
+                transport=jev_engine.http_transport(
+                    settings.typesafe_api_key, settings.typesafe_base_url, timeout=30, deadline=jev_deadline
+                ),
                 max_concurrency=settings.simulation_max_concurrency,
+                deadline=jev_deadline,
             )
         else:
             with temporary_env(
@@ -1819,6 +1825,7 @@ def build_insights_view(
             "models_used": list(latest_run_payload.get("models_used") or []),
             "requested_responses": latest_run_payload.get("total_requested_responses"),
             "generated_responses": latest_run_payload.get("total_generated_responses"),
+            "generation_mode": latest_run_payload.get("generation_mode"),
         },
         "executive_summary": executive_summary,
         "trust_snapshot": trust_snapshot,

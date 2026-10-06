@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import copy
+
 import pytest
 
 from src.services.demo_survey_run import DEMO_WARNING, NOT_COVERED_MESSAGE, build_demo_run_result, load_fixture
@@ -77,3 +79,13 @@ def test_fixture_data_is_copied_not_cached():
     result1["personas"][0]["persona_id"] = "MUTATED"
     result2 = build_demo_run_result(survey_payload=SURVEY, experiment_payload={"sample_size": 1}, reason="requested", fixture=FIXTURE)
     assert result2["personas"][0]["persona_id"] == "P001"
+    # List answers (multi-choice) are copied too: changing a result never reaches the cached fixture.
+    fixture = copy.deepcopy(FIXTURE)
+    fixture["question_ids"].append("Q20")
+    fixture["respondents"][0]["answers"]["Q20"] = ["Ads", "Expo"]
+    survey = dict(SURVEY, questions=SURVEY["questions"] + [
+        {"id": "Q20", "text": "Where did you hear about it?", "question_type": "multi_choice", "options": ["Ads", "Expo", "Friends"]}])
+    result3 = build_demo_run_result(survey_payload=survey, experiment_payload={"sample_size": 1}, reason="requested", fixture=fixture)
+    q20 = next(r for r in result3["response_records"] if r["question_id"] == "Q20")
+    q20["answer"].append("MUTATED")
+    assert fixture["respondents"][0]["answers"]["Q20"] == ["Ads", "Expo"]

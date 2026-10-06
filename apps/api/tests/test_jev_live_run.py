@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import threading
+import time
 
 from src.adapters.legacy_backend import domain, jev_engine
 from src.adapters.legacy_backend.runtime import load_module
@@ -263,3 +264,56 @@ def test_stability_check_is_refused_for_a_jev_experiment(client, app):
     response = client.post(f"/api/v1/studies/{study_id}/simulation-runs/stability", json={"repeat_runs": 2})
     assert response.status_code == 400 and "not available for Jev runs" in response.text
     assert "or-test-key" not in response.text
+
+
+def test_a_live_jev_run_uses_a_30_second_call_timeout_and_one_run_deadline(test_settings, monkeypatch):
+    settings = test_settings.model_copy(update={"typesafe_api_key": KEY})
+    survey = {"survey_title": "One question", "questions": [
+        {"id": "Q1", "text": "How likely are you to buy?", "question_type": "likert",
+         "options": ["1", "2", "3", "4", "5"], "min_value": 1, "max_value": 5, "required": True}]}
+    transport_kwargs, engine_kwargs = {}, {}
+    real_generate = jev_engine.generate_jev_records
+
+    def fake_transport(api_key, url, **kw):
+        transport_kwargs.update(kw)
+        return _answer_everything
+
+    def spy_generate(**kwargs):
+        engine_kwargs.update(kwargs)
+        return real_generate(**kwargs)
+
+    monkeypatch.setattr(jev_engine, "http_transport", fake_transport)
+    monkeypatch.setattr(jev_engine, "generate_jev_records", spy_generate)
+    before = time.monotonic()
+    domain.execute_simulation_run(
+        settings=settings, audience_payload={"state": "California", "age_min": 30, "age_max": 60, "homeowner_only": True},
+        survey_payload=survey, experiment_payload={"sample_size": 3, "selected_models": ["typesafe/jev"], "experiment_mode": "split",
+                                                   "reruns_per_persona": 1},
+        product_payload=None, market_payload=None, geography_context=None)
+    assert transport_kwargs["timeout"] == 30
+    # The transport and the engine share one monotonic deadline, 150 s after the run started.
+    assert transport_kwargs["deadline"] == engine_kwargs["deadline"]
+    assert before + jev_engine.JEV_RUN_DEADLINE_SECONDS <= engine_kwargs["deadline"] <= time.monotonic() + jev_engine.JEV_RUN_DEADLINE_SECONDS
+
+
+def test_a_blank_student_question_is_reported_in_the_run_warnings(test_settings, monkeypatch):
+    settings = test_settings.model_copy(update={"typesafe_api_key": KEY})
+    survey = {"survey_title": "With a student question", "questions": [
+        {"id": "Q1", "text": "How likely are you to buy?", "question_type": "likert",
+         "options": ["1", "2", "3", "4", "5"], "min_value": 1, "max_value": 5, "required": True},
+        {"id": "SQ1", "text": "Would solar panels make it more appealing?", "question_type": "likert",
+         "options": ["1", "2", "3", "4", "5"], "min_value": 1, "max_value": 5, "required": True}]}
+
+    def blank_sq1(payload):
+        reply = _answer_everything(payload)
+        reply["answers"]["SQ1"] = {"type": "score", "probabilities": {"0": 0, "1": 0, "2": 0, "3": 0, "4": 0}}
+        return reply
+
+    monkeypatch.setattr(jev_engine, "http_transport", lambda api_key, url, **kw: blank_sq1)
+    run = domain.execute_simulation_run(
+        settings=settings, audience_payload={"state": "California", "age_min": 30, "age_max": 60, "homeowner_only": True},
+        survey_payload=survey, experiment_payload={"sample_size": 3, "selected_models": ["typesafe/jev"], "experiment_mode": "split",
+                                                   "reruns_per_persona": 1},
+        product_payload=None, market_payload=None, geography_context=None)
+    assert {record["question_id"] for record in run["response_records"]} == {"Q1"}
+    assert "Jev gave no usable answer for some questions, so they are left blank: SQ1 (3 of 3 respondents)." in run["warnings"]

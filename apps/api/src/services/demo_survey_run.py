@@ -49,7 +49,7 @@ def build_demo_run_result(*, survey_payload: Dict[str, Any], experiment_payload:
                 continue
             records.append({"respondent_id": respondent["respondent_id"], "model": respondent["model"], "experiment_mode": "split",
                             "survey_title": survey_title, "question_id": question["id"], "question_text": question.get("text") or "",
-                            "question_type": question.get("question_type") or "", "answer": answer, "segment_label": None,
+                            "question_type": question.get("question_type") or "", "answer": copy.deepcopy(answer), "segment_label": None,
                             "run_id": run_id, "is_fallback": False})
     warnings = [DEMO_WARNING, REASONS.get(reason, REASONS["requested"])]
     if detail:
