@@ -26,3 +26,18 @@ export function isDemoGenerationMode(mode: string | null | undefined): boolean {
 export function runErrorNote(message: string): string | null {
   return message.includes("requires a live run") ? ADDED_QUESTIONS_NOT_IN_DEMO : null;
 }
+
+export const LLM_INSIGHTS_HEADER = {
+  title: "LLM-Summarized Insights",
+  description:
+    "These insights are summarized by the LLM from the synthetic survey responses and include a reliability confidence read, while the detailed view below shows the supporting signals, segments, and confidence context.",
+};
+export const DEMO_INSIGHTS_HEADER = {
+  title: "Preloaded Demo Insights",
+  description: "Rule-based insights from the preloaded demo answers (no AI).",
+};
+
+/** The Insights section header: a preloaded demo is never described as summarized by the LLM. */
+export function insightsHeader(generationMode: string | null | undefined): { title: string; description: string } {
+  return isDemoGenerationMode(generationMode) ? DEMO_INSIGHTS_HEADER : LLM_INSIGHTS_HEADER;
+}

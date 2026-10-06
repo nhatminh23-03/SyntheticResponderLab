@@ -8,6 +8,7 @@ import { HorizontalBarChart } from "@/components/charts/horizontal-bar-chart";
 import { LadderChart } from "@/components/charts/ladder-chart";
 import { ModelDifferenceChart as InsightsModelDifferenceChart } from "@/components/charts/model-difference-chart";
 import { formatAnswerSourcing } from "@/lib/answer-sourcing";
+import { insightsHeader } from "@/lib/demo-run";
 import { BadgeChip } from "@/components/ui/badge-chip";
 import { Button } from "@/components/ui/button";
 import { GlassPanel } from "@/components/ui/glass-panel";
@@ -116,6 +117,7 @@ export function InsightsSection() {
     [insights]
   );
   const llmSummary = insights?.llm_summary;
+  const header = insightsHeader(insights?.run?.generation_mode);
   const evidenceCount = insights?.evidence_package?.items?.length ?? 0;
 
   return (
@@ -126,8 +128,8 @@ export function InsightsSection() {
             <SectionHeader
               index={9}
               eyebrow="Insights"
-              title="LLM-Summarized Insights"
-              description="These insights are summarized by the LLM from the synthetic survey responses and include a reliability confidence read, while the detailed view below shows the supporting signals, segments, and confidence context."
+              title={header.title}
+              description={header.description}
             />
           </RevealOnScroll>
 

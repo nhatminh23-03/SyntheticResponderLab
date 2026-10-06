@@ -11,7 +11,7 @@ import {
   SimulationStabilityResultPayload,
   startSimulationRun,
 } from "@/lib/api";
-import { liveEngineAvailable, type BackendReadinessPayload } from "@/lib/backend-readiness";
+import { demoRunControl, liveRunControl, type BackendReadinessPayload } from "@/lib/backend-readiness";
 import { demoBannerLines, describeDemoRun, runErrorNote } from "@/lib/demo-run";
 import { describeRunEvidence } from "@/lib/run-evidence";
 import { describeRunCounts } from "@/lib/run-counts";
@@ -181,7 +181,11 @@ export function RunSimulationSection() {
   const demoLines = demoBannerLines(latestRun?.result);
   // The demo banner already shows every warning of a demo run, so the warnings panel would repeat them.
   const latestRunWarnings = demoRun ? [] : latestRun?.result?.warnings ?? [];
-  const liveReady = Boolean(readiness?.ready) && liveEngineAvailable(readiness);
+  // Label and enablement follow the study's saved models and the key each plan needs; the demo needs an API new
+  // enough to honour `source` (it reports `providers`).
+  const liveControl = liveRunControl(study?.experiment?.value?.selected_models, readiness);
+  const demoControl = demoRunControl(readiness);
+  const runHints = [liveControl.hint, demoControl.hint].filter((hint): hint is string => Boolean(hint));
   const latestParseWarnings = latestRun?.result?.survey_parse_warnings ?? [];
   const allPersonas = latestRun?.result?.personas ?? [];
   const runCounts = useMemo(
@@ -344,17 +348,17 @@ export function RunSimulationSection() {
                 <Button
                   onClick={() => handleRunStudy("live")}
                   disabled={
-                    !runReady || isRunning || isCreatingStudy || isHydratingStudy || !liveReady
+                    !runReady || isRunning || isCreatingStudy || isHydratingStudy || !liveControl.enabled
                   }
                 >
-                  {isRunning && activeSource === "live"
-                    ? "Running live..."
-                    : `Run live${readiness?.providers?.jev ? " (Jev)" : ""}`}
+                  {isRunning && activeSource === "live" ? "Running live..." : liveControl.label}
                 </Button>
                 <Button
                   variant="secondary"
                   onClick={() => handleRunStudy("demo")}
-                  disabled={!runReady || isRunning || isCreatingStudy || isHydratingStudy}
+                  disabled={
+                    !runReady || isRunning || isCreatingStudy || isHydratingStudy || !demoControl.enabled
+                  }
                 >
                   {isRunning && activeSource === "demo"
                     ? "Loading demo..."
@@ -369,14 +373,14 @@ export function RunSimulationSection() {
                 </Button>
               </div>
 
-              {readinessChecked && !liveReady ? (
-                <p className="mt-3 text-sm leading-6 text-app-muted">
-                  {readiness === null
-                    ? "Could not check which AI engines this server has. Use the preloaded demo, or reload to try again."
-                    : readiness.ready
-                      ? "No AI key on this server — use the preloaded demo."
-                      : "The backend is not ready yet, so Run live is unavailable. Use the preloaded demo, or try again in a moment."}
-                </p>
+              {readinessChecked && runHints.length > 0 ? (
+                <div className="mt-3 space-y-1">
+                  {runHints.map((hint) => (
+                    <p key={hint} className="text-sm leading-6 text-app-muted">
+                      {hint}
+                    </p>
+                  ))}
+                </div>
               ) : null}
 
               <div className="mt-5">

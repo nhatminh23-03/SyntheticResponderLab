@@ -688,6 +688,7 @@ export type InsightsPayload = {
     models_used?: string[];
     requested_responses?: number;
     generated_responses?: number;
+    generation_mode?: string | null;
   };
   executive_summary?: {
     top_use_case?: {

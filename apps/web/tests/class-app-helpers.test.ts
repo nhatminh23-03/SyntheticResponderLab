@@ -3,8 +3,15 @@ import assert from "node:assert/strict";
 
 import { JEV_MODEL_ID, normalizeSelectedModels, selectedModelsProblem, toggleModel } from "../src/lib/experiment-models";
 import { DEFAULT_LIKERT_ANCHORS, isStudentQuestion, toAddQuestionPayload, validateAddedQuestion } from "../src/lib/survey-question-form";
-import { demoBannerLines, describeDemoRun, isDemoGenerationMode, runErrorNote } from "../src/lib/demo-run";
-import { liveEngineAvailable, toBackendReadinessPayload } from "../src/lib/backend-readiness";
+import { demoBannerLines, describeDemoRun, insightsHeader, isDemoGenerationMode, runErrorNote } from "../src/lib/demo-run";
+import {
+  DEMO_NEEDS_UPDATED_API,
+  STUDY_MODELS_NEED_A_KEY,
+  demoRunControl,
+  liveEngineAvailable,
+  liveRunControl,
+  toBackendReadinessPayload,
+} from "../src/lib/backend-readiness";
 
 test("Jev and other models are mutually exclusive", () => {
   assert.deepEqual(toggleModel(["openai/gpt-4o-mini"], JEV_MODEL_ID), [JEV_MODEL_ID]);
@@ -81,5 +88,79 @@ test("a run is a preloaded demo only when its generation_mode says so", () => {
   assert.equal(isDemoGenerationMode("demo_preloaded"), true);
   for (const mode of ["jev_live", "openrouter_live", "mock", "", null, undefined]) {
     assert.equal(isDemoGenerationMode(mode), false);
+  }
+});
+
+test("an option or label longer than 120 characters is refused, like the API", () => {
+  const message = "Each option or label can be at most 120 characters.";
+  assert.equal(validateAddedQuestion({ text: "Pick a colour", questionType: "single_choice", options: ["Oak", "x".repeat(121)] }), message);
+  assert.equal(
+    validateAddedQuestion({ text: "Rate the roof", questionType: "likert", options: ["a", "b", "y".repeat(121), "d", "e"] }),
+    message
+  );
+  // Counted after trimming, as the API does.
+  assert.equal(validateAddedQuestion({ text: "Pick a colour", questionType: "single_choice", options: ["  " + "z".repeat(120) + "  ", "Oak"] }), null);
+});
+
+const READY = (providers?: { jev: boolean; openrouter: boolean }) =>
+  toBackendReadinessPayload(200, { data: { status: "ok", ...(providers ? { providers } : {}) } });
+
+test("Run live says (Jev) only when the study is saved to run on Jev alone", () => {
+  const both = READY({ jev: true, openrouter: true });
+  assert.equal(liveRunControl([JEV_MODEL_ID], both).label, "Run live (Jev)");
+  assert.equal(liveRunControl(["openai/gpt-4o-mini", "anthropic/claude-sonnet-4.5"], both).label, "Run live");
+  assert.equal(liveRunControl([JEV_MODEL_ID, "openai/gpt-4o-mini"], both).label, "Run live");
+  assert.equal(liveRunControl(undefined, both).label, "Run live");
+});
+
+test("Run live is enabled only when the server has the key the study's plan needs", () => {
+  assert.deepEqual(liveRunControl([JEV_MODEL_ID], READY({ jev: true, openrouter: false })), { label: "Run live (Jev)", enabled: true, hint: null });
+  assert.deepEqual(liveRunControl(["a", "b"], READY({ jev: false, openrouter: true })), { label: "Run live", enabled: true, hint: null });
+  for (const [models, providers] of [
+    [[JEV_MODEL_ID], { jev: false, openrouter: true }],
+    [["a", "b"], { jev: true, openrouter: false }],
+  ] as const) {
+    const control = liveRunControl([...models], READY(providers));
+    assert.equal(control.enabled, false);
+    assert.equal(control.hint, STUDY_MODELS_NEED_A_KEY);
+  }
+  assert.equal(
+    STUDY_MODELS_NEED_A_KEY,
+    "This study's models need a key this server does not have — use the preloaded demo or switch models in the Experiment step."
+  );
+  assert.deepEqual(liveRunControl(["a", "b"], READY({ jev: false, openrouter: false })), {
+    label: "Run live", enabled: false, hint: "No AI key on this server — use the preloaded demo.",
+  });
+});
+
+test("Run live stays off while the backend is unknown, not ready, or too old to report its engines", () => {
+  assert.equal(liveRunControl([JEV_MODEL_ID], null).enabled, false);
+  assert.match(liveRunControl([JEV_MODEL_ID], null).hint ?? "", /Could not check/);
+  const waking = toBackendReadinessPayload(503, null);
+  assert.equal(liveRunControl([JEV_MODEL_ID], waking).enabled, false);
+  assert.match(liveRunControl([JEV_MODEL_ID], waking).hint ?? "", /not ready yet/);
+  const failedButNew = toBackendReadinessPayload(200, { data: { status: "failed", providers: { jev: true, openrouter: true } } });
+  assert.equal(liveRunControl([JEV_MODEL_ID], failedButNew).enabled, false);
+  assert.equal(liveRunControl(["a", "b"], READY()).enabled, false);
+});
+
+test("the demo button needs an API that reports its engines (new enough to honour source)", () => {
+  assert.deepEqual(demoRunControl(READY({ jev: false, openrouter: false })), { enabled: true, hint: null });
+  assert.deepEqual(demoRunControl(READY({ jev: true, openrouter: true })), { enabled: true, hint: null });
+  assert.deepEqual(demoRunControl(READY()), { enabled: false, hint: "Demo needs the updated API." });
+  assert.equal(DEMO_NEEDS_UPDATED_API, "Demo needs the updated API.");
+  // Not ready yet, but the (new) API reported its engines: the demo still works.
+  assert.equal(demoRunControl(toBackendReadinessPayload(200, { data: { status: "failed", providers: { jev: false, openrouter: false } } })).enabled, true);
+  // Unknown or waking: off, and the Run live hint explains why.
+  assert.equal(demoRunControl(null).enabled, false);
+  assert.equal(demoRunControl(toBackendReadinessPayload(503, null)).enabled, false);
+});
+
+test("the Insights header never says the LLM summarized a preloaded demo", () => {
+  const demo = insightsHeader("demo_preloaded");
+  assert.equal(demo.description, "Rule-based insights from the preloaded demo answers (no AI).");
+  assert.doesNotMatch(`${demo.title} ${demo.description}`, /LLM/);
+  for (const mode of ["jev_live", "openrouter_live", null, undefined]) {
+    assert.match(insightsHeader(mode).description, /summarized by the LLM/);
   }
 });
