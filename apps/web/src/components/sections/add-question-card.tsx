@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { TextInput } from "@/components/ui/form-controls";
 import { GlassPanel } from "@/components/ui/glass-panel";
 import { addSurveyQuestion, removeSurveyQuestion } from "@/lib/api";
+import { useDemoMode } from "@/lib/demo-mode";
+import { DEMO_ADDED_QUESTIONS_NOTE } from "@/lib/survey-demo-lock";
 import {
   DEFAULT_LIKERT_ANCHORS,
   isStudentQuestion,
@@ -27,6 +29,7 @@ export function AddQuestionCard({
   questions: Question[];
   onChanged: () => Promise<unknown> | void;
 }) {
+  const [demoOn] = useDemoMode();
   const [text, setText] = useState("");
   const [questionType, setQuestionType] = useState<AddedQuestionType>("likert");
   const [options, setOptions] = useState<string[]>([...DEFAULT_LIKERT_ANCHORS]);
@@ -80,6 +83,7 @@ export function AddQuestionCard({
         <p className="text-sm leading-6 text-app-muted">
           Jev answers questions with listed options: a 1–5 scale or a single choice.
         </p>
+        {demoOn ? <p className="text-sm leading-6 text-app-muted">{DEMO_ADDED_QUESTIONS_NOTE}</p> : null}
         <textarea
           aria-label="Question text"
           className="w-full rounded-2xl border px-4 py-3 text-sm text-app-text outline-none transition placeholder:text-app-muted/50 [background:var(--control-bg)] [border-color:var(--control-border)] focus:[border-color:var(--color-border-strong)] focus:[background:var(--control-bg-hover)] focus:[box-shadow:var(--focus-ring-shadow)]"

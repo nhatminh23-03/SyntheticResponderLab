@@ -2061,10 +2061,15 @@ export async function getAnalysis(
   return result.data?.analysis ?? { available: false };
 }
 
-export async function getInsights(studyId: string) {
+/** Adds `?ai=false` for the Demo (no AI) switch; without it the request is exactly as before. */
+function aiQuery(options?: { ai?: boolean }) {
+  return options?.ai === false ? "?ai=false" : "";
+}
+
+export async function getInsights(studyId: string, options?: { ai?: boolean }) {
   const apiBaseUrl = getApiBaseUrl();
 
-  const response = await fetch(`${apiBaseUrl}/api/v1/studies/${studyId}/insights`, {
+  const response = await fetch(`${apiBaseUrl}/api/v1/studies/${studyId}/insights${aiQuery(options)}`, {
     method: "GET",
     headers: {
       Accept: "application/json",
@@ -2248,11 +2253,12 @@ export async function saveResearchBrief(
 }
 
 export async function getInterviewInsights(
-  studyId: string
+  studyId: string,
+  options?: { ai?: boolean }
 ): Promise<InterviewInsightsPayload> {
   const apiBaseUrl = getApiBaseUrl();
   const response = await fetch(
-    `${apiBaseUrl}/api/v1/studies/${studyId}/interview/insights`,
+    `${apiBaseUrl}/api/v1/studies/${studyId}/interview/insights${aiQuery(options)}`,
     { method: "GET", headers: { Accept: "application/json" }, cache: "no-store" }
   );
   if (!response.ok) {

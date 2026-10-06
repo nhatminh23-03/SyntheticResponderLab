@@ -3,6 +3,8 @@
 import { useRef, useState } from "react";
 
 import { acceptGeneratedSurvey, generateSurvey } from "@/lib/api";
+import { useDemoMode } from "@/lib/demo-mode";
+import { DEMO_AI_ACTION_NOTE, demoSwitchOn, isSurveyActionLocked, refuseIfDemoLocked } from "@/lib/survey-demo-lock";
 import { cn } from "@/lib/utils";
 import { BadgeChip } from "@/components/ui/badge-chip";
 import { Button } from "@/components/ui/button";
@@ -39,6 +41,9 @@ export function SurveyGeneratorPanel({
   onAccepted,
   onEnsureStudy,
 }: SurveyGeneratorPanelProps) {
+  const [demoOn] = useDemoMode();
+  // Drafting and revising call the AI; opening the panel, discarding and saving a draft do not.
+  const generationLocked = isSurveyActionLocked("survey_generate", demoOn);
   const [questionCount, setQuestionCount] = useState(String(DEFAULT_QUESTIONS));
   const [instruction, setInstruction] = useState("");
   const [turns, setTurns] = useState<ChatTurn[]>([]);
@@ -59,6 +64,12 @@ export function SurveyGeneratorPanel({
   const isBusy = isGenerating || isAccepting || disabled;
 
   async function runGeneration(nextInstruction: string | null) {
+    const refused = refuseIfDemoLocked("survey_generate", demoSwitchOn(demoOn));
+    if (refused) {
+      setError(refused);
+      return;
+    }
+
     if (!countIsValid) {
       setError(`Question count must be between ${MIN_QUESTIONS} and ${MAX_QUESTIONS}.`);
       return;
@@ -171,7 +182,7 @@ export function SurveyGeneratorPanel({
             <div className="flex flex-wrap gap-3">
               <Button
                 onClick={() => runGeneration(null)}
-                disabled={isBusy || !countIsValid}
+                disabled={isBusy || !countIsValid || generationLocked}
               >
                 {isGenerating
                   ? "Generating..."
@@ -191,6 +202,10 @@ export function SurveyGeneratorPanel({
             <p className="text-xs leading-5 text-app-gold">
               Enter a number between {MIN_QUESTIONS} and {MAX_QUESTIONS}.
             </p>
+          ) : null}
+
+          {generationLocked ? (
+            <p className="text-sm leading-6 text-app-muted">{DEMO_AI_ACTION_NOTE}</p>
           ) : null}
 
           {turns.length > 0 ? (
@@ -235,7 +250,7 @@ export function SurveyGeneratorPanel({
                 <Button
                   variant="secondary"
                   onClick={() => runGeneration(instruction.trim())}
-                  disabled={isBusy || !instruction.trim()}
+                  disabled={isBusy || !instruction.trim() || generationLocked}
                 >
                   {isGenerating ? "Revising..." : "Send"}
                 </Button>

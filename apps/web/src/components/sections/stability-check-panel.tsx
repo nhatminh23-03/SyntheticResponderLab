@@ -8,6 +8,8 @@ import {
   SimulationStabilityResultPayload,
   startStabilityCheck,
 } from "@/lib/api";
+import { useDemoMode } from "@/lib/demo-mode";
+import { DEMO_AI_ACTION_NOTE, demoSwitchOn, isSurveyActionLocked, refuseIfDemoLocked } from "@/lib/survey-demo-lock";
 import { cn } from "@/lib/utils";
 import { BadgeChip } from "@/components/ui/badge-chip";
 import { Button } from "@/components/ui/button";
@@ -26,6 +28,8 @@ const EMPTY_STATUS: StatusState = {
 };
 
 export function StabilityCheckPanel({ studyId }: { studyId?: string | null }) {
+  const [demoOn] = useDemoMode();
+  const locked = isSurveyActionLocked("stability_check", demoOn);
   const [latestStabilityCheck, setLatestStabilityCheck] =
     useState<SimulationJobPayload<SimulationStabilityResultPayload> | null>(null);
   const [status, setStatus] = useState<StatusState>(EMPTY_STATUS);
@@ -72,6 +76,13 @@ export function StabilityCheckPanel({ studyId }: { studyId?: string | null }) {
   }, [studyId]);
 
   async function handleRunStabilityCheck() {
+    // Repeated live runs: the Demo (no AI) switch refuses them here too, not only through the disabled button.
+    const refused = refuseIfDemoLocked("stability_check", demoSwitchOn(demoOn));
+    if (refused) {
+      setStatus({ tone: "warning", message: refused });
+      return;
+    }
+
     if (!studyId) {
       setStatus({
         tone: "warning",
@@ -125,10 +136,11 @@ export function StabilityCheckPanel({ studyId }: { studyId?: string | null }) {
             max={5}
             onChange={setRepeatRuns}
           />
-          <Button variant="secondary" onClick={handleRunStabilityCheck} disabled={isRunning}>
+          <Button variant="secondary" onClick={handleRunStabilityCheck} disabled={isRunning || locked}>
             {isRunning ? "Running Stability Check..." : "Run Stability Check"}
           </Button>
         </div>
+        {locked ? <p className="mt-3 text-sm leading-6 text-app-muted">{DEMO_AI_ACTION_NOTE}</p> : null}
 
         <div className="mt-5">
           <StatusBanner tone={status.tone} message={status.message} />

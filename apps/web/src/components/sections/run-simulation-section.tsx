@@ -20,6 +20,13 @@ import {
   type BackendReadinessPayload,
 } from "@/lib/backend-readiness";
 import { demoBannerLines, describeDemoRun, runErrorNote } from "@/lib/demo-run";
+import { useDemoMode } from "@/lib/demo-mode";
+import {
+  applyDemoLockToRunControls,
+  DEMO_RUN_LIVE_NOTE,
+  demoSwitchOn,
+  refuseIfDemoLocked,
+} from "@/lib/survey-demo-lock";
 import { describeRunEvidence } from "@/lib/run-evidence";
 import { describeRunCounts } from "@/lib/run-counts";
 import { cn } from "@/lib/utils";
@@ -80,6 +87,7 @@ export function RunSimulationSection() {
     refreshStudy,
   } = useStudy();
   const { scrollToSection, setNavigationLocked } = useSectionRegistry();
+  const [demoOn] = useDemoMode();
   const [latestRun, setLatestRun] =
     useState<SimulationJobPayload<SimulationRunResultPayload> | null>(null);
   const [latestStabilityCheck, setLatestStabilityCheck] =
@@ -208,9 +216,12 @@ export function RunSimulationSection() {
   // The demo banner already shows every warning of a demo run, so the warnings panel would repeat them.
   const latestRunWarnings = demoRun ? [] : latestRun?.result?.warnings ?? [];
   // Label and enablement follow the study's saved models and the key each plan needs; the demo needs an API new
-  // enough to honour `source` (it reports `providers`).
-  const liveControl = liveRunControl(study?.experiment?.value?.selected_models, readiness);
-  const demoControl = demoRunControl(readiness);
+  // enough to honour `source` (it reports `providers`). The app-wide Demo (no AI) switch locks Run live on top of that.
+  const { live: liveControl, demo: demoControl } = applyDemoLockToRunControls(
+    demoOn,
+    liveRunControl(study?.experiment?.value?.selected_models, readiness),
+    demoRunControl(readiness)
+  );
   const runHints = isWaitingForServer
     ? [WAKING_SERVER_HINT]
     : [liveControl.hint, demoControl.hint].filter((hint): hint is string => Boolean(hint));
@@ -272,6 +283,13 @@ export function RunSimulationSection() {
   }
 
   async function handleRunStudy(source: RunSource = "live") {
+    // The Demo (no AI) switch refuses a live run here too, not only through the disabled button. The demo still runs.
+    const locked = source === "live" ? refuseIfDemoLocked("run_live", demoSwitchOn(demoOn)) : null;
+    if (locked) {
+      setStatus({ tone: "warning", message: locked });
+      return;
+    }
+
     if (!runReady) {
       setStatus(readinessBanner);
       return;
@@ -417,6 +435,10 @@ export function RunSimulationSection() {
                   {isClearing ? "Clearing..." : "Clear Saved Simulation Result"}
                 </Button>
               </div>
+
+              {demoOn ? (
+                <p className="mt-3 text-sm leading-6 text-app-muted">{DEMO_RUN_LIVE_NOTE}</p>
+              ) : null}
 
               {readinessChecked && runHints.length > 0 ? (
                 <div className="mt-3 space-y-1">
