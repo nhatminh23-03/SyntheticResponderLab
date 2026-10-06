@@ -36,8 +36,21 @@ export const DEMO_INSIGHTS_HEADER = {
   title: "Preloaded Demo Insights",
   description: "Rule-based insights from the preloaded demo answers (no AI).",
 };
+/** A live run whose AI summary was not generated (the Demo (no AI) switch); the summary box below says why. */
+export const NO_AI_SUMMARY_INSIGHTS_HEADER = {
+  title: "Rule-Based Insights",
+  description:
+    "Rule-based insights from the synthetic survey responses: the detailed view below shows the supporting signals, segments, and confidence context.",
+};
 
-/** The Insights section header: a preloaded demo is never described as summarized by the LLM. */
-export function insightsHeader(generationMode: string | null | undefined): { title: string; description: string } {
-  return isDemoGenerationMode(generationMode) ? DEMO_INSIGHTS_HEADER : LLM_INSIGHTS_HEADER;
+/**
+ * The Insights section header: a preloaded demo is never described as summarized by the LLM, and neither is a live
+ * run whose AI summary was withheld.
+ */
+export function insightsHeader(
+  generationMode: string | null | undefined,
+  options: { aiSummaryWithheld?: boolean } = {}
+): { title: string; description: string } {
+  if (isDemoGenerationMode(generationMode)) return DEMO_INSIGHTS_HEADER;
+  return options.aiSummaryWithheld ? NO_AI_SUMMARY_INSIGHTS_HEADER : LLM_INSIGHTS_HEADER;
 }

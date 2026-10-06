@@ -92,6 +92,13 @@ export function SurveyGeneratorPanel({
         throw new Error("No study is available yet.");
       }
 
+      // The switch can be turned on while a new study is being created: read it again before the AI is called.
+      const refusedAfterSave = refuseIfDemoLocked("survey_generate", demoSwitchOn(demoOn));
+      if (refusedAfterSave) {
+        setError(refusedAfterSave);
+        return;
+      }
+
       const result = await generateSurvey(resolvedStudyId, {
         question_count: parsedCount,
         instructions: nextInstruction,

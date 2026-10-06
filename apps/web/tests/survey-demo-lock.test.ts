@@ -6,20 +6,23 @@ import ts from "typescript";
 
 import * as demoMode from "../src/lib/demo-mode";
 import {
+  ADDED_QUESTION_STATUS,
   DEMO_ADDED_QUESTIONS_NOTE,
   DEMO_AI_ACTION_NOTE,
   DEMO_RUN_LIVE_NOTE,
   SURVEY_AI_ACTIONS,
+  addedQuestionStatus,
   aiReadOptions,
   applyDemoLockToRunControls,
   demoSwitchOn,
+  isAiSummaryWithheld,
   isSurveyActionLocked,
   refuseIfDemoLocked,
 } from "../src/lib/survey-demo-lock";
+import { DEMO_INSIGHTS_HEADER, LLM_INSIGHTS_HEADER, NO_AI_SUMMARY_INSIGHTS_HEADER, insightsHeader } from "../src/lib/demo-run";
 import { demoRunControl, liveRunControl, type BackendReadinessPayload } from "../src/lib/backend-readiness";
 import { getInsights, getInterviewInsights } from "../src/lib/api";
 // The section harness below loads these real helpers by their "@/lib/..." names, so they must be compiled too.
-import "../src/lib/demo-run";
 import "../src/lib/run-evidence";
 import "../src/lib/run-counts";
 import "../src/lib/utils";
@@ -62,6 +65,13 @@ function switchSetTo(on: boolean) {
 async function withSwitch(on: boolean, body: (win: Record<string, unknown>) => Promise<void> | void) {
   const sw = switchSetTo(on);
   try { await body(sw.win); } finally { sw.restore(); }
+}
+
+/** A request the test holds open, so the switch can be turned on while a click waits on it. */
+function held() {
+  let release!: () => void;
+  const promise = new Promise<void>((done) => { release = done; });
+  return { promise, release };
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -255,13 +265,13 @@ function mountSection(
   };
 }
 
-function studyContext(study: Record<string, unknown>) {
+function studyContext(study: Record<string, unknown>, overrides: { createOrLoadStudy?: () => Promise<string> } = {}) {
   return {
     "@/providers/study-provider": {
       useStudy: () => ({
         studyId: "std_1",
         study,
-        createOrLoadStudy: async () => "std_1",
+        createOrLoadStudy: overrides.createOrLoadStudy ?? (async () => "std_1"),
         isCreatingStudy: false,
         isHydratingStudy: false,
         refreshStudy: async () => undefined,
@@ -285,8 +295,17 @@ const READY_STUDY = {
 function mountRunStep() {
   const runs: string[] = [];
   const fetches: string[] = [];
+  // Set one of these to hold the next readiness check or study save open.
+  const holds: { readiness: Promise<void> | null; study: Promise<void> | null } = { readiness: null, study: null };
+  const studySaves: string[] = [];
   const ui = mountSection("run-simulation-section.tsx", "RunSimulationSection", {
-    ...studyContext(READY_STUDY),
+    ...studyContext(READY_STUDY, {
+      createOrLoadStudy: async () => {
+        studySaves.push("std_1");
+        if (holds.study) await holds.study;
+        return "std_1";
+      },
+    }),
     "@/lib/api": {
       clearLatestSimulationRun: async () => ({}),
       getLatestSimulationRun: async () => null,
@@ -299,10 +318,11 @@ function mountRunStep() {
   }, {
     fetch: async (url: string) => {
       fetches.push(url);
+      if (holds.readiness) await holds.readiness;
       return { json: async () => READY };
     },
   });
-  return { ui, runs, fetches };
+  return { ui, runs, fetches, holds, studySaves };
 }
 
 test("switch on: the Run step shows Run live disabled with its note, the demo enabled, and runs nothing by itself", async () => {
@@ -416,18 +436,29 @@ test("switch on: survey generation is locked and refused when called directly", 
   });
 });
 
-function mountInterviewRun(studyMode: string) {
+function mountInterviewRun(
+  studyMode: string,
+  options: { savedQuestions?: { id: string; text: string }[]; saveHold?: Promise<void> } = {}
+) {
   const runs: unknown[] = [];
+  const saves: unknown[] = [];
   const ui = mountSection("interview-synthesis-section.tsx", "InterviewSynthesisSection", {
     ...studyContext({ ...READY_STUDY, study_mode: { status: "saved", value: studyMode } }),
     "@/lib/api": {
-      getInterviewSynthesis: async () => ({ latest_run: null, value: null }),
+      getInterviewSynthesis: async () => ({
+        latest_run: null,
+        value: options.savedQuestions ? { questions: options.savedQuestions } : null,
+      }),
       getLatestInterviewRun: async () => null,
-      saveInterviewSynthesisConfig: async () => ({}),
+      saveInterviewSynthesisConfig: async (_studyId: string, payload: unknown) => {
+        saves.push(payload);
+        if (options.saveHold) await options.saveHold;
+        return {};
+      },
       startInterviewRun: async (_studyId: string, payload: unknown) => { runs.push(payload); return { status: "completed" }; },
     },
   });
-  return { ui, runs };
+  return { ui, runs, saves };
 }
 
 test("switch on: a custom study's interview run is locked and refused when called directly", async () => {
@@ -517,4 +548,248 @@ test("switch on: the add-question card keeps adding questions and says they need
     });
   }
   assert.equal(DEMO_ADDED_QUESTIONS_NOTE, "Added questions need a live run — turn Demo off at the top of the page to answer them.");
+});
+
+// ---------------------------------------------------------------------------------------------------------------------
+// The switch turned on while a click is already waiting on the server: nothing reaches a provider after that
+// ---------------------------------------------------------------------------------------------------------------------
+
+test("switch turned on while Run live waits on its readiness check: no live run is posted", async () => {
+  await withSwitch(false, async () => {
+    const { ui, runs, holds, studySaves } = mountRunStep();
+    await ui.settle();
+    const readiness = held();
+    holds.readiness = readiness.promise;
+
+    const click = ui.button("Run live").props.onClick();
+    ui.render();
+    assert.ok(ui.text().includes("Running live..."));
+    demoMode.setDemoMode(true);   // the student turns Demo on at the top of the page while the click waits
+    readiness.release();
+    await click;
+    await ui.settle();
+
+    assert.deepEqual(runs, []);
+    assert.deepEqual(studySaves, []);   // refused right after the readiness check, before anything else is sent
+    assert.ok(ui.nodes().some((node) => node.props?.message === DEMO_RUN_LIVE_NOTE));
+    assert.ok(!ui.text().includes("Running live..."));
+    assert.equal(ui.button("Run live").props.disabled, true);
+    assert.equal(ui.button("Show preloaded demo (no AI)").props.disabled, false);
+  });
+});
+
+test("switch turned on while Run live waits on the study save: no live run is posted", async () => {
+  await withSwitch(false, async () => {
+    const { ui, runs, holds } = mountRunStep();
+    await ui.settle();
+    const save = held();
+    holds.study = save.promise;
+
+    const click = ui.button("Run live").props.onClick();
+    await new Promise((done) => setImmediate(done));   // past the readiness check, now waiting on the study save
+    ui.render();
+    assert.ok(ui.text().includes("Running live..."));
+    demoMode.setDemoMode(true);
+    save.release();
+    await click;
+    await ui.settle();
+
+    assert.deepEqual(runs, []);
+    assert.ok(ui.nodes().some((node) => node.props?.message === DEMO_RUN_LIVE_NOTE));
+    assert.ok(!ui.text().includes("Running live..."));
+    assert.ok(!ui.text().includes("Execution progress"));
+
+    // The demo still runs on its click afterwards.
+    holds.study = null;
+    await ui.button("Show preloaded demo (no AI)").props.onClick();
+    await ui.settle();
+    assert.deepEqual(runs, ["demo"]);
+  });
+});
+
+test("switch left off while Run live waits: the live run goes ahead as before", async () => {
+  await withSwitch(false, async () => {
+    const { ui, runs, holds } = mountRunStep();
+    await ui.settle();
+    const readiness = held();
+    holds.readiness = readiness.promise;
+    const click = ui.button("Run live").props.onClick();
+    readiness.release();
+    await click;
+    await ui.settle();
+    assert.deepEqual(runs, ["live"]);
+  });
+});
+
+test("switch turned on while a custom study's interview questions are saving: the interview models are not called", async () => {
+  await withSwitch(false, async () => {
+    const save = held();
+    const { ui, runs, saves } = mountInterviewRun("general", {
+      savedQuestions: [{ id: "IQ1", text: "How would you use a backyard studio?" }],
+      saveHold: save.promise,
+    });
+    await ui.settle();
+    ui.button("Custom questions").props.onClick();   // open the config panel, so the run saves the questions first
+    ui.render();
+
+    const click = ui.button("Run Interviews").props.onClick();
+    assert.equal(saves.length, 1);
+    demoMode.setDemoMode(true);
+    save.release();
+    await click;
+    await ui.settle();
+
+    assert.deepEqual(runs, []);
+    assert.ok(ui.text().includes(DEMO_AI_ACTION_NOTE));
+    assert.equal(ui.button("Run Interviews").props.disabled, true);
+  });
+});
+
+test("switch turned on while product autofill or image analysis waits on the study save: neither provider is called", async () => {
+  await withSwitch(false, async () => {
+    const calls: string[] = [];
+    let hold: Promise<void> | null = null;
+    const study = { ...READY_STUDY, product: { status: "not_started" }, product_enrichments: {} };
+    const ui = mountSection("product-section.tsx", "ProductSection", {
+      ...studyContext(study, {
+        createOrLoadStudy: async () => {
+          if (hold) await hold;
+          return "std_1";
+        },
+      }),
+      "@/lib/api": {
+        runProductUrlAutofill: async () => { calls.push("url"); return {}; },
+        runProductImageAnalysis: async () => { calls.push("image"); return {}; },
+        saveProduct: async () => ({}),
+      },
+    });
+    await ui.settle();
+    ui.find((node) => node.type === "TextInput" && node.props.placeholder === "https://example.com/product", "URL input")
+      .props.onChange("https://example.com/tahoe-mini");
+    ui.find((node) => node.type === "input" && node.props.type === "file", "image upload input")
+      .props.onChange({ target: { files: [new File(["png"], "studio.png", { type: "image/png" })] } });
+    await ui.settle();
+
+    const urlSave = held();
+    hold = urlSave.promise;
+    const autofill = ui.button("Autofill from URL").props.onClick();
+    demoMode.setDemoMode(true);
+    urlSave.release();
+    await autofill;
+    await ui.settle();
+    assert.deepEqual(calls, []);
+    // The status line (a plain div here) now carries the lock note instead of "Generating draft details from URL...".
+    assert.ok(ui.nodes().some((node) => node.type === "div" && node.props.children === DEMO_AI_ACTION_NOTE));
+    assert.ok(!ui.text().includes("Generating draft details from URL"));
+
+    demoMode.setDemoMode(false);
+    await ui.settle();
+    const imageSave = held();
+    hold = imageSave.promise;
+    const analyze = ui.button("Analyze Image").props.onClick();
+    demoMode.setDemoMode(true);
+    imageSave.release();
+    await analyze;
+    await ui.settle();
+    assert.deepEqual(calls, []);
+    assert.ok(!ui.text().includes("Analyzing product image"));
+  });
+});
+
+test("switch turned on while survey generation waits on the new study: the generator is not called", async () => {
+  await withSwitch(false, async () => {
+    let generated = 0;
+    const ensure = held();
+    const ui = mountSection("survey-generator-panel.tsx", "SurveyGeneratorPanel", {
+      "@/lib/demo-mode": SWITCH_MODULE,
+      "@/lib/api": { generateSurvey: async () => { generated++; return {}; }, acceptGeneratedSurvey: async () => ({}) },
+    }, {
+      props: {
+        studyId: null,
+        onAccepted() {},
+        onEnsureStudy: async () => { await ensure.promise; return "std_1"; },
+      },
+    });
+    ui.button("Open Generator").props.onClick();
+    ui.render();
+    const click = ui.button("Generate Survey").props.onClick();
+    demoMode.setDemoMode(true);
+    ensure.release();
+    await click;
+    await ui.settle();
+    assert.equal(generated, 0);
+    assert.ok(ui.text().includes(DEMO_AI_ACTION_NOTE));
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Wording under the switch: the Insights header and the add-question card
+// ---------------------------------------------------------------------------------------------------------------------
+
+test("insights header: with the switch on and no AI summary, it does not say the LLM summarized the insights", () => {
+  assert.equal(isAiSummaryWithheld(true, false), true);
+  assert.equal(isAiSummaryWithheld(true, undefined), true);
+  assert.equal(isAiSummaryWithheld(true, true), false);    // a cached summary is still served and is still the LLM's
+  assert.equal(isAiSummaryWithheld(false, false), false);  // switch off: unchanged
+
+  const withheld = insightsHeader("jev_live", { aiSummaryWithheld: true });
+  assert.equal(withheld, NO_AI_SUMMARY_INSIGHTS_HEADER);
+  assert.doesNotMatch(`${withheld.title} ${withheld.description}`, /LLM/);
+  // The gold box under it already says no AI summary was generated; the header does not say it again.
+  assert.doesNotMatch(withheld.description, /no AI summary was generated/);
+  assert.equal(insightsHeader("jev_live", { aiSummaryWithheld: false }), LLM_INSIGHTS_HEADER);
+  assert.equal(insightsHeader("jev_live"), LLM_INSIGHTS_HEADER);
+  assert.equal(insightsHeader("demo_preloaded", { aiSummaryWithheld: true }), DEMO_INSIGHTS_HEADER);
+});
+
+test("insights section: the header follows the switch and the summary the server returned", async () => {
+  const noSummary = { available: false, message: "Demo (no AI) is on: no AI summary was generated. Turn Demo off to get one." };
+  const cases = [
+    { on: true, llm: noSummary, title: NO_AI_SUMMARY_INSIGHTS_HEADER.title },
+    { on: true, llm: { available: true, cached: true, overview: "Cached." }, title: LLM_INSIGHTS_HEADER.title },
+    { on: false, llm: { available: false, message: "No key." }, title: LLM_INSIGHTS_HEADER.title },
+  ];
+  for (const { on, llm, title } of cases) {
+    await withSwitch(on, async () => {
+      const ui = mountSection("insights-section.tsx", "InsightsSection", {
+        ...studyContext(READY_STUDY),
+        "@/lib/api": {
+          getInsights: async () => ({ available: false, run: { generation_mode: "jev_live" }, llm_summary: llm }),
+        },
+      });
+      await ui.settle();
+      const header = ui.find((node) => node.type === "SectionHeader", "section header");
+      assert.equal(header.props.title, title, `switch ${on ? "on" : "off"}, summary ${llm.available}`);
+    });
+  }
+});
+
+test("add-question card: with the switch on the success line is just 'Added.'; off it is unchanged", async () => {
+  assert.equal(addedQuestionStatus(ADDED_QUESTION_STATUS, true), "Added.");
+  assert.equal(addedQuestionStatus(ADDED_QUESTION_STATUS, false), "Added. Run live to get answers to it.");
+  assert.equal(addedQuestionStatus("Could not add the question.", true), "Could not add the question.");
+  assert.equal(addedQuestionStatus(null, true), null);
+
+  for (const on of [true, false]) {
+    await withSwitch(on, async () => {
+      const ui = mountSection("add-question-card.tsx", "AddQuestionCard", {
+        "@/lib/demo-mode": SWITCH_MODULE,
+        "@/lib/api": { addSurveyQuestion: async () => ({}), removeSurveyQuestion: async () => ({}) },
+      }, { props: { studyId: "std_1", questions: [], onChanged() {} } });
+      ui.find((node) => node.type === "textarea", "question text").props.onChange({ target: { value: "How likely are you to buy it?" } });
+      ui.render();
+      await ui.button("Add question").props.onClick();
+      await ui.settle();
+      const status = ui.find((node) => node.props?.role === "status", "status line");
+      const shown = String(status.props.children);
+      assert.equal(shown, on ? "Added." : ADDED_QUESTION_STATUS);
+      // The live-run point is made once on the card, by the note, while the switch is on.
+      assert.equal(ui.text().split("live run").length - 1, on ? 1 : 0);
+
+      // Flipping the switch after the add updates the line with it.
+      demoMode.setDemoMode(!on);
+      ui.render();
+      assert.equal(String(ui.find((node) => node.props?.role === "status", "status line").props.children), on ? ADDED_QUESTION_STATUS : "Added.");
+    });
+  }
 });

@@ -296,7 +296,9 @@ export function InterviewSynthesisSection() {
   }
 
   async function handleRun() {
-    const refused = refuseIfDemoLocked("interview_run", demoSwitchOn(demoOn), studyMode);
+    // Read again after the config save: the switch can be turned on while the save is in flight.
+    const refuseRun = () => refuseIfDemoLocked("interview_run", demoSwitchOn(demoOn), studyMode);
+    const refused = refuseRun();
     if (refused) {
       setErrorMsg(refused);
       return;
@@ -309,6 +311,11 @@ export function InterviewSynthesisSection() {
       const questions = customQuestionsText.trim() ? parseQuestions(customQuestionsText) : undefined;
       if (questions !== undefined && showConfig) {
         await saveInterviewSynthesisConfig(studyId, { questions });
+      }
+      const refusedAfterSave = refuseRun();
+      if (refusedAfterSave) {
+        setErrorMsg(refusedAfterSave);
+        return;
       }
       const run = await startInterviewRun(studyId, questions ? { questions } : undefined);
       setLatestRun(run);

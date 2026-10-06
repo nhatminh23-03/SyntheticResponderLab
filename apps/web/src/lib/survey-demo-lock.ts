@@ -39,6 +39,8 @@ export const DEMO_RUN_LIVE_NOTE = `${DEMO_READ_ONLY}. Turn Demo off at the top o
 export const DEMO_AI_ACTION_NOTE = `${DEMO_READ_ONLY}. Turn Demo off at the top of the page to use this.`;
 export const DEMO_ADDED_QUESTIONS_NOTE =
   "Added questions need a live run — turn Demo off at the top of the page to answer them.";
+/** The add-question card's success line with the switch off. */
+export const ADDED_QUESTION_STATUS = "Added. Run live to get answers to it.";
 
 /** The study mode whose interview run is served from seeded transcripts on the server, with no model call. */
 const SEEDED_INTERVIEW_STUDY_MODE = "neo_smart";
@@ -85,4 +87,20 @@ export function applyDemoLockToRunControls<L extends RunControl>(
 /** Options for a read that can call a model on GET: with the switch on, the server serves cached AI output only. */
 export function aiReadOptions(demoOn: boolean): { ai: boolean } {
   return { ai: !demoOn };
+}
+
+/**
+ * True when the switch kept the Insights read from generating an AI summary: it is on and no cached summary came back.
+ * A cached summary is still served with the switch on, and it is still the LLM's.
+ */
+export function isAiSummaryWithheld(demoOn: boolean, llmSummaryAvailable: boolean | null | undefined): boolean {
+  return demoOn && !llmSummaryAvailable;
+}
+
+/**
+ * The add-question card's status line as shown. With the switch on, the success line drops "Run live to get answers to
+ * it": Run live is locked, and the note above the form already says added questions need a live run.
+ */
+export function addedQuestionStatus(message: string | null, demoOn: boolean): string | null {
+  return demoOn && message === ADDED_QUESTION_STATUS ? "Added." : message;
 }

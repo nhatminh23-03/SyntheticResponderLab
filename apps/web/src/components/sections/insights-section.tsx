@@ -10,7 +10,7 @@ import { ModelDifferenceChart as InsightsModelDifferenceChart } from "@/componen
 import { formatAnswerSourcing } from "@/lib/answer-sourcing";
 import { useDemoMode } from "@/lib/demo-mode";
 import { insightsHeader } from "@/lib/demo-run";
-import { aiReadOptions, demoSwitchOn } from "@/lib/survey-demo-lock";
+import { aiReadOptions, demoSwitchOn, isAiSummaryWithheld } from "@/lib/survey-demo-lock";
 import { BadgeChip } from "@/components/ui/badge-chip";
 import { Button } from "@/components/ui/button";
 import { GlassPanel } from "@/components/ui/glass-panel";
@@ -121,7 +121,10 @@ export function InsightsSection() {
     [insights]
   );
   const llmSummary = insights?.llm_summary;
-  const header = insightsHeader(insights?.run?.generation_mode);
+  // With the Demo (no AI) switch on and no cached summary, nothing here was summarized by the LLM.
+  const header = insightsHeader(insights?.run?.generation_mode, {
+    aiSummaryWithheld: isAiSummaryWithheld(demoOn, llmSummary?.available),
+  });
   const evidenceCount = insights?.evidence_package?.items?.length ?? 0;
 
   return (

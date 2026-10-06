@@ -284,7 +284,10 @@ export function RunSimulationSection() {
 
   async function handleRunStudy(source: RunSource = "live") {
     // The Demo (no AI) switch refuses a live run here too, not only through the disabled button. The demo still runs.
-    const locked = source === "live" ? refuseIfDemoLocked("run_live", demoSwitchOn(demoOn)) : null;
+    // The switch can also be turned on while this click waits on the server, so it is read again (from its store)
+    // after each wait, right before the request that would reach a provider.
+    const refuseLiveRun = () => (source === "live" ? refuseIfDemoLocked("run_live", demoSwitchOn(demoOn)) : null);
+    const locked = refuseLiveRun();
     if (locked) {
       setStatus({ tone: "warning", message: locked });
       return;
@@ -303,6 +306,13 @@ export function RunSimulationSection() {
     const fresh = await fetchReadiness();
     setReadiness(fresh);
     setReadinessChecked(true);
+    const lockedAfterCheck = refuseLiveRun();
+    if (lockedAfterCheck) {
+      setStatus({ tone: "warning", message: lockedAfterCheck });
+      setIsRunning(false);
+      setActiveSource(null);
+      return;
+    }
     const control =
       source === "demo" ? demoRunControl(fresh) : liveRunControl(study?.experiment?.value?.selected_models, fresh);
     if (!control.enabled) {
@@ -327,6 +337,13 @@ export function RunSimulationSection() {
       const resolvedStudyId = (await createOrLoadStudy()) ?? studyId;
       if (!resolvedStudyId) {
         throw new Error("No study is available yet.");
+      }
+
+      const lockedAfterSave = refuseLiveRun();
+      if (lockedAfterSave) {
+        stopProgressAnimation(0);
+        setStatus({ tone: "warning", message: lockedAfterSave });
+        return;
       }
 
       const result = await startSimulationRun(resolvedStudyId, source);

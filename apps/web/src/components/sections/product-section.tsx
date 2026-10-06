@@ -396,6 +396,13 @@ export function ProductSection() {
         throw new Error("No study is available yet.");
       }
 
+      // The switch can be turned on while the study save is in flight: read it again before the provider is called.
+      const refusedAfterSave = refuseIfDemoLocked("product_url_autofill", demoSwitchOn(demoOn));
+      if (refusedAfterSave) {
+        setStatus({ tone: "warning", message: refusedAfterSave });
+        return;
+      }
+
       const result = await runProductUrlAutofill(resolvedStudyId, urlInput.trim());
       await refreshStudy(resolvedStudyId);
       setLatestUrlAutofill(result.enrichment);
@@ -528,6 +535,12 @@ export function ProductSection() {
       const resolvedStudyId = (await createOrLoadStudy()) ?? studyId;
       if (!resolvedStudyId) {
         throw new Error("No study is available yet.");
+      }
+
+      const refusedAfterSave = refuseIfDemoLocked("product_image_analysis", demoSwitchOn(demoOn));
+      if (refusedAfterSave) {
+        setStatus({ tone: "warning", message: refusedAfterSave });
+        return;
       }
 
       const result = await runProductImageAnalysis(resolvedStudyId, uploadedImageFile);

@@ -7,7 +7,7 @@ import { TextInput } from "@/components/ui/form-controls";
 import { GlassPanel } from "@/components/ui/glass-panel";
 import { addSurveyQuestion, removeSurveyQuestion } from "@/lib/api";
 import { useDemoMode } from "@/lib/demo-mode";
-import { DEMO_ADDED_QUESTIONS_NOTE } from "@/lib/survey-demo-lock";
+import { ADDED_QUESTION_STATUS, addedQuestionStatus, DEMO_ADDED_QUESTIONS_NOTE } from "@/lib/survey-demo-lock";
 import {
   DEFAULT_LIKERT_ANCHORS,
   isStudentQuestion,
@@ -36,6 +36,8 @@ export function AddQuestionCard({
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const added = questions.filter((question) => isStudentQuestion(question.id));
+  // With the switch on, the note above the form makes the live-run point; the status line does not repeat it.
+  const shownMessage = addedQuestionStatus(message, demoOn);
 
   function switchType(next: AddedQuestionType) {
     setQuestionType(next);
@@ -54,7 +56,7 @@ export function AddQuestionCard({
       await addSurveyQuestion(studyId, toAddQuestionPayload(draft));
       setText("");
       switchType(questionType);
-      setMessage("Added. Run live to get answers to it.");
+      setMessage(ADDED_QUESTION_STATUS);
       await onChanged();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not add the question.");
@@ -136,9 +138,9 @@ export function AddQuestionCard({
             Add question
           </Button>
         </div>
-        {message ? (
+        {shownMessage ? (
           <p role="status" className="text-sm leading-6 text-app-text">
-            {message}
+            {shownMessage}
           </p>
         ) : null}
         {added.length > 0 ? (
