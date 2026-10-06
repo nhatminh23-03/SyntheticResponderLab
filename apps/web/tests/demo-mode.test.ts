@@ -92,6 +92,13 @@ test("demo mode batch and human exports retain labels, transcript and zero playb
   }
 });
 
+test("demo mode keeps demo sessions out of live history", () => {
+  const batch = read("src/app/interview/page.tsx");
+  assert.match(batch, /batches\.filter\(item => !item\.demo &&/);
+  assert.match(batch, /if \(active && !recovered\.demo\) setBatch/);
+  assert.match(read("src/app/focus-group/page.tsx"), /setRooms\(result\.rooms\.filter\(\(entry\) => !entry\.demo\)\)/);
+});
+
 test("demo mode isolates student photos, custom concepts and browser memo storage", () => {
   const focus = read("src/app/focus-group/page.tsx");
   assert.match(focus, /room.concept_card && !readOnly \? \(/);

@@ -412,12 +412,13 @@ function InterviewPageContent({ demoPlayback = false }: { demoPlayback?: boolean
     interviewOperation<{ batches: Batch[] }>(studyId, "batches")
       .then(({ batches }) => {
         if (active) setBatchHistory(previous => [
-          ...previous, ...batches.filter(item => !previous.some(saved => saved.job_id === item.job_id)),
+          // Demo playback lives only on the demo screen; listing it here would lock live controls.
+          ...previous, ...batches.filter(item => !item.demo && !previous.some(saved => saved.job_id === item.job_id)),
         ]);
       })
       .catch((err: Error) => { if (active) setError(err.message); });
     if (saved) interviewOperation<{ batch: Batch }>(studyId, `batches/${encodeURIComponent(saved)}`)
-      .then(({ batch: recovered }) => { if (active) setBatch(previous => previous ?? recovered); })
+      .then(({ batch: recovered }) => { if (active && !recovered.demo) setBatch(previous => previous ?? recovered); })
       .catch((err: Error) => { if (active) setError(err.message); });
     return () => { active = false; pauseBatch.current = true; generation.current += 1; };
   }, [studyId]);

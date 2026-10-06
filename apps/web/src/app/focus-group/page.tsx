@@ -186,7 +186,7 @@ function FocusGroupPageContent({ demoPlayback = false }: { demoPlayback?: boolea
   useEffect(() => {
     if (!studyId || demoPlayback) return;
     interviewOperation<{ rooms: FocusGroupRoom[] }>(studyId, focusGroupPath())
-      .then((result) => setRooms(result.rooms))
+      .then((result) => setRooms(result.rooms.filter((entry) => !entry.demo)))
       .catch(() => undefined);
   }, [studyId, room?.revision, room?.status]);
 
