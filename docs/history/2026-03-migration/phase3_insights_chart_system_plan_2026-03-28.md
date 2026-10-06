@@ -8,7 +8,7 @@ The goal is to add a premium, reusable chart system for the Insights chapter wit
 
 ## Why this approach
 
-The current frontend stack in [apps/web/package.json](/Users/mnd/Desktop/AI%20Hackathon/SyntheticResponderLab/apps/web/package.json) does not include a chart library.
+The current frontend stack in [apps/web/package.json](../../../apps/web/package.json) does not include a chart library.
 
 That is a good fit for the current product because:
 
@@ -34,7 +34,7 @@ Do not add `recharts` or another charting dependency in the first pass.
 
 Create:
 
-- [chart-frame.tsx](/Users/mnd/Desktop/AI%20Hackathon/SyntheticResponderLab/apps/web/src/components/charts/chart-frame.tsx)
+- [chart-frame.tsx](../../../apps/web/src/components/charts/chart-frame.tsx)
 
 Responsibility:
 
@@ -70,8 +70,8 @@ Design notes:
 
 Create:
 
-- [chart-scale.ts](/Users/mnd/Desktop/AI%20Hackathon/SyntheticResponderLab/apps/web/src/lib/chart-scale.ts)
-- [chart-format.ts](/Users/mnd/Desktop/AI%20Hackathon/SyntheticResponderLab/apps/web/src/lib/chart-format.ts)
+- [chart-scale.ts](../../../apps/web/src/lib/chart-scale.ts)
+- [chart-format.ts](../../../apps/web/src/lib/chart-format.ts)
 
 Responsibility:
 
@@ -96,7 +96,7 @@ export function heatmapOpacity(value: number | null, min: number, max: number): 
 
 Create:
 
-- [chart-types.ts](/Users/mnd/Desktop/AI%20Hackathon/SyntheticResponderLab/apps/web/src/components/charts/chart-types.ts)
+- [chart-types.ts](../../../apps/web/src/components/charts/chart-types.ts)
 
 Responsibility:
 
@@ -146,7 +146,7 @@ export type StepDatum = {
 
 Create:
 
-- [horizontal-bar-chart.tsx](/Users/mnd/Desktop/AI%20Hackathon/SyntheticResponderLab/apps/web/src/components/charts/horizontal-bar-chart.tsx)
+- [horizontal-bar-chart.tsx](../../../apps/web/src/components/charts/horizontal-bar-chart.tsx)
 
 Use for:
 
@@ -182,7 +182,7 @@ Implementation notes:
 
 Create:
 
-- [grouped-bar-chart.tsx](/Users/mnd/Desktop/AI%20Hackathon/SyntheticResponderLab/apps/web/src/components/charts/grouped-bar-chart.tsx)
+- [grouped-bar-chart.tsx](../../../apps/web/src/components/charts/grouped-bar-chart.tsx)
 
 Use for:
 
@@ -220,7 +220,7 @@ Why horizontal:
 
 Create:
 
-- [heatmap-grid.tsx](/Users/mnd/Desktop/AI%20Hackathon/SyntheticResponderLab/apps/web/src/components/charts/heatmap-grid.tsx)
+- [heatmap-grid.tsx](../../../apps/web/src/components/charts/heatmap-grid.tsx)
 
 Use for:
 
@@ -255,7 +255,7 @@ Implementation notes:
 
 Create:
 
-- [ladder-chart.tsx](/Users/mnd/Desktop/AI%20Hackathon/SyntheticResponderLab/apps/web/src/components/charts/ladder-chart.tsx)
+- [ladder-chart.tsx](../../../apps/web/src/components/charts/ladder-chart.tsx)
 
 Use for:
 
@@ -289,7 +289,7 @@ Recommended design:
 
 Create:
 
-- [model-difference-chart.tsx](/Users/mnd/Desktop/AI%20Hackathon/SyntheticResponderLab/apps/web/src/components/charts/model-difference-chart.tsx)
+- [model-difference-chart.tsx](../../../apps/web/src/components/charts/model-difference-chart.tsx)
 
 Use for:
 
@@ -327,12 +327,12 @@ Implementation notes:
 
 Create:
 
-- [insights-chart-adapters.ts](/Users/mnd/Desktop/AI%20Hackathon/SyntheticResponderLab/apps/web/src/lib/insights-chart-adapters.ts)
+- [insights-chart-adapters.ts](../../../apps/web/src/lib/insights-chart-adapters.ts)
 
 Responsibility:
 
 - convert raw `InsightsPayload` API objects into stable chart component inputs
-- keep chart presentation concerns out of [insights-section.tsx](/Users/mnd/Desktop/AI%20Hackathon/SyntheticResponderLab/apps/web/src/components/sections/insights-section.tsx)
+- keep chart presentation concerns out of [insights-section.tsx](../../../apps/web/src/components/sections/insights-section.tsx)
 
 Suggested exported helpers:
 
@@ -363,7 +363,7 @@ Why this matters:
 
 Update:
 
-- [insights-section.tsx](/Users/mnd/Desktop/AI%20Hackathon/SyntheticResponderLab/apps/web/src/components/sections/insights-section.tsx)
+- [insights-section.tsx](../../../apps/web/src/components/sections/insights-section.tsx)
 
 Current state:
 
@@ -439,7 +439,7 @@ The chart system is ready when:
 
 Add tests for:
 
-- [insights-chart-adapters.ts](/Users/mnd/Desktop/AI%20Hackathon/SyntheticResponderLab/apps/web/src/lib/insights-chart-adapters.ts)
+- [insights-chart-adapters.ts](../../../apps/web/src/lib/insights-chart-adapters.ts)
 
 Suggested test cases:
 
