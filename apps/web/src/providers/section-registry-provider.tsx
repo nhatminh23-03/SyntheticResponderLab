@@ -11,7 +11,7 @@ import {
   useState,
 } from "react";
 
-import { sectionWindowScrollTop } from "@/lib/section-scroll";
+import { cssLengthToPx, sectionWindowScrollTop } from "@/lib/section-scroll";
 import { workflowSections, WorkflowSectionId } from "@/lib/workflow-sections";
 
 type SectionRegistryContextValue = {
@@ -35,29 +35,17 @@ type SectionRegistryContextValue = {
 
 const SectionRegistryContext = createContext<SectionRegistryContextValue | null>(null);
 
-function resolveNavHeight() {
+/**
+ * Height in px of everything pinned at the top of the viewport: the app-wide
+ * Demo (no AI) strip (--demo-bar-height) plus the sticky menu bar (--nav-height).
+ * Mirrors the CSS --top-chrome, which cannot be read back as a number.
+ */
+function resolveTopChromeHeight() {
   const rootStyles = window.getComputedStyle(document.documentElement);
-  const rawValue = rootStyles.getPropertyValue("--nav-height").trim();
-
-  if (!rawValue) {
-    return 88;
-  }
-
-  if (rawValue.endsWith("px")) {
-    const parsed = Number.parseFloat(rawValue);
-    return Number.isFinite(parsed) ? parsed : 88;
-  }
-
-  if (rawValue.endsWith("rem")) {
-    const rootFontSize = Number.parseFloat(rootStyles.fontSize || "16");
-    const remValue = Number.parseFloat(rawValue);
-    if (Number.isFinite(rootFontSize) && Number.isFinite(remValue)) {
-      return rootFontSize * remValue;
-    }
-  }
-
-  const parsed = Number.parseFloat(rawValue);
-  return Number.isFinite(parsed) ? parsed : 88;
+  const rootFontSize = Number.parseFloat(rootStyles.fontSize || "16");
+  const navHeight = cssLengthToPx(rootStyles.getPropertyValue("--nav-height"), rootFontSize, 88);
+  const demoBarHeight = cssLengthToPx(rootStyles.getPropertyValue("--demo-bar-height"), rootFontSize, 40);
+  return navHeight + demoBarHeight;
 }
 
 export function SectionRegistryProvider({ children }: PropsWithChildren) {
@@ -222,8 +210,8 @@ export function SectionRegistryProvider({ children }: PropsWithChildren) {
 
   useEffect(() => {
     const handleScroll = () => {
-      const navHeight = resolveNavHeight();
-      const viewportAnchor = window.scrollY + navHeight + 20;
+      const topChromeHeight = resolveTopChromeHeight();
+      const viewportAnchor = window.scrollY + topChromeHeight + 20;
 
       let nearestId = activeSectionIdRef.current;
       let smallestDistance = Number.POSITIVE_INFINITY;
@@ -273,7 +261,7 @@ export function SectionRegistryProvider({ children }: PropsWithChildren) {
     const top = sectionWindowScrollTop(
       id,
       element.getBoundingClientRect().top + window.scrollY,
-      resolveNavHeight(),
+      resolveTopChromeHeight(),
       isDesktopRef.current,
     );
 

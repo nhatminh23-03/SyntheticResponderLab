@@ -950,7 +950,7 @@ function FocusGroupPageContent({ demoPlayback = false }: { demoPlayback?: boolea
             </div>
           ) : null}
         </GlassPanel>
-        <aside aria-label="Who is in the room" className="flex flex-col gap-2 lg:sticky lg:top-4 lg:self-start">
+        <aside aria-label="Who is in the room" className="flex flex-col gap-2 lg:sticky lg:top-[calc(var(--top-chrome)+1rem)] lg:self-start">
           <h2 className="text-lg font-semibold">Who is in the room</h2>
           {(room.participants ?? []).map((participant) => (
             <PersonaCardView

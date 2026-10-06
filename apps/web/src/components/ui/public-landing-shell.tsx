@@ -32,8 +32,8 @@ export function PublicLandingShell({ classroomNoLogin = false }: { classroomNoLo
 
       <PublicTopNav backendReady={readiness.ready} classroomNoLogin={classroomNoLogin} />
 
-      <main className="relative mx-auto flex min-h-[calc(100vh-5.5rem)] w-full max-w-[88rem] flex-col px-4 pb-14 pt-8 sm:min-h-[calc(100vh-var(--nav-height))] sm:px-5 sm:pb-16 sm:pt-10 md:px-8 lg:min-h-[calc(100vh-var(--nav-height))] lg:justify-center lg:px-12 lg:pb-10 lg:pt-8 xl:px-16">
-        <div className="grid gap-8 lg:min-h-[min(calc(100svh-var(--nav-height)-2rem),46rem)] lg:items-center xl:grid-cols-[minmax(0,0.98fr)_minmax(24rem,0.92fr)] xl:gap-10">
+      <main className="relative mx-auto flex min-h-[calc(100vh-5.5rem-var(--demo-bar-height))] w-full max-w-[88rem] flex-col px-4 pb-14 pt-8 sm:min-h-[calc(100vh-var(--top-chrome))] sm:px-5 sm:pb-16 sm:pt-10 md:px-8 lg:min-h-[calc(100vh-var(--top-chrome))] lg:justify-center lg:px-12 lg:pb-10 lg:pt-8 xl:px-16">
+        <div className="grid gap-8 lg:min-h-[min(calc(100svh-var(--top-chrome)-2rem),46rem)] lg:items-center xl:grid-cols-[minmax(0,0.98fr)_minmax(24rem,0.92fr)] xl:gap-10">
           <RevealOnScroll className="relative z-10 max-w-2xl">
             <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-app-cyan/20 bg-app-cyan/5 px-3 py-1.5 text-[0.62rem] font-medium uppercase tracking-[0.22em] text-app-cyan">
               <span className="h-1.5 w-1.5 rounded-full bg-app-cyan" />
@@ -123,7 +123,7 @@ export function PublicLandingShell({ classroomNoLogin = false }: { classroomNoLo
 
 function PublicTopNav({ backendReady, classroomNoLogin }: { backendReady: boolean; classroomNoLogin: boolean }) {
   return (
-    <header className="sticky top-0 z-50 border-b [background:var(--nav-bg)] [border-color:var(--nav-border)] backdrop-blur-2xl">
+    <header className="sticky top-[var(--demo-bar-height)] z-50 border-b [background:var(--nav-bg)] [border-color:var(--nav-border)] backdrop-blur-2xl">
       <div className="mx-auto flex h-[5.5rem] w-full max-w-[92rem] items-center justify-between gap-4 px-4 sm:h-[var(--nav-height)] sm:px-6 lg:px-8">
         <div className="flex min-w-0 items-center gap-3 px-1 py-1">
           <AppLogoMark className="h-10 w-10" />

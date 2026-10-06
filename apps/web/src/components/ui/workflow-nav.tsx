@@ -95,7 +95,7 @@ export function WorkflowNav() {
 
   return (
     <>
-      <header className="sticky top-0 z-50 hidden border-b [background:var(--nav-bg)] [border-color:var(--nav-border)] backdrop-blur-2xl lg:block">
+      <header className="sticky top-[var(--demo-bar-height)] z-50 hidden border-b [background:var(--nav-bg)] [border-color:var(--nav-border)] backdrop-blur-2xl lg:block">
         <div className="mx-auto flex h-[var(--nav-height)] w-full max-w-[92rem] items-center gap-2 px-4 xl:gap-4 xl:px-8">
           <button
             type="button"
@@ -189,7 +189,7 @@ export function WorkflowNav() {
         </div>
       </header>
 
-      <header className="sticky top-0 z-50 border-b [background:var(--nav-bg)] [border-color:var(--nav-border)] backdrop-blur-2xl lg:hidden">
+      <header className="sticky top-[var(--demo-bar-height)] z-50 border-b [background:var(--nav-bg)] [border-color:var(--nav-border)] backdrop-blur-2xl lg:hidden">
         <div className="mx-auto max-w-[92rem] px-3 pb-2 pt-3 sm:px-4">
           <div className="flex items-start justify-between gap-3">
             <button
@@ -305,7 +305,7 @@ export function WorkflowNav() {
                   transition={{ duration: 0.2, ease: "easeOut" }}
                   className="absolute inset-x-0 top-full z-30 mt-2 overflow-hidden rounded-[1.15rem] border p-3 shadow-[0_18px_44px_rgba(0,0,0,0.22)] [background:var(--color-background)] [border-color:var(--button-secondary-border)]"
                 >
-                  <div className="fine-scrollbar max-h-[min(calc(100svh-var(--nav-height)-1.25rem),28rem)] space-y-2 overflow-y-auto pr-1">
+                  <div className="fine-scrollbar max-h-[min(calc(100svh-var(--top-chrome)-1.25rem),28rem)] space-y-2 overflow-y-auto pr-1">
                     {navSections.map((section, index) => {
                       const isInterviewGroupTab = section.id === "interview-synthesis";
                       const isActive = isInterviewGroupTab

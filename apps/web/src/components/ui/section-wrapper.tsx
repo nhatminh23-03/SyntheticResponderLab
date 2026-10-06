@@ -42,8 +42,8 @@ export function SectionWrapper({
       ref={sectionRef}
       data-section-id={id}
       className={cn(
-        "relative scroll-mt-[calc(var(--nav-height)+1rem)] px-4 sm:px-5 md:px-8 lg:scroll-mt-[calc(var(--nav-height)+0.75rem)] lg:px-12 xl:px-16",
-        fullHeight && "lg:h-[calc(100svh-var(--nav-height))]",
+        "relative scroll-mt-[calc(var(--top-chrome)+1rem)] px-4 sm:px-5 md:px-8 lg:scroll-mt-[calc(var(--top-chrome)+0.75rem)] lg:px-12 xl:px-16",
+        fullHeight && "lg:h-[calc(100svh-var(--top-chrome))]",
         className
       )}
     >

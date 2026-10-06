@@ -6,7 +6,8 @@ import { DEMO_LABEL, DEMO_READ_ONLY, useDemoMode } from "@/lib/demo-mode";
 
 export function DemoSwitch() {
   const [demo, setDemo] = useDemoMode();
-  return <div className="border-b border-app-border px-6 py-2" aria-label="App mode">
+  // Pinned above the menu bars (z-50, which sit at top: --demo-bar-height), so it stays visible while scrolling.
+  return <div className="sticky top-0 z-[60] flex h-[var(--demo-bar-height)] items-center border-b border-app-border px-6 [background:var(--nav-bg)] backdrop-blur-2xl" aria-label="App mode">
     <label className="inline-flex items-center gap-2 text-sm">
       <input type="checkbox" role="switch" checked={demo} onChange={e => setDemo(e.target.checked)} />
       Demo (no AI)
