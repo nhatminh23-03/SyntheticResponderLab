@@ -11,6 +11,7 @@ import {
   useState,
 } from "react";
 
+import { sectionWindowScrollTop } from "@/lib/section-scroll";
 import { workflowSections, WorkflowSectionId } from "@/lib/workflow-sections";
 
 type SectionRegistryContextValue = {
@@ -269,8 +270,12 @@ export function SectionRegistryProvider({ children }: PropsWithChildren) {
     }
     const scrollContainer = scrollContainersRef.current[id];
 
-    const navHeight = resolveNavHeight();
-    const top = element.getBoundingClientRect().top + window.scrollY - navHeight - (isDesktopRef.current ? 0 : 12);
+    const top = sectionWindowScrollTop(
+      id,
+      element.getBoundingClientRect().top + window.scrollY,
+      resolveNavHeight(),
+      isDesktopRef.current,
+    );
 
     if (scrollContainer) {
       const rememberedTargetTop = rememberedScrollPositionsRef.current[id] ?? 0;
