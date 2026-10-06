@@ -1,4 +1,4 @@
-Goal: a "Demo (no AI)" option on /focus-group, /interview and /interview/you that opens a finished, pre-recorded example session with zero model calls, for Dr. Lin's class on Wed 2026-10-07. Live mode unchanged. Spec: BRIEF.md.
+Goal: one app-wide "Demo (no AI)" switch that puts /focus-group, /interview and /interview/you into demo together, each opening a finished, pre-recorded example session with zero model calls, for Dr. Lin's class on Wed 2026-10-07. Live mode unchanged. Spec: BRIEF.md.
 
 Checks run from this directory through `./check.sh`.
 
@@ -24,7 +24,8 @@ Checks run from this directory through `./check.sh`.
 
 ## Pages
 
-- [ ] Each of the three pages shows a "Demo (no AI)" button; in demo the AI controls are hidden or disabled with the "Demo (no AI): read-only" note, the "Demo session - pre-recorded, no AI" label is visible, and the memo form and export stay usable. — check: `./check.sh web 'demo mode'`
+- [ ] One "Demo (no AI)" switch in the shared app chrome appears on every page; turning it on puts /interview, /interview/you and /focus-group into demo together, it persists across navigation and reload, and `apps/web/src/lib/demo-mode.ts` exports `useDemoMode()` and the storage key for the survey section to read. — check: `./check.sh web 'demo switch'`
+- [ ] With the switch on, each of the three pages shows its demo session with AI controls hidden or disabled and the "Demo (no AI): read-only" note, the "Demo session - pre-recorded, no AI" label is visible, and the memo form and export stay usable; with it off, the pages are exactly as before. — check: `./check.sh web 'demo mode'`
 
 ## Nothing else broke
 
@@ -46,4 +47,3 @@ Checks run from this directory through `./check.sh`.
 - [ ] (sol) Every demo screen and export retains the existing “Synthetic rehearsal” label alongside the demo label.
 - [ ] (sol) Fixture generation uses the real service code and enforces the approved $2 total spending limit.
 - [ ] (sol) Missing or invalid deployed fixtures produce an actionable operator diagnostic identifying the affected demo without exposing student content.
-- [ ] (sol) All three demos work through the deployed classroom website before the October 7 class, including study creation, fixture loading, memo saving, and downloads.
