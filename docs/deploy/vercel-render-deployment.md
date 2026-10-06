@@ -55,13 +55,13 @@ Trust boundary:
 
 This repo now includes the minimum platform-specific definitions for this target:
 
-- [`.dockerignore`](/Users/mnd/Desktop/AI%20Hackathon/SyntheticResponderLab/.dockerignore)
+- [`.dockerignore`](../../.dockerignore)
   - trims the Docker build context for the Render backend image
-- [`apps/api/Dockerfile`](/Users/mnd/Desktop/AI%20Hackathon/SyntheticResponderLab/apps/api/Dockerfile)
+- [`apps/api/Dockerfile`](../../apps/api/Dockerfile)
   - builds the FastAPI service and copies the vendored legacy runtime tree into the image
-- [`render.yaml`](/Users/mnd/Desktop/AI%20Hackathon/SyntheticResponderLab/render.yaml)
+- [`render.yaml`](../../render.yaml)
   - defines the Render backend service and paid Render Postgres option; for free Neon deployments, create only the backend service manually and paste the Neon `DATABASE_URL`
-- [`apps/web/vercel.json`](/Users/mnd/Desktop/AI%20Hackathon/SyntheticResponderLab/apps/web/vercel.json)
+- [`apps/web/vercel.json`](../../apps/web/vercel.json)
   - locks the Vercel project to the expected Next.js build/install commands
 
 ### Platform project setup
@@ -75,7 +75,7 @@ Create a Vercel project with:
 
 #### Render
 
-Create the backend via the root [`render.yaml`](/Users/mnd/Desktop/AI%20Hackathon/SyntheticResponderLab/render.yaml), or manually mirror its configuration in the Render dashboard.
+Create the backend via the root [`render.yaml`](../../render.yaml), or manually mirror its configuration in the Render dashboard.
 
 ## C. Env/secrets matrix
 
@@ -233,7 +233,7 @@ Do **not** treat documented rate limits as “done” if they are not actually c
 
 1. Create the Vercel project rooted at `apps/web`
 2. Create a Neon Postgres database for the free path
-3. Create the Render backend as a Docker web service using [`apps/api/Dockerfile`](/Users/mnd/Desktop/AI%20Hackathon/SyntheticResponderLab/apps/api/Dockerfile)
+3. Create the Render backend as a Docker web service using [`apps/api/Dockerfile`](../../apps/api/Dockerfile)
 4. Skip the Render persistent disk on the fully-free path; uploaded/generated filesystem artifacts will be ephemeral until object storage or a paid Render disk is added
 4. Create the Clerk production or staging app
 
@@ -295,7 +295,7 @@ Confirm:
 
 ### 8. Run smoke tests
 
-Execute the smoke-test list from [invite-only-deployment-runbook.md](/Users/mnd/Desktop/AI%20Hackathon/SyntheticResponderLab/Documentation/invite-only-deployment-runbook.md), especially:
+Execute the smoke-test list from [invite-only-deployment-runbook.md](./invite-only-deployment-runbook.md), especially:
 - invite acceptance
 - ownership isolation with two users
 - simulation run
