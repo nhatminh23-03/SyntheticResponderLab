@@ -4,7 +4,7 @@
     "messages": [
       {
         "role": "user",
-        "content": "Who lives with you, and where do you spend time at home?"
+        "content": "When you think about adding something significant to your home, like a backyard studio, what's your typical process for deciding if it's the right move?"
       },
       {
         "role": "assistant",
@@ -12,7 +12,7 @@
       },
       {
         "role": "user",
-        "content": "You mentioned sharing space. When is that most difficult?"
+        "content": "What are the challenges you face when studying at the dining table?"
       },
       {
         "role": "assistant",
@@ -20,7 +20,7 @@
       },
       {
         "role": "user",
-        "content": "How do you handle those interruptions today?"
+        "content": "What happens when you can't find that quiet for reading in the evenings?"
       },
       {
         "role": "assistant",
@@ -28,7 +28,7 @@
       },
       {
         "role": "user",
-        "content": "What would a separate backyard studio change for you?"
+        "content": "What makes the library closing before you finish a problem for your studying?"
       },
       {
         "role": "assistant",
@@ -36,7 +36,7 @@
       },
       {
         "role": "user",
-        "content": "What would you need to learn before considering Tahoe Mini?"
+        "content": "What would influence your parents' decision to buy something like that?"
       },
       {
         "role": "assistant",
@@ -44,7 +44,7 @@
       },
       {
         "role": "user",
-        "content": "Why does the installation uncertainty matter to you?"
+        "content": "What concerns you most about whether it fits in the yard?"
       },
       {
         "role": "assistant",
@@ -52,7 +52,7 @@
       },
       {
         "role": "user",
-        "content": "How would you decide whether the cost is worth it?"
+        "content": "What would make a schedule feel clear enough to overcome that past experience?"
       },
       {
         "role": "assistant",
@@ -60,7 +60,7 @@
       },
       {
         "role": "user",
-        "content": "What else should we understand about your decision?"
+        "content": "How often do you imagine yourselves using it to make that comparison worthwhile?"
       },
       {
         "role": "assistant",
@@ -70,13 +70,13 @@
     "model": "google/gemini-2.5-flash-lite"
   },
   "kind": "you",
-  "provisional": true,
-  "source": "hand-written",
+  "provisional": false,
+  "source": "real-service-model-run",
   "generation": {
     "script": "scripts/make_demo_fixtures.py",
-    "cost_usd": "0",
-    "reserved_usd": "0",
-    "calls": 0,
+    "cost_usd": "0.03595370",
+    "reserved_usd": "0.23571225",
+    "calls": 141,
     "limit_usd": "2"
   }
 }
