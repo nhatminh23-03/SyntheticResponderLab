@@ -1757,6 +1757,20 @@ export async function acceptGeneratedSurvey(
   };
 }
 
+export async function addSurveyQuestion(studyId: string, payload: { text: string; question_type: string; options: string[] }) {
+  const response = await fetch(`${getApiBaseUrl()}/api/v1/studies/${studyId}/survey/questions`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw new Error(await readApiErrorMessage(response, `Adding the question failed (${response.status})`));
+  return (await response.json()).data;
+}
+
+export async function removeSurveyQuestion(studyId: string, questionId: string) {
+  const response = await fetch(`${getApiBaseUrl()}/api/v1/studies/${studyId}/survey/questions/${encodeURIComponent(questionId)}`, { method: "DELETE" });
+  if (!response.ok) throw new Error(await readApiErrorMessage(response, `Removing the question failed (${response.status})`));
+  return (await response.json()).data;
+}
+
 export async function saveExperiment(studyId: string, payload: ExperimentPayload) {
   const apiBaseUrl = getApiBaseUrl();
 
@@ -1860,11 +1874,13 @@ export async function getPromptPreview(studyId: string, personaIndex = 0) {
   return result.data?.prompt_preview ?? null;
 }
 
-export async function startSimulationRun(studyId: string) {
+export async function startSimulationRun(studyId: string, source: "live" | "demo" = "live") {
   const apiBaseUrl = getApiBaseUrl();
 
   const response = await fetch(`${apiBaseUrl}/api/v1/studies/${studyId}/simulation-runs`, {
     method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ source }),
   });
 
   if (!response.ok) {

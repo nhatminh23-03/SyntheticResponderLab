@@ -3,11 +3,13 @@ export type BackendReadinessPayload = {
   status: "ready" | "waking" | "unavailable" | "misconfigured";
   healthStatus?: "ok" | "degraded" | "failed" | string;
   message: string;
+  providers?: { jev: boolean; openrouter: boolean };
 };
 
 type HealthEnvelope = {
   data?: {
     status?: string;
+    providers?: { jev?: boolean; openrouter?: boolean };
   };
 };
 
@@ -19,6 +21,8 @@ export function toBackendReadinessPayload(
     typeof payload === "object" && payload !== null
       ? (payload as HealthEnvelope).data?.status
       : undefined;
+  const rawProviders = typeof payload === "object" && payload !== null ? (payload as HealthEnvelope).data?.providers : undefined;
+  const providers = rawProviders ? { jev: Boolean(rawProviders.jev), openrouter: Boolean(rawProviders.openrouter) } : undefined;
 
   if (httpStatus >= 200 && httpStatus < 300) {
     if (healthStatus === "ok" || healthStatus === "degraded") {
@@ -27,6 +31,7 @@ export function toBackendReadinessPayload(
         status: "ready",
         healthStatus,
         message: "Backend is ready.",
+        providers,
       };
     }
 
@@ -37,6 +42,7 @@ export function toBackendReadinessPayload(
         healthStatus,
         message:
           "The backend is online but not ready yet. Please retry in a moment.",
+        providers,
       };
     }
   }
@@ -47,6 +53,7 @@ export function toBackendReadinessPayload(
       status: "waking",
       healthStatus,
       message: "Starting backend... this may take up to a minute.",
+      providers,
     };
   }
 
@@ -55,5 +62,10 @@ export function toBackendReadinessPayload(
     status: "unavailable",
     healthStatus,
     message: "The backend is not ready yet. Please retry in a moment.",
+    providers,
   };
+}
+
+export function liveEngineAvailable(readiness: BackendReadinessPayload | null | undefined): boolean {
+  return Boolean(readiness?.providers && (readiness.providers.jev || readiness.providers.openrouter));
 }
