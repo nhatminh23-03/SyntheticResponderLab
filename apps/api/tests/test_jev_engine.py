@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import math
+import urllib.error
 from types import SimpleNamespace
 
 import pytest
@@ -84,6 +85,38 @@ def test_http_transport_retries_then_raises_and_never_leaks_the_key(monkeypatch)
     with pytest.raises(RuntimeError) as error:
         jev.http_transport("secret-key", "https://example.invalid", retries=4, sleep=lambda s: None)({})
     assert "secret-key" not in str(error.value)
+    assert len(calls) == 4
+
+    # Test redaction happens before truncation: 195 'x' chars + key should not show key prefix
+    calls.clear()
+    def long_body_with_key(request, timeout, context=None):
+        calls.append(request)
+        import urllib.error, io
+        body = b"x" * 195 + b"secret-key"
+        raise urllib.error.HTTPError(request.full_url, 401, "no", {}, io.BytesIO(body))
+
+    monkeypatch.setattr(jev.urllib.request, "urlopen", long_body_with_key)
+    with pytest.raises(jev.JevRequestError) as error:
+        jev.http_transport("secret-key", "https://example.invalid", sleep=lambda s: None)({})
+    # Verify key was redacted before truncation (no key prefix appears)
+    assert "secret-key" not in error.value.message
+    assert "secr" not in error.value.message  # No prefix of the key
+    assert "***" in error.value.message
+
+    # Test unreadable error body on retryable 503 is retried (4 times), not escaped after 1 attempt
+    calls.clear()
+    class BadHTTPError(urllib.error.HTTPError):
+        def read(self):
+            raise IOError("cannot read")
+
+    def unreadable_503(request, timeout, context=None):
+        calls.append(request)
+        raise BadHTTPError(request.full_url, 503, "service", {}, None)
+
+    monkeypatch.setattr(jev.urllib.request, "urlopen", unreadable_503)
+    with pytest.raises(RuntimeError):
+        jev.http_transport("secret-key", "https://example.invalid", retries=4, sleep=lambda s: None)({})
+    # Verify it retried all 4 times (not escaped after 1 attempt)
     assert len(calls) == 4
 
 
@@ -223,3 +256,45 @@ def test_no_askable_questions_raises_validation_error():
         jev.generate_jev_records(schemas=schemas, config=config, survey_schema=survey, persona_profiles=personas,
                                  business_product_context=None, market_context=None, transport=lambda x: {}, max_concurrency=2)
     assert "Jev answers only questions with listed options" in error.value.message
+
+
+def test_multi_choice_one_hot_yields_exactly_one():
+    """A one-hot multi-choice reply (only one option has weight) draws exactly that one."""
+    schemas, config, personas, survey = _stub_runtime(n_personas=2)
+    survey.questions = [Q("Q20", "multi_choice", ["Ads", "Expo", "Friends"])]
+
+    def transport(payload):
+        # Return one-hot for Q20 (Ads=1.0, Expo=0, Friends=0)
+        return {"answers": {"Q20": {"type": "choice", "probabilities": {"Ads": 1.0, "Expo": 0, "Friends": 0}}}}
+
+    records, debug, is_fallback, probabilities = jev.generate_jev_records(
+        schemas=schemas, config=config, survey_schema=survey, persona_profiles=personas,
+        business_product_context=None, market_context=None, transport=transport, max_concurrency=2)
+
+    # Both respondents should have exactly ['Ads'] as the answer (not ['Ads', 'Friends'] or similar)
+    for record in records:
+        assert record.answer == ["Ads"], f"Expected ['Ads'], got {record.answer}"
+
+
+def test_mixed_usable_and_unusable_questions_in_one_respondent():
+    """A respondent with one usable and one unusable question keeps the usable answer, other is missing."""
+    schemas, config, personas, survey = _stub_runtime(n_personas=2)
+    survey.questions = [Q("Q1", "likert", ["a", "b", "c", "d", "e"]), Q("Q2", "single_choice", ["X", "Y"])]
+
+    def transport(payload):
+        # Return Q1 with usable probabilities, Q2 with all-zero (unusable)
+        return {"answers": {
+            "Q1": {"type": "score", "probabilities": {"0": 0, "1": 0, "2": 0, "3": 1, "4": 0}},
+            "Q2": {"type": "choice", "probabilities": {"X": 0, "Y": 0}}
+        }}
+
+    records, debug, is_fallback, probabilities = jev.generate_jev_records(
+        schemas=schemas, config=config, survey_schema=survey, persona_profiles=personas,
+        business_product_context=None, market_context=None, transport=transport, max_concurrency=2)
+
+    # Should have exactly 2 records (both respondents × 1 usable question)
+    assert len(records) == 2
+    assert all(r.question_id == "Q1" for r in records)
+    assert debug["respondents_completed"] == 2
+    assert debug["respondents_failed"] == 0
+    assert debug["questions_missing"] == 2  # Both Q2s are missing (all-zero)

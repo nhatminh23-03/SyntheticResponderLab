@@ -67,6 +67,7 @@ def http_transport(api_key: str, url: str, *, timeout: int = 60, retries: int = 
                     raw_body = error.read().decode(errors="replace")
                 except Exception:
                     raw_body = ""
+                # Redact key before truncating to preserve the fact that it was present
                 detail = raw_body.replace(api_key, "***")[:200]
                 if error.code not in RETRYABLE and error.code < 500:
                     raise JevRequestError(f"Jev refused the request (HTTP {error.code}): {detail}") from None
@@ -111,7 +112,7 @@ def usable_probabilities(stated: Dict[str, float]) -> Optional[Dict[str, float]]
         try:
             if not isinstance(value, (int, float)) or math.isnan(value) or math.isinf(value):
                 return None
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):
             return None
     total = sum(max(v, 0.0) for v in stated.values())
     return stated if total > 0 else None
@@ -120,6 +121,8 @@ def usable_probabilities(stated: Dict[str, float]) -> Optional[Dict[str, float]]
 def _draw(probabilities: Dict[str, float], rng: random.Random) -> str:
     """Draw one option from usable probabilities (assume caller validated with usable_probabilities)."""
     total = sum(max(v, 0.0) for v in probabilities.values())
+    if total <= 0:
+        raise ValueError("Cannot draw from non-positive total probabilities")
     point, cumulative = rng.random() * total, 0.0
     for option, share in probabilities.items():
         cumulative += max(share, 0.0)
@@ -133,7 +136,9 @@ def answer_value(question: Any, probabilities: Dict[str, float], key: str) -> An
     if question.question_type == "likert":
         return int(_draw(probabilities, rng))
     if question.question_type == "multi_choice":
-        k = max(1, min(int(getattr(question, "max_value", None) or 2), len(probabilities)))
+        # Cap k at the number of options with positive weight (at least 1)
+        positive_weight_count = sum(1 for v in probabilities.values() if v > 0)
+        k = max(1, min(int(getattr(question, "max_value", None) or 2), positive_weight_count))
         remaining, picks = dict(probabilities), []
         for _ in range(k):
             choice = _draw(remaining, rng)
