@@ -1,0 +1,82 @@
+{
+  "config": {},
+  "state": {
+    "messages": [
+      {
+        "role": "user",
+        "content": "Who lives with you, and where do you spend time at home?"
+      },
+      {
+        "role": "assistant",
+        "content": "I am a fictional graduate student living with my parents and a younger sibling. I study at the dining table."
+      },
+      {
+        "role": "user",
+        "content": "You mentioned sharing space. When is that most difficult?"
+      },
+      {
+        "role": "assistant",
+        "content": "Evenings are difficult because everyone is home and I need quiet for reading."
+      },
+      {
+        "role": "user",
+        "content": "How do you handle those interruptions today?"
+      },
+      {
+        "role": "assistant",
+        "content": "I use headphones or go to the library, but the library closes before I finish sometimes."
+      },
+      {
+        "role": "user",
+        "content": "What would a separate backyard studio change for you?"
+      },
+      {
+        "role": "assistant",
+        "content": "A separate room could help me concentrate, though it would really be my parents' purchase."
+      },
+      {
+        "role": "user",
+        "content": "What would you need to learn before considering Tahoe Mini?"
+      },
+      {
+        "role": "assistant",
+        "content": "I would want to know whether it fits in the yard and who handles delivery and permits."
+      },
+      {
+        "role": "user",
+        "content": "Why does the installation uncertainty matter to you?"
+      },
+      {
+        "role": "assistant",
+        "content": "My parents had a repair project that took weeks longer than expected. They want a clear schedule."
+      },
+      {
+        "role": "user",
+        "content": "How would you decide whether the cost is worth it?"
+      },
+      {
+        "role": "assistant",
+        "content": "We would compare the total installed cost with improving the spare room, and how often we would use it."
+      },
+      {
+        "role": "user",
+        "content": "What else should we understand about your decision?"
+      },
+      {
+        "role": "assistant",
+        "content": "My sibling could use it for music too. We would need a schedule so it does not become another shared-space problem."
+      }
+    ],
+    "model": "google/gemini-2.5-flash-lite"
+  },
+  "kind": "you",
+  "provisional": true,
+  "source": "hand-written",
+  "generation": {
+    "script": "scripts/make_demo_fixtures.py",
+    "cost_usd": "0",
+    "reserved_usd": "0",
+    "calls": 0,
+    "limit_usd": "2"
+  }
+}

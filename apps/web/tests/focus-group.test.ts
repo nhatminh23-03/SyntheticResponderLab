@@ -101,7 +101,7 @@ test("the page recomputes the confirmed estimate from the live controls", () => 
   // Start opens the confirmation; only the confirmation calls the paid endpoint.
   assert.match(
     pageSource,
-    /<Button onClick=\{\(\) => setConfirming\(true\)\} disabled=\{busy \|\| refusal !== null\}/
+    /<Button onClick=\{\(\) => setConfirming\(true\)\} disabled=\{readOnly \|\| busy \|\| refusal !== null\}/
   );
   assert.match(
     pageSource,
@@ -207,7 +207,7 @@ test("going back to an earlier stage keeps every answer already collected", () =
 test("the page shows the stage the student is in and lets them step back", () => {
   assert.match(
     pageSource,
-    /FOCUS_GROUP_STAGES\.map\(\(entry, index\) => \([\s\S]*?onClick=\{\(\) => \{[\s\S]*?setStage\(entry\);[\s\S]*?disabled=\{busy \|\| !canAskStage\(room, entry\)\}/
+    /FOCUS_GROUP_STAGES\.map\(\(entry, index\) => \([\s\S]*?onClick=\{\(\) => \{[\s\S]*?setStage\(entry\);[\s\S]*?disabled=\{readOnly \|\| busy \|\| !canAskStage\(room, entry\)\}/
   );
   assert.match(
     pageSource,

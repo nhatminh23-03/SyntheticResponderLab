@@ -58,8 +58,8 @@ test("manual memo: a saved draft is restored, padded to three themes and three o
   assert.equal(restored.themes[0].label, "Cold garage");
   assert.equal(restored.themes.length, 3);
   assert.equal(restored.surprise.quote.turn_id, "R1-P001");
-  // Re-opening a room and starting one both restore the saved draft.
-  assert.equal((pageSource.match(/setManualMemo\(manualMemoFrom\(result\.room\.manual_memo\)\)/g) ?? []).length, 2);
+  // Re-opening, starting, and opening a demo all restore the saved draft.
+  assert.equal((pageSource.match(/setManualMemo\(manualMemoFrom\(result\.room\.manual_memo\)\)/g) ?? []).length, 3);
 });
 
 test("manual memo: only answered turns are quotable, and a quote keeps its turn ID", () => {

@@ -1,9 +1,12 @@
 # Decisions
 
-| # | Decision | Why | Undo |
-|---|---|---|---|
-| 1 | Demo sessions are read-only: no AI-calling control works in demo. | "No key, no API" (Dr. Lin 10/4); Anderson OK'd 10/5. | Remove the demo guard. |
-| 2 | Fixtures generated once with the real model, capped at $2. | Real output reads like the live product; ~$1 approved. | Regenerate or delete `apps/api/seed_data/demo/`. |
-| 3 | A demo is cloned into the student's study (flagged demo) so memo/export reuse live code. | Fewer new paths, fewer bugs before Wednesday. | Delete demo-flagged rooms/batches. |
-| 4 | One app-wide Demo switch replaces per-page buttons; shared via `apps/web/src/lib/demo-mode.ts` so the survey reads it. | Minh's request 10/5; Anderson relayed it. | Revert to per-page buttons. |
-| 5 | Dropped Sol's "works on the deployed site" outcome from DONE.md; the harness verifies it after merge. | A builder can't deploy; checking it is the harness's job. | Re-add the line. |
+The BRIEF's approved defaults remain: one app-wide switch, read-only AI actions,
+fixtures generated through real services within $2, one study-owned example of each
+kind, and deployed-site verification by the harness after merge. No survey,
+scoring, research, or live prompt changes are part of this patch.
+
+| # | Decision | Why | Where | To change / revert | Status |
+|---|---|---|---|---|---|
+| 1 | Store playback as completed existing Job types; serialize opens with the existing SQLite lock/Postgres transaction advisory lock; snapshot roster cards in the fixture. Deleted rooms get a fresh ID and no old memo. | Reuses ownership, manual memo, export and history paths without a migration or changing study configuration. Keeps cards stable and never copies a student's photo. | apps/api/src/services/demo_mode.py:81 | Change `open_demo` and `load_fixture` together; retain ownership checks and transaction locking. Remove only demo-marked jobs to reset playback. | Implemented; focused API checks pass. |
+| 2 | Keep live and demo screens mounted separately, keyed by study, and pause live automatic batch advances. Put the switch in root layout chrome with localStorage key `srl:demo-mode` and storage-event synchronization. Demo batch notes remain in memory; focus-group drafts use the existing server save. | Preserves live transcripts and unsaved drafts across toggles; late replies cannot replace the demo. Avoids retaining demo memo text in shared-device browser storage. Existing live requests may finish and are identified on screen. | apps/web/src/components/demo/demo-mode.tsx:28; apps/web/src/lib/demo-mode.ts:6 | Replace `DemoScreens` only with equivalent isolated state and stale-response handling. Migrate the exported storage key if changing it; Minh can import `useDemoMode`. | Implemented; focused web checks pass. |
+| 3 | Generate against a temporary database with no student data. Reserve conservative input/output cost before every provider call, cap completions at 512 tokens, disable retries, and retain uncertain reservations against a shared $2 limit. Ship explicitly provisional handwritten fixtures until the API key is supplied. No fixture themes are generated. | The API settings have no OpenRouter key in this workspace. This implements the authorized provisional path honestly; absent themes cannot offer generation. A restricted provider key supplies an additional external billing ceiling. | apps/api/scripts/make_demo_fixtures.py:57; apps/api/seed_data/demo/ | From `apps/api`, configure `OPENROUTER_API_KEY` in API settings and run `python scripts/make_demo_fixtures.py`; inspect all three outputs, run `../../plans/demo-mode/check.sh fixtures`, then deploy them. Existing study copies intentionally remain unchanged. | Provisional playback verified; real-recording release gate remains blocked. |

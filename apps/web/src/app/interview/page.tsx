@@ -1,5 +1,8 @@
 "use client";
 
+import { DemoScreens, DemoNotice, useDemoActivity } from "@/components/demo/demo-mode";
+import { isDemoMode, useDemoMode } from "@/lib/demo-mode";
+
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 
@@ -88,14 +91,30 @@ export default function InterviewPage() {
     <ThemeProvider>
       <StudyProvider>
         <WorkflowNav />
-        <InterviewPageContent />
+        <DemoScreens>{demo => <InterviewPageContent demoPlayback={demo} />}</DemoScreens>
       </StudyProvider>
     </ThemeProvider>
   );
 }
 
-function InterviewPageContent() {
+function InterviewPageContent({ demoPlayback = false }: { demoPlayback?: boolean } = {}) {
+  const [demoEnabled] = useDemoMode();
+  const [demoRetry, setDemoRetry] = useState(0);
   const { studyId, studyBootstrapError } = useStudy();
+  useEffect(() => {
+    if (!demoPlayback || !studyId) return;
+    let active = true;
+    setError("");
+    interviewOperation<{ batch: Batch }>(studyId, "demo/batch", {})
+      .then(result => {
+        if (!active) return;
+        setBatch(result.batch);
+        setStep(1);
+      })
+      .catch((failure: Error) => { if (active) setError(failure.message); });
+    return () => { active = false; };
+  }, [studyId, demoPlayback, demoRetry]);
+
   const [personas, setPersonas] = useState<InterviewPersona[]>([]);
   // Empty means "the first N by the slider", which is every batch run so far.
   const [recruited, setRecruited] = useState<string[]>([]);
@@ -156,14 +175,20 @@ function InterviewPageContent() {
   const [step, setStep] = useState(0);
   const [themes, setThemes] = useState<Themes | null>(null);
   const [themesLoading, setThemesLoading] = useState(false);
+  const readOnly = demoPlayback || !!batch?.demo;
+  useEffect(() => {
+    if (demoEnabled && !demoPlayback) { pauseBatch.current = true; setPausing(true); }
+  }, [demoEnabled, demoPlayback]);
   const themeRequest = useRef(0);
   const stepTitle = useRef<HTMLHeadingElement | null>(null);
   function changeStep(next: number) { setStep(next); }
   useEffect(() => { stepTitle.current?.focus(); }, [step]);
   const busy = loading || comparisonLoading || batchLoading || regenerating || themesLoading;
+  useDemoActivity(busy, demoPlayback);
   const transcriptEnd = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
+    if (demoPlayback) return;
     Promise.all([getInterviewPersonas(), getInterviewModelCatalog()])
       .then(([personaData, modelData]) => {
         setPersonas(personaData.personas);
@@ -197,7 +222,7 @@ function InterviewPageContent() {
     setMemos((prev) => {
       const next = { ...prev, [memoKey]: update(prev[memoKey] ?? EMPTY_MEMO) };
       try {
-        localStorage.setItem(MEMO_STORE, JSON.stringify(next));
+        if (!readOnly) localStorage.setItem(MEMO_STORE, JSON.stringify(next));
         setMemoUnsaved("");
       } catch {
         setMemoUnsaved("This browser is not saving your memo — copy it somewhere before you reload.");
@@ -211,7 +236,7 @@ function InterviewPageContent() {
     interviewerModelEntry && intervieweeModelEntry
       ? estimateInterviewRunCost(roomSize, interviewerModelEntry, intervieweeModelEntry)
       : null;
-  const modelsLocked = turns.length > 0 || busy;
+  const modelsLocked = readOnly || turns.length > 0 || busy;
 
   function selectPersona(id: string) {
     if (activity.current) return;
@@ -283,6 +308,7 @@ function InterviewPageContent() {
   }
 
   async function compareModels() {
+    if (readOnly || isDemoMode()) return;
     const asked = comparisonQuestion.trim();
     const orderedModelIds = orderInterviewComparisonModelIds(models, comparisonModelIds);
     if (
@@ -315,6 +341,7 @@ function InterviewPageContent() {
   }
 
   async function ask() {
+    if (readOnly || isDemoMode()) return;
     const asked = question.trim();
     if (
       !asked ||
@@ -372,7 +399,10 @@ function InterviewPageContent() {
 
   useEffect(() => {
     if (!studyId) return;
-    try { setMemos(readMemos(localStorage.getItem(MEMO_STORE))); } catch { /* ignore */ }
+    if (!demoPlayback) {
+      try { setMemos(readMemos(localStorage.getItem(MEMO_STORE))); } catch { /* ignore */ }
+    }
+    if (demoPlayback) return;
     const saved = localStorage.getItem(`interview-batch:${studyId}`);
     const savedRequest = localStorage.getItem(`interview-batch-request:${studyId}`);
     if (savedRequest) {
@@ -393,6 +423,7 @@ function InterviewPageContent() {
   }, [studyId]);
 
   async function runBatch(resume = false, recoverRequest = false) {
+    if (readOnly || isDemoMode()) return;
     if (!studyId || activity.current || !interviewerModel || !intervieweeModel) return;
     const settings = resume && batch ? batch : recoverRequest ? batchRequest.current : {
       persona_count: roomSize, interviewer_model: interviewerModel, interviewee_model: intervieweeModel,
@@ -448,7 +479,7 @@ function InterviewPageContent() {
       const started = current;
       setBatchHistory(previous => [started, ...previous.filter(item => item.job_id !== started.job_id)]);
       do {
-        if (pauseBatch.current || current.status === "completed" || current.status === "budget_stopped") break;
+        if (isDemoMode() || pauseBatch.current || current.status === "completed" || current.status === "budget_stopped") break;
         current = (await interviewOperation<{ batch: Batch }>(studyId, `batches/${current.job_id}/advance`, { revision: current.revision, retry: resume && current.status === "failed" })).batch;
         setBatch(current);
         const updated = current;
@@ -463,6 +494,7 @@ function InterviewPageContent() {
   }
 
   async function loadThemes(generate = false) {
+    if (generate && (readOnly || isDemoMode())) return;
     if (!studyId || !batch || activity.current) return;
     const runId = batch.job_id;
     const token = ++themeRequest.current;
@@ -493,6 +525,7 @@ function InterviewPageContent() {
   }
 
   async function regenerate(answerId: string, version: number, comparison: boolean) {
+    if (readOnly || isDemoMode()) return;
     if (!studyId || activity.current) return;
     activity.current = true;
     setRegenerating(true);
@@ -560,6 +593,10 @@ function InterviewPageContent() {
 
   return (
     <main className="min-h-svh px-4 py-10 sm:px-6 lg:px-12">
+      {readOnly ? <DemoNotice provisional={batch?.provisional} /> : null}
+      {demoPlayback && !batch && !error ? <p role="status">Loading demo…</p> : null}
+      {demoPlayback && error ? <Button onClick={() => setDemoRetry(n => n + 1)}>Retry demo load</Button> : null}
+
       <div className="mx-auto w-full max-w-[88rem]">
         <div className="mb-4 flex flex-wrap items-center gap-2.5 sm:gap-3">
           <BadgeChip tone="gold">Interview</BadgeChip>
@@ -669,7 +706,7 @@ function InterviewPageContent() {
             {themes.stale ? <p>These themes belong to an earlier transcript version. Generate again to compare the current version.</p> : null}
             {themes.saved?.message ? <p role="alert">{themes.saved.message}</p> : null}
             {themes.saved?.budget_stop ? <p role="alert">{themes.saved.budget_stop}</p> : null}
-            {themes.eligible && (!themes.available || themes.stale) ? <Button disabled={busy} onClick={() => loadThemes(true)}>
+            {!readOnly && themes.eligible && (!themes.available || themes.stale) ? <Button disabled={readOnly || busy} onClick={() => loadThemes(true)}>
               {themes.saved && !themes.stale ? "Retry extraction" : "Generate themes"} (about ${Number(themes.estimated_cost_usd).toFixed(4)} extra)
             </Button> : null}
             {themes.emotion && themes.emotion.interviewed > 0 ? <section className="my-4">
@@ -696,8 +733,8 @@ function InterviewPageContent() {
             {themes.saved?.themes?.map((theme, index) => <article className="my-4" key={index}>
               <h3 className="font-semibold">{theme.label} · {theme.sentiment}</h3><p>{theme.synthesis}</p>
               <blockquote>“{theme.representative_quote}”</blockquote>
-              <a className="underline" href={`#transcript-${theme.quote_persona_id}`} onClick={() => {
-                const transcript = document.getElementById(`transcript-${theme.quote_persona_id}`);
+              <a className="underline" href={`#${demoPlayback ? "demo-" : ""}transcript-${theme.quote_persona_id}`} onClick={() => {
+                const transcript = document.getElementById(`${demoPlayback ? "demo-" : ""}transcript-${theme.quote_persona_id}`);
                 transcript?.setAttribute("open", "");
               }}>{theme.quote_persona_id} — locate interviewee quote</a>
             </article>)}
@@ -705,8 +742,8 @@ function InterviewPageContent() {
               <h3 className="font-semibold">One surprise</h3>
               <p>{themes.saved.surprise.summary}</p>
               <blockquote>“{themes.saved.surprise.quote}”</blockquote>
-              <a className="underline" href={`#transcript-${themes.saved.surprise.quote_persona_id}`} onClick={() => {
-                document.getElementById(`transcript-${themes.saved!.surprise!.quote_persona_id}`)?.setAttribute("open", "");
+              <a className="underline" href={`#${demoPlayback ? "demo-" : ""}transcript-${themes.saved.surprise.quote_persona_id}`} onClick={() => {
+                document.getElementById(`${demoPlayback ? "demo-" : ""}transcript-${themes.saved!.surprise!.quote_persona_id}`)?.setAttribute("open", "");
               }}>{themes.saved.surprise.quote_persona_id} — locate interviewee quote</a>
             </article> : null}
             {themes.saved?.themes?.length && themes.saved.answer_options?.length ? <article className="my-4">
@@ -714,8 +751,8 @@ function InterviewPageContent() {
               <p className="text-sm text-app-muted">Each one is a participant&rsquo;s own wording, copied from an answer.</p>
               <ul className="mt-2 list-disc pl-5">
                 {themes.saved.answer_options.map((option, index) => <li key={index}>
-                  “{option.text}” — <a className="underline" href={`#transcript-${option.quote_persona_id}`} onClick={() => {
-                    document.getElementById(`transcript-${option.quote_persona_id}`)?.setAttribute("open", "");
+                  “{option.text}” — <a className="underline" href={`#${demoPlayback ? "demo-" : ""}transcript-${option.quote_persona_id}`} onClick={() => {
+                    document.getElementById(`${demoPlayback ? "demo-" : ""}transcript-${option.quote_persona_id}`)?.setAttribute("open", "");
                   }}>{option.quote_persona_id}</a>
                 </li>)}
               </ul>
@@ -735,7 +772,7 @@ function InterviewPageContent() {
                   key={entry.persona_id}
                   type="button"
                   onClick={() => selectPersona(entry.persona_id)}
-                  disabled={busy || exportingFormat !== null}
+                  disabled={readOnly || busy || exportingFormat !== null}
                   className={cn(
                     "rounded-xl border px-3.5 py-2.5 text-left transition duration-200 disabled:cursor-not-allowed disabled:opacity-60",
                     entry.persona_id === selectedId
@@ -921,22 +958,22 @@ function InterviewPageContent() {
 
             <GlassPanel hidden={step === 0} style={{ display: step === 0 ? "none" : undefined }} className="p-5" aria-label="AI-to-AI batch results">
               <div className="flex flex-wrap gap-2">
-                <Button disabled={busy || !studyId || !interviewerModel || !intervieweeModel || (recruited.length > 0 && recruited.length < personaCountRange.minimum)} onClick={() => runBatch()}>
+                <Button disabled={readOnly || busy || !studyId || !interviewerModel || !intervieweeModel || (recruited.length > 0 && recruited.length < personaCountRange.minimum)} onClick={() => runBatch()}>
                   Run AI-to-AI batch ({roomSize} personas)
                 </Button>
                 {batchRequest.current ? (
-                  <Button variant="secondary" disabled={busy} onClick={() => runBatch(false, true)}>
+                  <Button variant="secondary" disabled={readOnly || busy} onClick={() => runBatch(false, true)}>
                     Recover earlier request: {batchRequest.current.persona_count} personas ({batchRequest.current.persona_ids?.length ? batchRequest.current.persona_ids.join(", ") : `first ${batchRequest.current.persona_count}`}) · interviewer {batchRequest.current.interviewer_model} · interviewee {batchRequest.current.interviewee_model} · expensive models {batchRequest.current.allow_expensive_models ? "enabled" : "disabled"} (re-submit and run)
                   </Button>
                 ) : null}
                 {batch && (batch.status === "running" || batch.status === "failed") ? (
-                  <Button variant="secondary" disabled={busy} onClick={() => runBatch(true)}>Resume batch</Button>
+                  <Button variant="secondary" disabled={readOnly || busy} onClick={() => runBatch(true)}>Resume batch</Button>
                 ) : null}
                 {batchLoading ? <Button variant="secondary" disabled={pausing} onClick={() => { pauseBatch.current = true; setPausing(true); }}>Pause after this call</Button> : null}
               </div>
               <p className="mt-2 text-xs text-app-muted">Eight adaptive questions per persona using the fixed household set and Tahoe Mini research brief. Cached interviews replay free.</p>
               {batchHistory.length > 0 ? <label className="mt-4 block">Saved batches
-                <select aria-label="Saved batches" disabled={busy} value={batch?.job_id ?? ""}
+                <select aria-label="Saved batches" disabled={readOnly || busy} value={batch?.job_id ?? ""}
                   onChange={event => {
                     const selected = batchHistory.find(item => item.job_id === event.target.value);
                     if (selected && studyId) {
@@ -963,7 +1000,7 @@ function InterviewPageContent() {
                   document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url);
                 }}>{format === "csv" ? "Download batch CSV" : "Export transcript + memo"}</Button>)}</div>
                 {batch.error ? <p role="alert">{batch.error.details?.scope ? `${batch.error.details.scope} cap: ` : ""}{batch.error.message}</p> : null}
-                {batch.transcripts.map(transcript => <details id={`transcript-${transcript.persona_id}`} key={transcript.persona_id} className="rounded-xl border border-app-border p-3">
+                {batch.transcripts.map(transcript => <details id={`${demoPlayback ? "demo-" : ""}transcript-${transcript.persona_id}`} key={transcript.persona_id} className="rounded-xl border border-app-border p-3">
                   <summary>{transcript.persona_id} · {Math.floor(transcript.messages.length / 2)}/{batch.turn_limit} answers</summary>
                   {transcript.messages.map((message, index) => <p key={index} className="mt-3 whitespace-pre-wrap text-sm leading-6"><strong>{message.role === "user" ? "Interviewer" : transcript.persona_id}: </strong>{message.content}</p>)}
                 </details>)}
@@ -980,7 +1017,7 @@ function InterviewPageContent() {
                   key={entry.persona_id}
                   type="button"
                   onClick={() => selectPersona(entry.persona_id)}
-                  disabled={busy || exportingFormat !== null}
+                  disabled={readOnly || busy || exportingFormat !== null}
                   className={cn(
                     "rounded-xl border px-3.5 py-2.5 text-left transition duration-200 disabled:cursor-not-allowed disabled:opacity-60",
                     entry.persona_id === selectedId
@@ -1037,7 +1074,7 @@ function InterviewPageContent() {
                 <BadgeChip tone="cyan">Controlled comparison</BadgeChip>
               </div>
 
-              <fieldset className="mt-5" disabled={busy}>
+              <fieldset className="mt-5" disabled={readOnly || busy}>
                 <legend className="text-xs font-semibold uppercase tracking-[0.14em] text-app-muted">
                   Models to compare ({comparisonModelIds.length} selected)
                 </legend>
@@ -1092,7 +1129,7 @@ function InterviewPageContent() {
                   onChange={(event) =>
                     setExpensiveComparisonModelsForRun(event.target.checked)
                   }
-                  disabled={busy}
+                  disabled={readOnly || busy}
                   className="mt-0.5 size-4 accent-[var(--color-gold)] disabled:cursor-not-allowed"
                 />
                 Enable expensive models for this comparison. Add one above to compare the price
@@ -1113,14 +1150,14 @@ function InterviewPageContent() {
                   onKeyDown={(event) => {
                     if (event.key === "Enter") compareModels();
                   }}
-                  disabled={busy}
+                  disabled={readOnly || busy}
                   placeholder="Ask every model the same question…"
                   className="flex-1 rounded-xl border border-app-border bg-transparent px-4 py-3 text-sm text-app-text outline-none transition placeholder:text-app-muted focus:border-app-borderStrong disabled:cursor-not-allowed disabled:opacity-60"
                 />
                 <Button
                   onClick={compareModels}
                   disabled={
-                    busy ||
+                    readOnly || busy ||
                     comparisonLoading ||
                     !comparisonQuestion.trim() ||
                     !studyId ||
@@ -1209,7 +1246,7 @@ function InterviewPageContent() {
                               </p>
                             )}
                           </div>
-                          {result.answerId && result.answer ? <Button variant="secondary" disabled={busy} onClick={() => regenerate(result.answerId!, result.version ?? 0, true)}>Regenerate answer (paid)</Button> : null}
+                          {result.answerId && result.answer ? <Button variant="secondary" disabled={readOnly || busy} onClick={() => regenerate(result.answerId!, result.version ?? 0, true)}>Regenerate answer (paid)</Button> : null}
                           {result.postInterviewScore ? (
                             <div className="mt-auto border-t border-app-border pt-4">
                               <p className="text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-app-muted">
@@ -1290,7 +1327,7 @@ function InterviewPageContent() {
                       >
                         {turn.text}
                       </p>
-                      {turn.answerId && index === turns.length - 1 ? <Button variant="secondary" disabled={busy} onClick={() => regenerate(turn.answerId!, turn.version ?? 0, false)}>Regenerate answer (paid)</Button> : null}
+                      {turn.answerId && index === turns.length - 1 ? <Button variant="secondary" disabled={readOnly || busy} onClick={() => regenerate(turn.answerId!, turn.version ?? 0, false)}>Regenerate answer (paid)</Button> : null}
                     </motion.div>
                   ))}
                 </AnimatePresence>
@@ -1330,7 +1367,7 @@ function InterviewPageContent() {
                 <Button
                   onClick={ask}
                   disabled={
-                    busy ||
+                    readOnly || busy ||
                     !question.trim() ||
                     !studyId ||
                     !persona ||

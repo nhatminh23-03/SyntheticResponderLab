@@ -312,6 +312,8 @@ def estimate_room_cost_usd(*, persona_count: int, rounds: int, model_id: str) ->
 
 
 def participant_card(config, persona_id):
+    if config.get("demo_cards", {}).get(persona_id):
+        return config["demo_cards"][persona_id]
     custom = config.get("custom_personas", {}).get(persona_id)
     if custom:
         return custom["card"]
@@ -558,6 +560,8 @@ def ask_round(session, settings, study, room_id, payload):
     """
     from src.services import interview_service as service
     room = owned_room(session, study, room_id, lock=True)
+    from src.services.demo_mode import refuse_demo
+    refuse_demo(room)
     if type(payload.get("revision")) is not int:
         raise ValidationApiError("An integer room revision is required.")
     if room.status in {"cancelled", "completed"}:
@@ -857,6 +861,8 @@ def extend_room(session, settings, study, room_id, payload):
     must be authorized, and has to fit the same run and class budget a room start does."""
     from src.services.interview_service import utcnow
     room = owned_room(session, study, room_id, lock=True)
+    from src.services.demo_mode import refuse_demo
+    refuse_demo(room)
     if type(payload.get("revision")) is not int:
         raise ValidationApiError("An integer room revision is required.")
     if room.status in {"cancelled", "completed"}:
@@ -1013,6 +1019,9 @@ def focus_group_memo(session, settings, study, room_id, payload=None):
     """Read-only unless the student authorizes the charge; re-opening never pays twice."""
     from src.services import interview_service as service
     room = owned_room(session, study, room_id, lock=True)
+    from src.services.demo_mode import refuse_demo
+    if payload is not None:
+        refuse_demo(room)
     view = memo_view(session, settings, study, room_id, room=room)
     if payload is None or not view["eligible"]:
         return view
@@ -1356,6 +1365,10 @@ def build_room_export(status, export_format):
         # ponytail: the label is the first row so no one opens the file without seeing it;
         # a parser that wants the header first skips one line.
         writer.writerow([REHEARSAL_LABEL])
+        if status.get("demo"):
+            writer.writerow([status["demo_label"], "Playback cost: $0"])
+            if status.get("provisional"):
+                writer.writerow(["Provisional hand-written example"])
         writer.writerow(["round", "stage", "speaker", "role", "text", "status", "complete", "turn_id"])
         for round_ in status["rounds"]:
             if round_.get("stimulus"):
@@ -1418,6 +1431,8 @@ def build_room_export(status, export_format):
     lines = ["# Focus group transcript", "",
              f"> **{REHEARSAL_LABEL}.** Every participant below is a simulated persona, not a real "
              "person. Nothing here is PA3.5 fieldwork or evidence about real customers.", ""]
+    if status.get("demo"):
+        lines += [status["demo_label"], "Playback cost: $0", "Provisional hand-written example" if status.get("provisional") else "", ""]
     if unfinished:
         lines += [f"> **INCOMPLETE — do not submit as final.** Room status: `{status['status']}`."
                   + (f" Missing answers (round:persona): {', '.join(incomplete)}." if incomplete else ""), ""]

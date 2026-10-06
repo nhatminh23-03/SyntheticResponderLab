@@ -15,7 +15,7 @@
 !apps/web/.env.example
 
 # Node / Next.js
-node_modules/
+node_modules
 .next/
 *.tsbuildinfo
 

@@ -247,6 +247,15 @@ def status(job):
 @serialized_local
 def standalone_themes(session, settings, study, job_id, payload=None):
     job = owned_job(session, study, job_id, "standalone_batch", lock=True)
+    if (job.payload_json or {}).get("demo"):
+        from src.services.demo_mode import refuse_demo, ZERO_USAGE
+        if payload is not None:
+            refuse_demo(job)
+        saved = (job.result_json or {}).get("insights")
+        return {"from_run_id": job_id, "revision": job.result_json["revision"], "eligible": False,
+                "available": bool(saved), "stale": False, "saved": saved, "session_usage": dict(ZERO_USAGE),
+                "message": "Saved fixture themes." if saved else "No themes were saved in this demo. Demo (no AI): read-only",
+                "estimated_cost_usd": "0", "model": "pre-recorded"}
     view = {**status(job), "session_usage": usage(session, settings, job_id)}
     if payload is None:
         return view

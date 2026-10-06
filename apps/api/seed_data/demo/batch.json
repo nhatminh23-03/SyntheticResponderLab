@@ -1,0 +1,447 @@
+{
+  "config": {
+    "persona_count": 6,
+    "persona_ids": [
+      "P001",
+      "P002",
+      "P003",
+      "P004",
+      "P005",
+      "P006"
+    ],
+    "interviewer_model": "openai/gpt-4o-mini",
+    "interviewee_model": "openai/gpt-4o-mini",
+    "estimated_cost_usd": "0.0324",
+    "turn_limit": 8
+  },
+  "state": {
+    "revision": 96,
+    "transcripts": [
+      {
+        "persona_id": "P001",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Who lives with you, and where do you spend time at home?"
+          },
+          {
+            "role": "assistant",
+            "content": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding."
+          },
+          {
+            "role": "user",
+            "content": "You mentioned sharing space. When is that most difficult?"
+          },
+          {
+            "role": "assistant",
+            "content": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding."
+          },
+          {
+            "role": "user",
+            "content": "How do you handle those interruptions today?"
+          },
+          {
+            "role": "assistant",
+            "content": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding."
+          },
+          {
+            "role": "user",
+            "content": "What would a separate backyard studio change for you?"
+          },
+          {
+            "role": "assistant",
+            "content": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding."
+          },
+          {
+            "role": "user",
+            "content": "What would you need to learn before considering Tahoe Mini?"
+          },
+          {
+            "role": "assistant",
+            "content": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding."
+          },
+          {
+            "role": "user",
+            "content": "Why does the installation uncertainty matter to you?"
+          },
+          {
+            "role": "assistant",
+            "content": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding."
+          },
+          {
+            "role": "user",
+            "content": "How would you decide whether the cost is worth it?"
+          },
+          {
+            "role": "assistant",
+            "content": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding."
+          },
+          {
+            "role": "user",
+            "content": "What else should we understand about your decision?"
+          },
+          {
+            "role": "assistant",
+            "content": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding."
+          }
+        ]
+      },
+      {
+        "persona_id": "P002",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Who lives with you, and where do you spend time at home?"
+          },
+          {
+            "role": "assistant",
+            "content": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding."
+          },
+          {
+            "role": "user",
+            "content": "You mentioned sharing space. When is that most difficult?"
+          },
+          {
+            "role": "assistant",
+            "content": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding."
+          },
+          {
+            "role": "user",
+            "content": "How do you handle those interruptions today?"
+          },
+          {
+            "role": "assistant",
+            "content": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding."
+          },
+          {
+            "role": "user",
+            "content": "What would a separate backyard studio change for you?"
+          },
+          {
+            "role": "assistant",
+            "content": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding."
+          },
+          {
+            "role": "user",
+            "content": "What would you need to learn before considering Tahoe Mini?"
+          },
+          {
+            "role": "assistant",
+            "content": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding."
+          },
+          {
+            "role": "user",
+            "content": "Why does the installation uncertainty matter to you?"
+          },
+          {
+            "role": "assistant",
+            "content": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding."
+          },
+          {
+            "role": "user",
+            "content": "How would you decide whether the cost is worth it?"
+          },
+          {
+            "role": "assistant",
+            "content": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding."
+          },
+          {
+            "role": "user",
+            "content": "What else should we understand about your decision?"
+          },
+          {
+            "role": "assistant",
+            "content": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding."
+          }
+        ]
+      },
+      {
+        "persona_id": "P003",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Who lives with you, and where do you spend time at home?"
+          },
+          {
+            "role": "assistant",
+            "content": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding."
+          },
+          {
+            "role": "user",
+            "content": "You mentioned sharing space. When is that most difficult?"
+          },
+          {
+            "role": "assistant",
+            "content": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding."
+          },
+          {
+            "role": "user",
+            "content": "How do you handle those interruptions today?"
+          },
+          {
+            "role": "assistant",
+            "content": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding."
+          },
+          {
+            "role": "user",
+            "content": "What would a separate backyard studio change for you?"
+          },
+          {
+            "role": "assistant",
+            "content": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding."
+          },
+          {
+            "role": "user",
+            "content": "What would you need to learn before considering Tahoe Mini?"
+          },
+          {
+            "role": "assistant",
+            "content": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding."
+          },
+          {
+            "role": "user",
+            "content": "Why does the installation uncertainty matter to you?"
+          },
+          {
+            "role": "assistant",
+            "content": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding."
+          },
+          {
+            "role": "user",
+            "content": "How would you decide whether the cost is worth it?"
+          },
+          {
+            "role": "assistant",
+            "content": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding."
+          },
+          {
+            "role": "user",
+            "content": "What else should we understand about your decision?"
+          },
+          {
+            "role": "assistant",
+            "content": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding."
+          }
+        ]
+      },
+      {
+        "persona_id": "P004",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Who lives with you, and where do you spend time at home?"
+          },
+          {
+            "role": "assistant",
+            "content": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding."
+          },
+          {
+            "role": "user",
+            "content": "You mentioned sharing space. When is that most difficult?"
+          },
+          {
+            "role": "assistant",
+            "content": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding."
+          },
+          {
+            "role": "user",
+            "content": "How do you handle those interruptions today?"
+          },
+          {
+            "role": "assistant",
+            "content": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding."
+          },
+          {
+            "role": "user",
+            "content": "What would a separate backyard studio change for you?"
+          },
+          {
+            "role": "assistant",
+            "content": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding."
+          },
+          {
+            "role": "user",
+            "content": "What would you need to learn before considering Tahoe Mini?"
+          },
+          {
+            "role": "assistant",
+            "content": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding."
+          },
+          {
+            "role": "user",
+            "content": "Why does the installation uncertainty matter to you?"
+          },
+          {
+            "role": "assistant",
+            "content": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding."
+          },
+          {
+            "role": "user",
+            "content": "How would you decide whether the cost is worth it?"
+          },
+          {
+            "role": "assistant",
+            "content": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding."
+          },
+          {
+            "role": "user",
+            "content": "What else should we understand about your decision?"
+          },
+          {
+            "role": "assistant",
+            "content": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding."
+          }
+        ]
+      },
+      {
+        "persona_id": "P005",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Who lives with you, and where do you spend time at home?"
+          },
+          {
+            "role": "assistant",
+            "content": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding."
+          },
+          {
+            "role": "user",
+            "content": "You mentioned sharing space. When is that most difficult?"
+          },
+          {
+            "role": "assistant",
+            "content": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding."
+          },
+          {
+            "role": "user",
+            "content": "How do you handle those interruptions today?"
+          },
+          {
+            "role": "assistant",
+            "content": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding."
+          },
+          {
+            "role": "user",
+            "content": "What would a separate backyard studio change for you?"
+          },
+          {
+            "role": "assistant",
+            "content": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding."
+          },
+          {
+            "role": "user",
+            "content": "What would you need to learn before considering Tahoe Mini?"
+          },
+          {
+            "role": "assistant",
+            "content": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding."
+          },
+          {
+            "role": "user",
+            "content": "Why does the installation uncertainty matter to you?"
+          },
+          {
+            "role": "assistant",
+            "content": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding."
+          },
+          {
+            "role": "user",
+            "content": "How would you decide whether the cost is worth it?"
+          },
+          {
+            "role": "assistant",
+            "content": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding."
+          },
+          {
+            "role": "user",
+            "content": "What else should we understand about your decision?"
+          },
+          {
+            "role": "assistant",
+            "content": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding."
+          }
+        ]
+      },
+      {
+        "persona_id": "P006",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Who lives with you, and where do you spend time at home?"
+          },
+          {
+            "role": "assistant",
+            "content": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding."
+          },
+          {
+            "role": "user",
+            "content": "You mentioned sharing space. When is that most difficult?"
+          },
+          {
+            "role": "assistant",
+            "content": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding."
+          },
+          {
+            "role": "user",
+            "content": "How do you handle those interruptions today?"
+          },
+          {
+            "role": "assistant",
+            "content": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding."
+          },
+          {
+            "role": "user",
+            "content": "What would a separate backyard studio change for you?"
+          },
+          {
+            "role": "assistant",
+            "content": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding."
+          },
+          {
+            "role": "user",
+            "content": "What would you need to learn before considering Tahoe Mini?"
+          },
+          {
+            "role": "assistant",
+            "content": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding."
+          },
+          {
+            "role": "user",
+            "content": "Why does the installation uncertainty matter to you?"
+          },
+          {
+            "role": "assistant",
+            "content": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding."
+          },
+          {
+            "role": "user",
+            "content": "How would you decide whether the cost is worth it?"
+          },
+          {
+            "role": "assistant",
+            "content": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding."
+          },
+          {
+            "role": "user",
+            "content": "What else should we understand about your decision?"
+          },
+          {
+            "role": "assistant",
+            "content": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding."
+          }
+        ]
+      }
+    ],
+    "completed_personas": 6
+  },
+  "kind": "batch",
+  "provisional": true,
+  "source": "hand-written",
+  "generation": {
+    "script": "scripts/make_demo_fixtures.py",
+    "cost_usd": "0",
+    "reserved_usd": "0",
+    "calls": 0,
+    "limit_usd": "2"
+  }
+}

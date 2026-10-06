@@ -13,7 +13,8 @@ import { isClassroomInterviewApiRequest } from "../src/lib/classroom-access";
 // Render the actual page with deterministic hooks and transport. This exercises its
 // event handlers and rendered controls without a browser or a paid provider.
 type Element = { type: unknown; props: Record<string, any> };
-function harness(savedBatches: any[] = [], comparisonFetcher?: Parameters<typeof comparisonHelpers.runInterviewComparison>[1], carried?: Map<string, string>) {
+function harness(savedBatches: any[] = [], comparisonFetcher?: Parameters<typeof comparisonHelpers.runInterviewComparison>[1], carried?: Map<string, string>, demoPlayback = false) {
+  let demoEnabled = demoPlayback;
   let confirmResult = true;
   const confirmations: string[] = [];
   const states: any[] = [];
@@ -29,7 +30,14 @@ function harness(savedBatches: any[] = [], comparisonFetcher?: Parameters<typeof
   ];
   const personas = ["neo-001", "neo-002", "neo-003"].map(persona_id => ({ persona_id, lifestyle_tags: [], census_profile: "Household" }));
   const memory = carried ?? new Map<string, string>();
-  let transport: (path: string, payload: any) => Promise<any> = async () => { throw new Error("unexpected request"); };
+  let transport: (path: string, payload: any) => Promise<any> = async (path) => {
+    if (path === "demo/batch") {
+      const fixture = JSON.parse(readFileSync(resolve(__dirname, "../../../api/seed_data/demo/batch.json"), "utf8"));
+      return { batch: { ...fixture.config, ...fixture.state, demo: true, provisional: true, job_id: "demo_batch",
+        status: "completed", session_usage: { cost_usd: "0" }, error: null } };
+    }
+    throw new Error("unexpected request");
+  };
   let exportsPayload: any;
   const exportedMemos: any[] = [];
   const exportedStudentMemos: any[] = [];
@@ -61,6 +69,8 @@ function harness(savedBatches: any[] = [], comparisonFetcher?: Parameters<typeof
   };
   const mocks: Record<string, any> = {
     react,
+    "@/components/demo/demo-mode": { DemoScreens: "demo-screens", DemoNotice: "demo-notice", useDemoActivity() {} },
+    "@/lib/demo-mode": { useDemoMode: () => [demoEnabled, () => {}], isDemoMode: () => demoEnabled },
     "framer-motion": { AnimatePresence: "presence", motion: { div: "div" } },
     "@/lib/api": api,
     "@/lib/interview-batch-export": { REFLECTION_PROMPTS, batchExport: (...args: Parameters<typeof batchExport>) => {
@@ -91,7 +101,9 @@ function harness(savedBatches: any[] = [], comparisonFetcher?: Parameters<typeof
   const dom = { createElement: () => ({ click() {}, remove() {} }), body: { appendChild() {} } };
   new Function("require", "exports", "localStorage", "document", "window", compiled)((name: string) => mocks[name] ?? require(name), exported, storage, dom, { confirm: (message: string) => { confirmations.push(message); return confirmResult; } });
   // ponytail: the page's default export is just provider wrappers; find the one real component inside.
-  const findComponent = (node: any): any => Array.isArray(node)
+  const findComponent = (node: any): any => typeof node === "function"
+    ? findComponent(node(demoPlayback))
+    : Array.isArray(node)
     ? node.map(findComponent).find(Boolean)
     : node && typeof node === "object"
       ? (typeof node.type === "function" ? node.type : findComponent(node.props?.children))
@@ -99,7 +111,7 @@ function harness(savedBatches: any[] = [], comparisonFetcher?: Parameters<typeof
   const component = findComponent(exported.default());
   assert.ok(component, "interview page renders no component inside its providers");
   let tree: Element;
-  function render() { cursor = 0; tree = component(); first = false; return tree; }
+  function render() { cursor = 0; tree = component({ demoPlayback }); first = false; return tree; }
   render();
   effects.forEach(effect => effect());
   function flatten(node: any): Element[] {
@@ -115,6 +127,7 @@ function harness(savedBatches: any[] = [], comparisonFetcher?: Parameters<typeof
   }
   return {
     calls, chatCalls, memory, api, confirmations, exportedMemos, exportedStudentMemos,
+    setDemo(enabled: boolean) { demoEnabled = enabled; },
     dismissConfirmation() { confirmResult = false; },
     get exportedTranscript() { return exportsPayload; },
     setTransport(fn: typeof transport) { transport = fn; },
@@ -874,4 +887,40 @@ test("a persona switch cannot land while the transcript export it advises is sti
   await exporting;
   await ui.settle();
   assert.match(ui.text(), /Original 1/);
+});
+
+test("demo mode page opens prerecorded batch without models, disables run, exports and never pays", async () => {
+  const ui = harness([], undefined, undefined, true);
+  await ui.settle();
+  assert.deepEqual(ui.calls.map(c => c.path), ["demo/batch"]);
+  assert.match(ui.text(), /6\/6 personas complete/);
+  assert.match(ui.text(), /Measured cost: \$0.000000/);
+  assert.equal(ui.button("Run AI-to-AI batch").props.disabled, true);
+  // Calling the handler directly is also refused, independent of disabled markup.
+  await ui.button("Run AI-to-AI batch").props.onClick();
+  ui.button("Export transcript + memo").props.onClick();
+  assert.equal(ui.calls.length, 1);
+  assert.equal(ui.chatCalls.length, 0);
+  ui.button("3. Themes").props.onClick(); ui.render();
+  ui.setTransport(async () => ({ insights: { from_run_id: "demo_batch", eligible: false, available: false,
+    saved: null, message: "No themes were saved in this demo." } }));
+  await ui.button("Check saved themes").props.onClick(); await ui.settle();
+  assert.match(ui.text(), /No themes were saved/);
+  assert.equal(ui.nodes().some(n => n.type === "Button" && String(n.props.children).includes("Generate themes")), false);
+});
+
+test("demo switch during live advance retains its paid result and stops further automatic calls", async () => {
+  const ui = harness(); await ui.settle();
+  let complete!: (value: any) => void;
+  ui.setTransport(async path => path === "batches" ? { batch } : new Promise(resolve => { complete = resolve; }));
+  const running = ui.button("Run AI-to-AI batch").props.onClick(); await ui.settle();
+  ui.setDemo(true);
+  complete({ batch: { ...batch, revision: 1, session_usage: { cost_usd: ".001" },
+    transcripts: [{ persona_id: "neo-001", messages: [{ role: "user", content: "Paid live result preserved" }] }] } });
+  await running; await ui.settle();
+  assert.equal(ui.calls.length, 2);
+  assert.match(ui.text(), /Paid live result preserved/);
+  ui.setDemo(false); await ui.settle();
+  assert.equal(ui.calls.length, 2, "turning demo off cannot resume paid work automatically");
+  assert.equal(ui.button("Resume batch").props.disabled, false);
 });

@@ -1,0 +1,1008 @@
+{
+  "config": {
+    "persona_ids": [
+      "P001",
+      "P002",
+      "P003",
+      "P004",
+      "P005",
+      "P006"
+    ],
+    "model": "openai/gpt-4o-mini",
+    "max_rounds": 8,
+    "estimated_cost_usd": "0.02592",
+    "demo_cards": {
+      "P001": {
+        "persona_id": "P001",
+        "name": "Jorge Beltran",
+        "origin": "source_grounded_roster",
+        "origin_label": "Roster persona grounded in one ACS household record",
+        "attributes": [
+          {
+            "key": "name",
+            "label": "Name",
+            "value": "Jorge Beltran",
+            "source": "fictional"
+          },
+          {
+            "key": "household",
+            "label": "Household",
+            "value": "Nonfamily household: Male householder: Living alone, 1 person",
+            "source": "census"
+          },
+          {
+            "key": "tenure",
+            "label": "Homeowner or renter",
+            "value": "Owned with mortgage or loan (include home equity loans)",
+            "source": "census"
+          },
+          {
+            "key": "outdoor_space",
+            "label": "Usable outdoor space",
+            "value": "Unknown",
+            "source": "unknown"
+          },
+          {
+            "key": "willing_more_space",
+            "label": "Willing to consider more living/work space",
+            "value": "Unknown",
+            "source": "unknown"
+          },
+          {
+            "key": "current_space_use",
+            "label": "How they use their space today",
+            "value": "Unknown",
+            "source": "unknown"
+          },
+          {
+            "key": "age",
+            "label": "Age",
+            "value": "32, male",
+            "source": "census"
+          },
+          {
+            "key": "county",
+            "label": "Lives in",
+            "value": "San Diego County, California",
+            "source": "census"
+          },
+          {
+            "key": "home",
+            "label": "Home",
+            "value": "detached single-family, 3 rooms, built 1950 to 1959",
+            "source": "census"
+          },
+          {
+            "key": "moved_in",
+            "label": "Lived there",
+            "value": "10 to 19 years",
+            "source": "census"
+          },
+          {
+            "key": "income",
+            "label": "Household income",
+            "value": "$104,999 a year",
+            "source": "census"
+          },
+          {
+            "key": "housing_cost",
+            "label": "Housing cost share of income",
+            "value": "33%",
+            "source": "census"
+          },
+          {
+            "key": "work",
+            "label": "Work",
+            "value": "Chief Executives And Legislators; Civilian employed, at work; 60 hours/week; commutes by car, truck, or van, 45 min",
+            "source": "census"
+          }
+        ],
+        "screener": [
+          {
+            "criterion": "Homeowner or landowner",
+            "verdict": "meets",
+            "why": "Tenure: Owned with mortgage or loan (include home equity loans).",
+            "source": "census"
+          },
+          {
+            "criterion": "Has usable outdoor space",
+            "verdict": "unknown",
+            "why": "Not recorded. A detached home often has a yard, but that is an assumption to check with a screener question, not a fact.",
+            "source": "unknown"
+          },
+          {
+            "criterion": "Open to adding living or work space",
+            "verdict": "unknown",
+            "why": "Not recorded \u2014 this is exactly what a screener question has to ask.",
+            "source": "unknown"
+          }
+        ],
+        "source_note": "Source-backed attributes come from one real household record in the Census Bureau's American Community Survey microdata (ACS PUMS, California). The name is invented. In a focus group the persona is also given an invented speaking manner and, once the concept is shown, an invented stance toward it. Anything the record does not cover is marked unknown: the persona may improvise it, and nothing it says is evidence about real customers."
+      },
+      "P002": {
+        "persona_id": "P002",
+        "name": "Janet Keller",
+        "origin": "source_grounded_roster",
+        "origin_label": "Roster persona grounded in one ACS household record",
+        "attributes": [
+          {
+            "key": "name",
+            "label": "Name",
+            "value": "Janet Keller",
+            "source": "fictional"
+          },
+          {
+            "key": "household",
+            "label": "Household",
+            "value": "Married couple household, 4 people, 2 children",
+            "source": "census"
+          },
+          {
+            "key": "tenure",
+            "label": "Homeowner or renter",
+            "value": "Owned with mortgage or loan (include home equity loans)",
+            "source": "census"
+          },
+          {
+            "key": "outdoor_space",
+            "label": "Usable outdoor space",
+            "value": "Unknown",
+            "source": "unknown"
+          },
+          {
+            "key": "willing_more_space",
+            "label": "Willing to consider more living/work space",
+            "value": "Unknown",
+            "source": "unknown"
+          },
+          {
+            "key": "current_space_use",
+            "label": "How they use their space today",
+            "value": "Unknown",
+            "source": "unknown"
+          },
+          {
+            "key": "age",
+            "label": "Age",
+            "value": "32, female",
+            "source": "census"
+          },
+          {
+            "key": "county",
+            "label": "Lives in",
+            "value": "Kern County, California",
+            "source": "census"
+          },
+          {
+            "key": "home",
+            "label": "Home",
+            "value": "detached single-family, 3 bedrooms, 5 rooms, built 1980 to 1989",
+            "source": "census"
+          },
+          {
+            "key": "moved_in",
+            "label": "Lived there",
+            "value": "10 to 19 years",
+            "source": "census"
+          },
+          {
+            "key": "income",
+            "label": "Household income",
+            "value": "$100,547 a year",
+            "source": "census"
+          },
+          {
+            "key": "housing_cost",
+            "label": "Housing cost share of income",
+            "value": "17%",
+            "source": "census"
+          },
+          {
+            "key": "work",
+            "label": "Work",
+            "value": "Tutors; Not in labor force",
+            "source": "census"
+          }
+        ],
+        "screener": [
+          {
+            "criterion": "Homeowner or landowner",
+            "verdict": "meets",
+            "why": "Tenure: Owned with mortgage or loan (include home equity loans).",
+            "source": "census"
+          },
+          {
+            "criterion": "Has usable outdoor space",
+            "verdict": "unknown",
+            "why": "Not recorded. A detached home often has a yard, but that is an assumption to check with a screener question, not a fact.",
+            "source": "unknown"
+          },
+          {
+            "criterion": "Open to adding living or work space",
+            "verdict": "unknown",
+            "why": "Not recorded \u2014 this is exactly what a screener question has to ask.",
+            "source": "unknown"
+          }
+        ],
+        "source_note": "Source-backed attributes come from one real household record in the Census Bureau's American Community Survey microdata (ACS PUMS, California). The name is invented. In a focus group the persona is also given an invented speaking manner and, once the concept is shown, an invented stance toward it. Anything the record does not cover is marked unknown: the persona may improvise it, and nothing it says is evidence about real customers."
+      },
+      "P003": {
+        "persona_id": "P003",
+        "name": "Leilani Duarte",
+        "origin": "source_grounded_roster",
+        "origin_label": "Roster persona grounded in one ACS household record",
+        "attributes": [
+          {
+            "key": "name",
+            "label": "Name",
+            "value": "Leilani Duarte",
+            "source": "fictional"
+          },
+          {
+            "key": "household",
+            "label": "Household",
+            "value": "Married couple household, 4 people",
+            "source": "census"
+          },
+          {
+            "key": "tenure",
+            "label": "Homeowner or renter",
+            "value": "Owned with mortgage or loan (include home equity loans)",
+            "source": "census"
+          },
+          {
+            "key": "outdoor_space",
+            "label": "Usable outdoor space",
+            "value": "Unknown",
+            "source": "unknown"
+          },
+          {
+            "key": "willing_more_space",
+            "label": "Willing to consider more living/work space",
+            "value": "Unknown",
+            "source": "unknown"
+          },
+          {
+            "key": "current_space_use",
+            "label": "How they use their space today",
+            "value": "Unknown",
+            "source": "unknown"
+          },
+          {
+            "key": "age",
+            "label": "Age",
+            "value": "50, female",
+            "source": "census"
+          },
+          {
+            "key": "county",
+            "label": "Lives in",
+            "value": "Los Angeles County, California",
+            "source": "census"
+          },
+          {
+            "key": "home",
+            "label": "Home",
+            "value": "detached single-family, 3 bedrooms, 7 rooms, built 1950 to 1959",
+            "source": "census"
+          },
+          {
+            "key": "moved_in",
+            "label": "Lived there",
+            "value": "10 to 19 years",
+            "source": "census"
+          },
+          {
+            "key": "income",
+            "label": "Household income",
+            "value": "$229,025 a year",
+            "source": "census"
+          },
+          {
+            "key": "housing_cost",
+            "label": "Housing cost share of income",
+            "value": "23%",
+            "source": "census"
+          },
+          {
+            "key": "work",
+            "label": "Work",
+            "value": "Chief Executives And Legislators; Civilian employed, at work; 40 hours/week; commutes by car, truck, or van, 15 min",
+            "source": "census"
+          }
+        ],
+        "screener": [
+          {
+            "criterion": "Homeowner or landowner",
+            "verdict": "meets",
+            "why": "Tenure: Owned with mortgage or loan (include home equity loans).",
+            "source": "census"
+          },
+          {
+            "criterion": "Has usable outdoor space",
+            "verdict": "unknown",
+            "why": "Not recorded. A detached home often has a yard, but that is an assumption to check with a screener question, not a fact.",
+            "source": "unknown"
+          },
+          {
+            "criterion": "Open to adding living or work space",
+            "verdict": "unknown",
+            "why": "Not recorded \u2014 this is exactly what a screener question has to ask.",
+            "source": "unknown"
+          }
+        ],
+        "source_note": "Source-backed attributes come from one real household record in the Census Bureau's American Community Survey microdata (ACS PUMS, California). The name is invented. In a focus group the persona is also given an invented speaking manner and, once the concept is shown, an invented stance toward it. Anything the record does not cover is marked unknown: the persona may improvise it, and nothing it says is evidence about real customers."
+      },
+      "P004": {
+        "persona_id": "P004",
+        "name": "Paloma Acosta",
+        "origin": "source_grounded_roster",
+        "origin_label": "Roster persona grounded in one ACS household record",
+        "attributes": [
+          {
+            "key": "name",
+            "label": "Name",
+            "value": "Paloma Acosta",
+            "source": "fictional"
+          },
+          {
+            "key": "household",
+            "label": "Household",
+            "value": "Married couple household, 4 people, 1 child",
+            "source": "census"
+          },
+          {
+            "key": "tenure",
+            "label": "Homeowner or renter",
+            "value": "Owned with mortgage or loan (include home equity loans)",
+            "source": "census"
+          },
+          {
+            "key": "outdoor_space",
+            "label": "Usable outdoor space",
+            "value": "Unknown",
+            "source": "unknown"
+          },
+          {
+            "key": "willing_more_space",
+            "label": "Willing to consider more living/work space",
+            "value": "Unknown",
+            "source": "unknown"
+          },
+          {
+            "key": "current_space_use",
+            "label": "How they use their space today",
+            "value": "Unknown",
+            "source": "unknown"
+          },
+          {
+            "key": "age",
+            "label": "Age",
+            "value": "53, female",
+            "source": "census"
+          },
+          {
+            "key": "county",
+            "label": "Lives in",
+            "value": "Orange County, California",
+            "source": "census"
+          },
+          {
+            "key": "home",
+            "label": "Home",
+            "value": "detached single-family, 4 bedrooms, 9 rooms, built 1990 to 1999",
+            "source": "census"
+          },
+          {
+            "key": "moved_in",
+            "label": "Lived there",
+            "value": "20 to 29 years",
+            "source": "census"
+          },
+          {
+            "key": "income",
+            "label": "Household income",
+            "value": "$379,846 a year",
+            "source": "census"
+          },
+          {
+            "key": "housing_cost",
+            "label": "Housing cost share of income",
+            "value": "17%",
+            "source": "census"
+          },
+          {
+            "key": "work",
+            "label": "Work",
+            "value": "Lawyers, And Judges, Magistrates, And Other Judicial Workers; Unemployed; 10 hours/week",
+            "source": "census"
+          }
+        ],
+        "screener": [
+          {
+            "criterion": "Homeowner or landowner",
+            "verdict": "meets",
+            "why": "Tenure: Owned with mortgage or loan (include home equity loans).",
+            "source": "census"
+          },
+          {
+            "criterion": "Has usable outdoor space",
+            "verdict": "unknown",
+            "why": "Not recorded. A detached home often has a yard, but that is an assumption to check with a screener question, not a fact.",
+            "source": "unknown"
+          },
+          {
+            "criterion": "Open to adding living or work space",
+            "verdict": "unknown",
+            "why": "Not recorded \u2014 this is exactly what a screener question has to ask.",
+            "source": "unknown"
+          }
+        ],
+        "source_note": "Source-backed attributes come from one real household record in the Census Bureau's American Community Survey microdata (ACS PUMS, California). The name is invented. In a focus group the persona is also given an invented speaking manner and, once the concept is shown, an invented stance toward it. Anything the record does not cover is marked unknown: the persona may improvise it, and nothing it says is evidence about real customers."
+      },
+      "P005": {
+        "persona_id": "P005",
+        "name": "Marcus Barrett",
+        "origin": "source_grounded_roster",
+        "origin_label": "Roster persona grounded in one ACS household record",
+        "attributes": [
+          {
+            "key": "name",
+            "label": "Name",
+            "value": "Marcus Barrett",
+            "source": "fictional"
+          },
+          {
+            "key": "household",
+            "label": "Household",
+            "value": "Married couple household, 5 people, 1 child",
+            "source": "census"
+          },
+          {
+            "key": "tenure",
+            "label": "Homeowner or renter",
+            "value": "Owned with mortgage or loan (include home equity loans)",
+            "source": "census"
+          },
+          {
+            "key": "outdoor_space",
+            "label": "Usable outdoor space",
+            "value": "Unknown",
+            "source": "unknown"
+          },
+          {
+            "key": "willing_more_space",
+            "label": "Willing to consider more living/work space",
+            "value": "Unknown",
+            "source": "unknown"
+          },
+          {
+            "key": "current_space_use",
+            "label": "How they use their space today",
+            "value": "Unknown",
+            "source": "unknown"
+          },
+          {
+            "key": "age",
+            "label": "Age",
+            "value": "61, male",
+            "source": "census"
+          },
+          {
+            "key": "county",
+            "label": "Lives in",
+            "value": "Orange County, California",
+            "source": "census"
+          },
+          {
+            "key": "home",
+            "label": "Home",
+            "value": "detached single-family, 4 bedrooms, 7 rooms, built 1950 to 1959",
+            "source": "census"
+          },
+          {
+            "key": "moved_in",
+            "label": "Lived there",
+            "value": "20 to 29 years",
+            "source": "census"
+          },
+          {
+            "key": "income",
+            "label": "Household income",
+            "value": "$237,071 a year",
+            "source": "census"
+          },
+          {
+            "key": "housing_cost",
+            "label": "Housing cost share of income",
+            "value": "14%",
+            "source": "census"
+          },
+          {
+            "key": "work",
+            "label": "Work",
+            "value": "Software Developers; Civilian employed, at work; 40 hours/week; commutes by car, truck, or van, 30 min",
+            "source": "census"
+          }
+        ],
+        "screener": [
+          {
+            "criterion": "Homeowner or landowner",
+            "verdict": "meets",
+            "why": "Tenure: Owned with mortgage or loan (include home equity loans).",
+            "source": "census"
+          },
+          {
+            "criterion": "Has usable outdoor space",
+            "verdict": "unknown",
+            "why": "Not recorded. A detached home often has a yard, but that is an assumption to check with a screener question, not a fact.",
+            "source": "unknown"
+          },
+          {
+            "criterion": "Open to adding living or work space",
+            "verdict": "unknown",
+            "why": "Not recorded \u2014 this is exactly what a screener question has to ask.",
+            "source": "unknown"
+          }
+        ],
+        "source_note": "Source-backed attributes come from one real household record in the Census Bureau's American Community Survey microdata (ACS PUMS, California). The name is invented. In a focus group the persona is also given an invented speaking manner and, once the concept is shown, an invented stance toward it. Anything the record does not cover is marked unknown: the persona may improvise it, and nothing it says is evidence about real customers."
+      },
+      "P006": {
+        "persona_id": "P006",
+        "name": "Jeffrey Vo",
+        "origin": "source_grounded_roster",
+        "origin_label": "Roster persona grounded in one ACS household record",
+        "attributes": [
+          {
+            "key": "name",
+            "label": "Name",
+            "value": "Jeffrey Vo",
+            "source": "fictional"
+          },
+          {
+            "key": "household",
+            "label": "Household",
+            "value": "Married couple household, 6 people, 3 children",
+            "source": "census"
+          },
+          {
+            "key": "tenure",
+            "label": "Homeowner or renter",
+            "value": "Owned with mortgage or loan (include home equity loans)",
+            "source": "census"
+          },
+          {
+            "key": "outdoor_space",
+            "label": "Usable outdoor space",
+            "value": "Unknown",
+            "source": "unknown"
+          },
+          {
+            "key": "willing_more_space",
+            "label": "Willing to consider more living/work space",
+            "value": "Unknown",
+            "source": "unknown"
+          },
+          {
+            "key": "current_space_use",
+            "label": "How they use their space today",
+            "value": "Unknown",
+            "source": "unknown"
+          },
+          {
+            "key": "age",
+            "label": "Age",
+            "value": "45, male",
+            "source": "census"
+          },
+          {
+            "key": "county",
+            "label": "Lives in",
+            "value": "Los Angeles County, California",
+            "source": "census"
+          },
+          {
+            "key": "home",
+            "label": "Home",
+            "value": "detached single-family, 2 bedrooms, 7 rooms, built 1939 or earlier",
+            "source": "census"
+          },
+          {
+            "key": "moved_in",
+            "label": "Lived there",
+            "value": "10 to 19 years",
+            "source": "census"
+          },
+          {
+            "key": "income",
+            "label": "Household income",
+            "value": "$116,092 a year",
+            "source": "census"
+          },
+          {
+            "key": "housing_cost",
+            "label": "Housing cost share of income",
+            "value": "25%",
+            "source": "census"
+          },
+          {
+            "key": "work",
+            "label": "Work",
+            "value": "First-Line Supervisors Of Production And Operating Workers; Civilian employed, at work; 40 hours/week; commutes by car, truck, or van, 20 min",
+            "source": "census"
+          }
+        ],
+        "screener": [
+          {
+            "criterion": "Homeowner or landowner",
+            "verdict": "meets",
+            "why": "Tenure: Owned with mortgage or loan (include home equity loans).",
+            "source": "census"
+          },
+          {
+            "criterion": "Has usable outdoor space",
+            "verdict": "unknown",
+            "why": "Not recorded. A detached home often has a yard, but that is an assumption to check with a screener question, not a fact.",
+            "source": "unknown"
+          },
+          {
+            "criterion": "Open to adding living or work space",
+            "verdict": "unknown",
+            "why": "Not recorded \u2014 this is exactly what a screener question has to ask.",
+            "source": "unknown"
+          }
+        ],
+        "source_note": "Source-backed attributes come from one real household record in the Census Bureau's American Community Survey microdata (ACS PUMS, California). The name is invented. In a focus group the persona is also given an invented speaking manner and, once the concept is shown, an invented stance toward it. Anything the record does not cover is marked unknown: the persona may improvise it, and nothing it says is evidence about real customers."
+      }
+    }
+  },
+  "state": {
+    "revision": 7,
+    "stage_index": 4,
+    "rounds": [
+      {
+        "index": 0,
+        "stage": "icebreaker",
+        "question": "Who lives with you and what does a weekday look like?",
+        "post_exposure": false,
+        "kind": "core",
+        "recipients": null,
+        "answers": [
+          {
+            "persona_id": "P001",
+            "text": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding.",
+            "status": "answered",
+            "error": null
+          },
+          {
+            "persona_id": "P002",
+            "text": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding.",
+            "status": "answered",
+            "error": null
+          },
+          {
+            "persona_id": "P003",
+            "text": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding.",
+            "status": "answered",
+            "error": null
+          },
+          {
+            "persona_id": "P004",
+            "text": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding.",
+            "status": "answered",
+            "error": null
+          },
+          {
+            "persona_id": "P005",
+            "text": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding.",
+            "status": "answered",
+            "error": null
+          },
+          {
+            "persona_id": "P006",
+            "text": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding.",
+            "status": "answered",
+            "error": null
+          }
+        ]
+      },
+      {
+        "index": 1,
+        "stage": "space_needs",
+        "question": "Where do you run out of space at home?",
+        "post_exposure": false,
+        "kind": "core",
+        "recipients": null,
+        "answers": [
+          {
+            "persona_id": "P001",
+            "text": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding.",
+            "status": "answered",
+            "error": null
+          },
+          {
+            "persona_id": "P002",
+            "text": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding.",
+            "status": "answered",
+            "error": null
+          },
+          {
+            "persona_id": "P003",
+            "text": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding.",
+            "status": "answered",
+            "error": null
+          },
+          {
+            "persona_id": "P004",
+            "text": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding.",
+            "status": "answered",
+            "error": null
+          },
+          {
+            "persona_id": "P005",
+            "text": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding.",
+            "status": "answered",
+            "error": null
+          },
+          {
+            "persona_id": "P006",
+            "text": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding.",
+            "status": "answered",
+            "error": null
+          }
+        ]
+      },
+      {
+        "index": 2,
+        "stage": "space_needs",
+        "question": "What makes that situation difficult for you?",
+        "post_exposure": false,
+        "kind": "probe",
+        "recipients": [
+          "P001"
+        ],
+        "answers": [
+          {
+            "persona_id": "P001",
+            "text": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding.",
+            "status": "answered",
+            "error": null
+          },
+          {
+            "persona_id": "P002",
+            "text": "",
+            "status": "silent",
+            "error": null
+          },
+          {
+            "persona_id": "P003",
+            "text": "",
+            "status": "silent",
+            "error": null
+          },
+          {
+            "persona_id": "P004",
+            "text": "",
+            "status": "silent",
+            "error": null
+          },
+          {
+            "persona_id": "P005",
+            "text": "",
+            "status": "silent",
+            "error": null
+          },
+          {
+            "persona_id": "P006",
+            "text": "",
+            "status": "silent",
+            "error": null
+          }
+        ]
+      },
+      {
+        "index": 3,
+        "stage": "concept",
+        "question": "I'd like to show you an idea. It's called the Tahoe Mini, from Neo Smart Living: a compact 117-square-foot studio, built in a factory, then delivered and installed in your backyard. It isn't an ADU, so there's no kitchen or bathroom. What's your first reaction, and what would you use it for?",
+        "post_exposure": false,
+        "kind": "core",
+        "recipients": null,
+        "stimulus": {
+          "kind": "concept",
+          "text": "PRODUCT CONCEPT SHOWN BY THE MODERATOR:\nName: Tahoe Mini by Neo Smart Living\nDescription: A compact 117-square-foot factory-built studio that is delivered and installed in a backyard. It is not an ADU and has no kitchen or bathroom.\n- 117 square feet\n- Factory-built; delivered and installed in your backyard\n- Not an ADU: no kitchen, no bathroom\nIntended for: homeowners with usable outdoor space"
+        },
+        "answers": [
+          {
+            "persona_id": "P001",
+            "text": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding.",
+            "status": "answered",
+            "error": null
+          },
+          {
+            "persona_id": "P002",
+            "text": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding.",
+            "status": "answered",
+            "error": null
+          },
+          {
+            "persona_id": "P003",
+            "text": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding.",
+            "status": "answered",
+            "error": null
+          },
+          {
+            "persona_id": "P004",
+            "text": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding.",
+            "status": "answered",
+            "error": null
+          },
+          {
+            "persona_id": "P005",
+            "text": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding.",
+            "status": "answered",
+            "error": null
+          },
+          {
+            "persona_id": "P006",
+            "text": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding.",
+            "status": "answered",
+            "error": null
+          }
+        ]
+      },
+      {
+        "index": 4,
+        "stage": "price_reactions",
+        "question": "What would you expect something like this to cost?",
+        "post_exposure": false,
+        "kind": "core",
+        "recipients": null,
+        "answers": [
+          {
+            "persona_id": "P001",
+            "text": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding.",
+            "status": "answered",
+            "error": null
+          },
+          {
+            "persona_id": "P002",
+            "text": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding.",
+            "status": "answered",
+            "error": null
+          },
+          {
+            "persona_id": "P003",
+            "text": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding.",
+            "status": "answered",
+            "error": null
+          },
+          {
+            "persona_id": "P004",
+            "text": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding.",
+            "status": "answered",
+            "error": null
+          },
+          {
+            "persona_id": "P005",
+            "text": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding.",
+            "status": "answered",
+            "error": null
+          },
+          {
+            "persona_id": "P006",
+            "text": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding.",
+            "status": "answered",
+            "error": null
+          }
+        ]
+      },
+      {
+        "index": 5,
+        "stage": "price_reactions",
+        "question": "At about $23,000, how does your reaction change?",
+        "post_exposure": false,
+        "kind": "probe",
+        "recipients": null,
+        "stimulus": {
+          "kind": "price",
+          "text": "PRICE SHOWN BY THE MODERATOR: about $23,000"
+        },
+        "answers": [
+          {
+            "persona_id": "P001",
+            "text": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding.",
+            "status": "answered",
+            "error": null
+          },
+          {
+            "persona_id": "P002",
+            "text": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding.",
+            "status": "answered",
+            "error": null
+          },
+          {
+            "persona_id": "P003",
+            "text": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding.",
+            "status": "answered",
+            "error": null
+          },
+          {
+            "persona_id": "P004",
+            "text": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding.",
+            "status": "answered",
+            "error": null
+          },
+          {
+            "persona_id": "P005",
+            "text": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding.",
+            "status": "answered",
+            "error": null
+          },
+          {
+            "persona_id": "P006",
+            "text": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding.",
+            "status": "answered",
+            "error": null
+          }
+        ]
+      },
+      {
+        "index": 6,
+        "stage": "close",
+        "question": "What else should we have asked?",
+        "post_exposure": false,
+        "kind": "core",
+        "recipients": null,
+        "answers": [
+          {
+            "persona_id": "P001",
+            "text": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding.",
+            "status": "answered",
+            "error": null
+          },
+          {
+            "persona_id": "P002",
+            "text": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding.",
+            "status": "answered",
+            "error": null
+          },
+          {
+            "persona_id": "P003",
+            "text": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding.",
+            "status": "answered",
+            "error": null
+          },
+          {
+            "persona_id": "P004",
+            "text": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding.",
+            "status": "answered",
+            "error": null
+          },
+          {
+            "persona_id": "P005",
+            "text": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding.",
+            "status": "answered",
+            "error": null
+          },
+          {
+            "persona_id": "P006",
+            "text": "I would use a quiet room for work, but I need to understand the installation and total cost before deciding.",
+            "status": "answered",
+            "error": null
+          }
+        ]
+      }
+    ],
+    "memo": null
+  },
+  "kind": "focus-group",
+  "provisional": true,
+  "source": "hand-written",
+  "generation": {
+    "script": "scripts/make_demo_fixtures.py",
+    "cost_usd": "0",
+    "reserved_usd": "0",
+    "calls": 0,
+    "limit_usd": "2"
+  }
+}

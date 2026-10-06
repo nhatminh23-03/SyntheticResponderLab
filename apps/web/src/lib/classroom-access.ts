@@ -14,6 +14,7 @@ const CLASSROOM_SESSION_ID_PATTERN =
 const CLASSROOM_INTERVIEW_API_RULES = [
   { method: "GET", pattern: /^\/api\/backend\/api\/v1\/personas\/?$/ },
   { method: "GET", pattern: /^\/api\/backend\/api\/v1\/interview\/models\/?$/ },
+  { method: "POST", pattern: /^\/api\/backend\/api\/v1\/studies\/[A-Za-z0-9_-]+\/interview\/demo\/(?:focus-group|batch|you)\/?$/ },
   { method: "POST", pattern: /^\/api\/backend\/api\/v1\/studies\/?$/ },
   {
     method: "GET",

@@ -1,4 +1,6 @@
 export type Batch = {
+  demo?: boolean;
+  provisional?: boolean;
   job_id: string;
   status: "running" | "completed" | "failed" | "budget_stopped";
   revision: number;

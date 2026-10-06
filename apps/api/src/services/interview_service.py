@@ -616,6 +616,8 @@ def compare_interview_models(
         raise ValidationApiError(f"Persona '{persona_id}' was not found.")
 
     session_id = str(payload.get("session_id") or "").strip() or make_public_id("ses")
+    from src.services.demo_mode import refuse_demo_session
+    refuse_demo_session(session, session_id)
     validate_session(session, study, session_id)
     system_prompt = _build_fixed_persona_system_prompt(dict(persona.profile_json))
     messages = [
@@ -823,6 +825,8 @@ def continue_standalone_interview_chat(
         raise ValidationApiError(f"Persona '{persona_id}' was not found.")
 
     session_id = str(payload.get("session_id") or "").strip() or make_public_id("ses")
+    from src.services.demo_mode import refuse_demo_session
+    refuse_demo_session(session, session_id)
     validate_session(session, study, session_id)
     system_prompt = _build_fixed_persona_system_prompt(dict(persona.profile_json))
     full_messages = [
@@ -1018,6 +1022,8 @@ def continue_interview_chat(
     if not model:
         model = DEFAULT_MODEL_A
     session_id = str(payload.get("session_id") or "").strip() or make_public_id("ses")
+    from src.services.demo_mode import refuse_demo_session
+    refuse_demo_session(session, session_id)
 
     system_prompt = _build_persona_followup_system_prompt(
         session=session,
@@ -1175,6 +1181,8 @@ def generate_interviewer_question(
         raise ValidationApiError(str(exc)) from exc
 
     session_id = str(payload.get("session_id") or "").strip() or make_public_id("ses")
+    from src.services.demo_mode import refuse_demo_session
+    refuse_demo_session(session, session_id)
     persisted_answer_count = len(
         session.scalars(
             select(InterviewTurn).where(

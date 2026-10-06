@@ -72,5 +72,5 @@ export function batchExport(batch: Batch, format: "csv" | "md", memo?: BatchMemo
     ? [["Persona", "Interviewer model", "Interviewee model", "Turn", "Role", "Text"], ...rows].map(row => row.map(quote).join(",")).join("\r\n")
     : `# Batch ${batch.job_id}\n\nStatus: ${batch.status}\nMeasured cost: $${batch.session_usage.cost_usd}\n${studentMemoMarkdown(student)}${memoMarkdown(memo)}\n` + rows.map(([persona, interviewer, interviewee, turn, role, content]) =>
       `## ${persona} — Turn ${turn}: ${role}\n\nInterviewer: ${interviewer} · Interviewee: ${interviewee}\n\n${content}\n`).join("\n");
-  return { filename: `${batch.job_id}.${format}`, blob: new Blob([text], { type: format === "csv" ? "text/csv;charset=utf-8" : "text/markdown;charset=utf-8" }) };
+  return { filename: `${batch.job_id}.${format}`, blob: new Blob([...(batch.demo ? ["Demo session - pre-recorded, no AI\nSynthetic rehearsal - not PA3.5 live fieldwork\nPlayback cost: $0\n", ...(batch.provisional ? ["Provisional hand-written example\n"] : [])] : []), text], { type: format === "csv" ? "text/csv;charset=utf-8" : "text/markdown;charset=utf-8" }) };
 }

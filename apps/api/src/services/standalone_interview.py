@@ -49,6 +49,8 @@ def validate_session(session, study, session_id):
         session.add(Job(public_id=session_id, study_id=study.id, job_type="interview_session",
                         status="active", payload_json={}))
         session.flush()
+    from src.services.demo_mode import refuse_demo
+    refuse_demo(batch)
     if batch and batch.job_type == "standalone_batch":
         raise ConflictApiError("Batch sessions can only be advanced through the batch endpoint.")
 
@@ -85,6 +87,10 @@ def owned_job(session, study, public_id, kind, *, lock=False):
 
 
 def usage(session, settings, session_id):
+    from src.services.demo_mode import ZERO_USAGE
+    job = session.scalar(select(Job).where(Job.public_id == session_id))
+    if job and (job.payload_json or {}).get("demo"):
+        return dict(ZERO_USAGE)
     from src.services.interview_service import _serialize_session_usage
     return _serialize_session_usage(load_interview_budget_snapshot(session, session_id=session_id, run_budget_usd=settings.llm_budget_usd))
 
@@ -94,6 +100,8 @@ def regenerate_answer(session, settings, study, answer_id, payload):
     from src.services import interview_service as service
     from src.services.interview_scoring import score_persisted_interview_transcript
     job = owned_job(session, study, answer_id, "interview_answer")
+    from src.services.demo_mode import refuse_demo
+    refuse_demo(job)
     original_turn = session.get(InterviewTurn, UUID(job.payload_json["turn_id"]))
     if not original_turn or original_turn.study_id != study.id:
         raise NotFoundApiError()
@@ -291,6 +299,8 @@ def advance_batch(session, settings, study, job_id, payload):
     """Exactly one provider/cache call per revision; progress and usage commit together."""
     from src.services import interview_service as service
     job = owned_job(session, study, job_id, "standalone_batch", lock=True)
+    from src.services.demo_mode import refuse_demo
+    refuse_demo(job)
     state = deepcopy(job.result_json)
     if type(payload.get("revision")) is not int:
         raise ValidationApiError("An integer batch revision is required.")
@@ -411,6 +421,8 @@ def next_human_question(session, settings, study, payload):
     exactly as the AI-led interview already records them."""
     from src.services import interview_service as service
     from src.services.exceptions import ProviderUnavailableApiError
+    from src.services.demo_mode import refuse_demo_session
+    refuse_demo_session(session, payload.get("session_id"))
     if normalize_cache_mode(settings.cache_mode) == REPLAY_ONLY:
         raise ConflictApiError("AI interviews you needs live model calls, and this server only replays "
                                "recorded interviews (CACHE_MODE=replay_only).")

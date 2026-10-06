@@ -19,6 +19,8 @@ export type HumanQuestion = {
 };
 
 export type HumanInterview = {
+  demo?: boolean;
+  provisional?: boolean;
   sessionId: string | null;
   messages: HumanMessage[];
   ended: boolean;
@@ -74,6 +76,8 @@ export function describeFailure(error: unknown): { message: string; ends: boolea
 /** The same single file a batch exports, with the respondent named as a human on every row. */
 export function humanInterviewExport(interview: HumanInterview, format: "csv" | "md") {
   const batch: Batch = {
+    demo: interview.demo,
+    provisional: interview.provisional,
     job_id: interview.sessionId ?? "ai-interviews-you",
     status: "completed",
     revision: 0,

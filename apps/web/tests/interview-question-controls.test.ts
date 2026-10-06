@@ -32,7 +32,7 @@ test("persona selection is locked during chat, comparison, batch and regeneratio
   assert.match(interviewPageSource, /const busy = loading \|\| comparisonLoading \|\| batchLoading \|\| regenerating/);
   assert.match(
     interviewPageSource,
-    /personas\.map\(\(entry\) => \([\s\S]*?onClick=\{\(\) => selectPersona\(entry\.persona_id\)\}[\s\S]*?disabled=\{busy\}/
+    /personas\.map\(\(entry\) => \([\s\S]*?onClick=\{\(\) => selectPersona\(entry\.persona_id\)\}[\s\S]*?disabled=\{readOnly \|\| busy \|\| exportingFormat !== null\}/
   );
 });
 

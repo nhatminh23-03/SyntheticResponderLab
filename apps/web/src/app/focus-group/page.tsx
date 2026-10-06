@@ -1,5 +1,8 @@
 "use client";
 
+import { DemoScreens, DemoNotice, useDemoActivity } from "@/components/demo/demo-mode";
+import { isDemoMode } from "@/lib/demo-mode";
+
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { ConceptCardPanel } from "@/components/focus-group/concept-card";
@@ -80,14 +83,30 @@ export default function FocusGroupPage() {
     <ThemeProvider>
       <StudyProvider>
         <WorkflowNav />
-        <FocusGroupPageContent />
+        <DemoScreens>{demo => <FocusGroupPageContent demoPlayback={demo} />}</DemoScreens>
       </StudyProvider>
     </ThemeProvider>
   );
 }
 
-function FocusGroupPageContent() {
+function FocusGroupPageContent({ demoPlayback = false }: { demoPlayback?: boolean } = {}) {
+  const [demoRetry, setDemoRetry] = useState(0);
   const { studyId, studyBootstrapError } = useStudy();
+  useEffect(() => {
+    if (!demoPlayback || !studyId) return;
+    let active = true;
+    setError("");
+    interviewOperation<{ room: FocusGroupRoom }>(studyId, "demo/focus-group", {})
+      .then(result => {
+        if (!active) return;
+        setRoom(result.room);
+        setStage(result.room.stage);
+        setManualMemo(manualMemoFrom(result.room.manual_memo));
+      })
+      .catch((failure: Error) => { if (active) setError(failure.message); });
+    return () => { active = false; };
+  }, [studyId, demoPlayback, demoRetry]);
+
   const [personas, setPersonas] = useState<InterviewPersona[]>([]);
   const [models, setModels] = useState<InterviewModelCatalogEntry[]>([]);
   const [defaultModelId, setDefaultModelId] = useState("");
@@ -128,6 +147,8 @@ function FocusGroupPageContent() {
   const [error, setError] = useState("");
   const startRequest = useRef<string>("");
 
+  useDemoActivity(busy, demoPlayback);
+  const readOnly = demoPlayback || !!room?.demo;
   const model = models.find((entry) => entry.id === modelId);
   const refusal = focusGroupSetupRefusal({
     personaIds: selectedPersonaIds,
@@ -143,6 +164,7 @@ function FocusGroupPageContent() {
   );
 
   useEffect(() => {
+    if (demoPlayback) return;
     getInterviewPersonas()
       .then((result) => setPersonas(result.personas))
       .catch((err: Error) => setError(err.message));
@@ -162,14 +184,14 @@ function FocusGroupPageContent() {
   }, [expensiveOptIn, models, defaultModelId]);
 
   useEffect(() => {
-    if (!studyId) return;
+    if (!studyId || demoPlayback) return;
     interviewOperation<{ rooms: FocusGroupRoom[] }>(studyId, focusGroupPath())
       .then((result) => setRooms(result.rooms))
       .catch(() => undefined);
   }, [studyId, room?.revision, room?.status]);
 
   useEffect(() => {
-    if (!studyId) return;
+    if (!studyId || demoPlayback) return;
     interviewOperation<{ personas: StudentPersona[] }>(studyId, "focus-group/personas")
       .then((result) => setStudentPersonas(result.personas))
       .catch(() => undefined);
@@ -244,6 +266,7 @@ function FocusGroupPageContent() {
   }
 
   async function startRoom() {
+    if (readOnly || isDemoMode()) return;
     if (!studyId || refusal) return;
     // One request id per confirmation: a double-clicked Start resolves to one room.
     startRequest.current = startRequest.current || crypto.randomUUID();
@@ -266,6 +289,7 @@ function FocusGroupPageContent() {
   }
 
   async function askRoom(extra: Record<string, unknown> = {}) {
+    if (readOnly || isDemoMode()) return;
     if (!studyId || !room) return;
     const result = await run(() =>
       interviewOperation<{ room: FocusGroupRoom }>(
@@ -290,6 +314,7 @@ function FocusGroupPageContent() {
   }
 
   async function extendRoom() {
+    if (readOnly || isDemoMode()) return;
     if (!studyId || !room) return;
     const result = await run(() =>
       interviewOperation<{ room: FocusGroupRoom }>(studyId, focusGroupPath(room.room_id, "extend"), {
@@ -303,7 +328,7 @@ function FocusGroupPageContent() {
   }
 
   async function openRoom(roomId: string) {
-    if (!studyId) return;
+    if (!studyId || demoPlayback) return;
     const result = await run(() =>
       interviewOperation<{ room: FocusGroupRoom }>(studyId, focusGroupPath(roomId))
     );
@@ -333,7 +358,7 @@ function FocusGroupPageContent() {
   }
 
   async function deleteRoom(roomId: string) {
-    if (!studyId) return;
+    if (!studyId || demoPlayback) return;
     await run(() =>
       fetch(
         `/api/backend/api/v1/studies/${encodeURIComponent(studyId)}/interview/${focusGroupPath(roomId)}`,
@@ -345,6 +370,7 @@ function FocusGroupPageContent() {
   }
 
   async function loadMemo(authorize = false) {
+    if (readOnly || isDemoMode()) return;
     if (!studyId || !room) return;
     const path = focusGroupPath(room.room_id, "memo");
     const result = await run(() =>
@@ -391,13 +417,17 @@ function FocusGroupPageContent() {
     URL.revokeObjectURL(url);
   }
 
-  const askBlocked = askRefusal(room, stage, target, pendingReveal) !== null;
+  const askBlocked = readOnly || askRefusal(room, stage, target, pendingReveal) !== null;
   const answered = collectedAnswers(room);
   const turns = quotableTurns(room);
   const missing = missingAnswers(room);
 
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-6 py-12">
+      {readOnly ? <DemoNotice provisional={room?.provisional} /> : null}
+      {demoPlayback && !room && !error ? <p role="status">Loading demo…</p> : null}
+      {demoPlayback && error ? <Button onClick={() => setDemoRetry(n => n + 1)}>Retry demo load</Button> : null}
+
       <header className="flex flex-col gap-2">
         <h1 className="text-3xl font-semibold">Simulated focus group</h1>
         <p role="note" className="text-sm font-semibold" data-testid="rehearsal-label">
@@ -416,7 +446,7 @@ function FocusGroupPageContent() {
         </p>
       ) : null}
 
-      {!room ? (
+      {!room && !demoPlayback ? (
         <GlassPanel className="flex flex-col gap-5 p-6">
           <h2 className="text-xl font-semibold">Recruit the room</h2>
           <p className="text-sm text-app-muted">
@@ -571,7 +601,7 @@ function FocusGroupPageContent() {
             </p>
           ) : null}
 
-          <Button onClick={() => setConfirming(true)} disabled={busy || refusal !== null}>
+          <Button onClick={() => setConfirming(true)} disabled={readOnly || busy || refusal !== null}>
             Start the focus group
           </Button>
 
@@ -613,7 +643,7 @@ function FocusGroupPageContent() {
                   setQuestion(introduce ? room.concept_card!.introduction : STAGE_PROMPTS[entry]);
                   setPendingReveal(introduce ? "concept" : null);
                 }}
-                disabled={busy || !canAskStage(room, entry)}
+                disabled={readOnly || busy || !canAskStage(room, entry)}
                 aria-current={stage === entry ? "step" : undefined}
                 className={cn(
                   "rounded-full border px-3 py-1 text-xs",
@@ -631,7 +661,7 @@ function FocusGroupPageContent() {
             stays in the transcript.
           </p>
 
-          {room.concept_card ? (
+          {room.concept_card && !readOnly ? (
             <ConceptCardPanel
               card={room.concept_card}
               room={room}
@@ -647,7 +677,7 @@ function FocusGroupPageContent() {
             />
           ) : null}
 
-          <fieldset className="flex flex-wrap items-center gap-3 text-sm" aria-label="Who the question is for">
+          <fieldset disabled={readOnly} className="flex flex-wrap items-center gap-3 text-sm" aria-label="Who the question is for">
             <legend className="sr-only">Who the question is for</legend>
             <label className="flex items-center gap-1">
               <input
@@ -701,7 +731,7 @@ function FocusGroupPageContent() {
               placeholder="Ask the room…"
               className="flex-1 rounded-lg border border-app-border bg-transparent px-3 py-2"
             />
-            <Button onClick={() => askRoom()} disabled={busy || !question.trim() || askBlocked}>
+            <Button onClick={() => askRoom()} disabled={readOnly || busy || !question.trim() || askBlocked}>
               {busy
                 ? "Asking…"
                 : questionKind(room, stage, pendingReveal) === "probe"
@@ -719,7 +749,7 @@ function FocusGroupPageContent() {
                 setQuestion(introduce ? room.concept_card!.introduction : STAGE_PROMPTS[next]);
                 setPendingReveal(introduce ? "concept" : null);
               }}
-              disabled={busy || !nextStage(stage) || !canAskStage(room, nextStage(stage)!)}
+              disabled={readOnly || busy || !nextStage(stage) || !canAskStage(room, nextStage(stage)!)}
             >
               {nextStage(stage) ? `Next stage: ${FOCUS_GROUP_STAGE_LABELS[nextStage(stage)!]} →` : "Last stage"}
             </Button>
@@ -858,12 +888,13 @@ function FocusGroupPageContent() {
           />
 
           <div className="flex flex-wrap gap-3">
-            <Button variant="secondary" onClick={() => loadMemo()} disabled={busy}>
+            <Button variant="secondary" onClick={() => loadMemo()} disabled={readOnly || busy}>
               Optional: AI draft memo to compare with yours
             </Button>
             <Button variant="secondary" onClick={() => exportRoom("markdown")} disabled={busy}>
               Export transcript + memo
             </Button>
+            <Button variant="secondary" onClick={() => exportRoom("csv")} disabled={busy}>Export CSV</Button>
             <Button
               variant="secondary"
               onClick={() =>
@@ -875,7 +906,7 @@ function FocusGroupPageContent() {
                   ).then((result) => setRoom(result.room))
                 )
               }
-              disabled={busy || room.status === "cancelled"}
+              disabled={readOnly || busy || room.status === "cancelled"}
             >
               End this room
             </Button>
@@ -885,7 +916,7 @@ function FocusGroupPageContent() {
             <div className="rounded-xl border border-app-border p-4 text-sm">
               <p>{memo.message}</p>
               {memo.eligible && !memo.available ? (
-                <Button onClick={() => loadMemo(true)} disabled={busy}>
+                <Button onClick={() => loadMemo(true)} disabled={readOnly || busy}>
                   {aiMemoRetryLabel(memo)}
                 </Button>
               ) : null}
@@ -932,7 +963,7 @@ function FocusGroupPageContent() {
         </div>
       ) : null}
 
-      <GlassPanel className="flex flex-col gap-3 p-6">
+      {!demoPlayback ? <GlassPanel className="flex flex-col gap-3 p-6">
         <h2 className="text-xl font-semibold">Your focus groups</h2>
         {rooms.length === 0 ? <p className="text-sm text-app-muted">No rooms yet.</p> : null}
         {rooms.map((entry) => (
@@ -949,7 +980,7 @@ function FocusGroupPageContent() {
             </Button>
           </div>
         ))}
-      </GlassPanel>
+      </GlassPanel> : null}
     </main>
   );
 }
