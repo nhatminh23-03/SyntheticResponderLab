@@ -76,9 +76,6 @@ apps/api/artifacts/
 !/docs/qa/2026-08-17/artifacts/
 apps/api/tmp_artifacts/
 
-# Legacy local environments / caches
-NeoSmart-Hackathon-App/venv/
-NeoSmart-Hackathon-App/.streamlit/
 
 # Coverage / reports
 .coverage

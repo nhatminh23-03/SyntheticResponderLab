@@ -5,7 +5,7 @@ Premium Next.js + Python evolution of the Grounded Synthetic Respondent Lab.
 This repository contains:
 - a new **Next.js frontend** for the cinematic, one-page product experience
 - a new **FastAPI backend** that wraps and preserves the working Python simulation logic
-- the original **Streamlit prototype** kept as a reference implementation
+- the original **Streamlit simulation engine**, vendored at `apps/api/legacy_runtime` and wrapped by the API
 
 The product helps a user:
 - define a study mode
@@ -19,11 +19,26 @@ The product helps a user:
 ```text
 SyntheticResponderLab/
 ├── apps/
-│   ├── api/                     # FastAPI backend for the new product
-│   └── web/                     # Next.js frontend for the new product
-├── Documentation/              # migration docs, specs, and implementation notes
-└── UI Prototype/               # visual reference files
+│   ├── api/          # FastAPI backend; legacy_runtime/ is the vendored simulation engine
+│   └── web/          # Next.js frontend (Vercel root directory)
+├── analysis/         # R validation project and its tests
+├── docs/             # all project documentation; start at docs/README.md
+├── plans/            # per-feature build folders (brief, done checks, handoff)
+├── research/         # neo_persona_set: Census persona pipeline
+├── scripts/          # verify gate, build loop, prerecord/prewarm tools, staged-secret check
+├── SPEC.md           # build spec and checklist
+├── render.yaml       # Render blueprint for the API
+└── railway.json      # Railway config for the API
 ```
+
+Who looks after what (ask the owner before moving or restructuring their area):
+
+| Area | Owner | Notes |
+| --- | --- | --- |
+| `apps/api`, `apps/web` | shared | Do not move: the Dockerfile, Render, Vercel and the tests depend on these paths. |
+| `plans/`, `SPEC.md`, `analysis/`, `scripts/` (except `check-staged-secrets.sh`), `railway.json`, `docs/cost-report.md`, `docs/instructor-guide.md`, `docs/prerecorded-interviews.md` | Anderson | `plans/<feature>/` must stay two levels below the root; `docs/cost-report.md` is read by `apps/api/tests/test_cost_report.py`. |
+| `research/neo_persona_set/` | Yaza | Census persona pipeline. |
+| `docs/deploy/`, `docs/history/`, `docs/qa/`, `docs/design/`, `docs/superpowers/`, `render.yaml` | Minh | `docs/history/2026-08-handoff/` was written by Yaza. |
 
 ## Architecture
 
@@ -427,46 +442,20 @@ pre-commit install
 
 This repo now includes a lightweight staged-secret check that blocks obvious private keys and Google service-account JSON from being committed.
 
-## Legacy Reference App
+## Legacy Simulation Engine
 
-The old Streamlit app lives in [`NeoSmart-Hackathon-App/`](NeoSmart-Hackathon-App/).
+The original Streamlit prototype's simulation engine is vendored in [`apps/api/legacy_runtime/`](apps/api/legacy_runtime/) (see Architecture above). It remains the reference for:
+- grounding, survey parsing, simulation, analysis, and insights logic
+- the Neo survey presets (`apps/api/legacy_runtime/Provided Info/`)
 
-It remains useful for:
-- validating behavior against the original prototype
-- tracing legacy grounding, survey parsing, simulation, analysis, and insights logic
-- understanding the migration history
-
-The new product work should happen in:
-- [`apps/api/`](apps/api/)
-- [`apps/web/`](apps/web/)
-
-## Suggested Git Setup
-
-This workspace is not currently initialized as a git repository from the root.
-
-If you want to publish from this root folder:
-
-```bash
-git init
-git add .
-git commit -m "Initial commit"
-git branch -M main
-git remote add origin <your-github-repo-url>
-git push -u origin main
-```
+New product work happens in [`apps/api/`](apps/api/) and [`apps/web/`](apps/web/).
 
 ## Documentation
 
-Project planning and migration notes are in [`Documentation/`](Documentation/).
+All project documentation lives in [`docs/`](docs/); start with [`docs/README.md`](docs/README.md), which also maps the old `Documentation/`, `QA August 17/` and `UI Prototype/` paths to their new places.
 
 Deployment operators should start with:
-- [`Documentation/invite-only-deployment-runbook.md`](Documentation/invite-only-deployment-runbook.md)
-- [`Documentation/vercel-render-deployment.md`](Documentation/vercel-render-deployment.md)
+- [`docs/deploy/invite-only-deployment-runbook.md`](docs/deploy/invite-only-deployment-runbook.md)
+- [`docs/deploy/vercel-render-deployment.md`](docs/deploy/vercel-render-deployment.md)
 
-Key docs include:
-- frontend migration review
-- Next.js + Python migration plan
-- Phase 0 backend spec
-- Phase 1 backend implementation notes
-- Phase 2 setup flow hardening notes
-- Phase 3 chart system plan
+The planning record (migration plan, Phase 0–3 specs, April audits, August handoff) is in [`docs/history/`](docs/history/), and the August 17 QA pass is in [`docs/qa/2026-08-17/`](docs/qa/2026-08-17/).
