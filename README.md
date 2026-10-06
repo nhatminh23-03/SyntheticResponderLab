@@ -38,7 +38,7 @@ Who looks after what (ask the owner before moving or restructuring their area):
 | `apps/api`, `apps/web` | shared | Do not move: the Dockerfile, Render, Vercel and the tests depend on these paths. |
 | `plans/`, `SPEC.md`, `analysis/`, `scripts/` (except `check-staged-secrets.sh`), `railway.json`, `docs/cost-report.md`, `docs/instructor-guide.md`, `docs/prerecorded-interviews.md` | Anderson | `plans/<feature>/` must stay two levels below the root; `docs/cost-report.md` is read by `apps/api/tests/test_cost_report.py`. |
 | `research/neo_persona_set/` | Yaza | Census persona pipeline. |
-| `docs/deploy/`, `docs/history/`, `docs/qa/`, `docs/design/`, `docs/superpowers/`, `render.yaml` | Minh | `docs/history/2026-08-handoff/` was written by Yaza. |
+| `docs/deploy/`, `docs/history/`, `docs/qa/`, `docs/design/`, `docs/superpowers/`, `render.yaml`, `scripts/check-staged-secrets.sh`, `.pre-commit-config.yaml` | Minh | `docs/history/2026-08-handoff/` was written by Yaza. |
 
 ## Architecture
 
@@ -444,11 +444,7 @@ This repo now includes a lightweight staged-secret check that blocks obvious pri
 
 ## Legacy Simulation Engine
 
-The original Streamlit prototype's simulation engine is vendored in [`apps/api/legacy_runtime/`](apps/api/legacy_runtime/) (see Architecture above). It remains the reference for:
-- grounding, survey parsing, simulation, analysis, and insights logic
-- the Neo survey presets (`apps/api/legacy_runtime/Provided Info/`)
-
-New product work happens in [`apps/api/`](apps/api/) and [`apps/web/`](apps/web/).
+The original Streamlit prototype's simulation engine is vendored in [`apps/api/legacy_runtime/`](apps/api/legacy_runtime/) (see Architecture above). It is the live engine, not a frozen copy: `apps/api` uses it directly in local development and production, so fixes to grounding, survey parsing, simulation, analysis, or insights logic go in `legacy_runtime` itself. It also holds the Neo survey presets (`apps/api/legacy_runtime/Provided Info/`).
 
 ## Documentation
 
