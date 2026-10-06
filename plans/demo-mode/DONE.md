@@ -47,3 +47,12 @@ Checks run from this directory through `./check.sh`.
 - [ ] (sol) Every demo screen and export retains the existing “Synthetic rehearsal” label alongside the demo label.
 - [ ] (sol) Fixture generation uses the real service code and enforces the approved $2 total spending limit.
 - [ ] (sol) Missing or invalid deployed fixtures produce an actionable operator diagnostic identifying the affected demo without exposing student content.
+
+## Added by Sol refute [codex:gpt-6-astra] (each needs a check before it can pass)
+- [ ] (sol) Turning demo mode on during a live batch stops subsequent automatic advance requests, clearly identifies any already-running paid request, and requires explicit action to resume paid work after demo mode is turned off.
+- [ ] (sol) Changing the switch in one browser tab updates other open app tabs so they cannot silently remain in live mode.
+- [ ] (sol) Opening demos consumes no daily interview-run quota and leaves the student's remaining live-run allowance unchanged.
+- [ ] (sol) Deleting a demo focus-group room cannot strand the demo page, and reopening provides a complete usable example without resurrecting deleted memos.
+- [ ] (sol) Demo screens and exports show zero cost for the student's playback and clearly distinguish any historical fixture-generation cost.
+- [ ] (sol) A student's previously selected product photo or custom concept cannot appear attached to the prerecorded Tahoe Mini discussion.
+- [ ] (sol) Keyboard and screen-reader users can operate the shared switch and determine whether demo mode is on in both desktop and compact navigation.
