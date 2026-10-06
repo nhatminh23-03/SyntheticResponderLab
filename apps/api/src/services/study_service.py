@@ -12,7 +12,7 @@ import requests
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from src.adapters.legacy_backend.jev_engine import JevUnavailableError
+from src.adapters.legacy_backend.jev_engine import JEV_MODEL_ID, JevUnavailableError
 from src.adapters.legacy_backend.runtime import load_module
 from src.adapters.legacy_backend.domain import (
     build_geography_context,
@@ -634,6 +634,13 @@ DEMO_PRESETS: Dict[str, DemoPreset] = {
 }
 
 
+def _class_default_experiment(experiment: Dict[str, Any], settings: AppSettings) -> Dict[str, Any]:
+    """The Neo class study answers with Jev by default whenever a TypeSafe key is configured."""
+    if settings.typesafe_api_key:
+        return {**experiment, "selected_models": [JEV_MODEL_ID], "experiment_mode": "split"}
+    return experiment
+
+
 def bootstrap_demo_study(
     session: Session,
     settings: AppSettings,
@@ -661,11 +668,14 @@ def bootstrap_demo_study(
         raise ValidationApiError(f"{preset.label} bootstrap market payload is invalid.")
     _save_section(session, study, "market", validated_market)
 
+    experiment = preset.experiment
+    if preset.key == NEO_DEMO_PRESET.key:
+        experiment = _class_default_experiment(experiment, settings)
     _save_section(
         session,
         study,
         "experiment",
-        _prepare_bootstrap_experiment(legacy_available, settings, preset.experiment),
+        _prepare_bootstrap_experiment(legacy_available, settings, experiment),
     )
 
     if preset.survey_filename is None:
