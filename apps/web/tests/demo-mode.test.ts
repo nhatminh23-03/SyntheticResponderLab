@@ -89,3 +89,79 @@ test("demo mode batch and human exports retain labels, transcript and zero playb
     }
   }
 });
+
+test("demo mode isolates student photos, custom concepts and browser memo storage", () => {
+  const focus = read("src/app/focus-group/page.tsx");
+  assert.match(focus, /room.concept_card && !readOnly \? \(/);
+  assert.match(focus, /const readOnly = demoPlayback \|\| !!room\?\.demo/);
+  assert.doesNotMatch(focus, /localStorage|sessionStorage/);
+  const batch = read("src/app/interview/page.tsx");
+  assert.match(batch, /if \(!readOnly\) localStorage.setItem\(MEMO_STORE/);
+  const screens = read("src/components/demo/demo-mode.tsx");
+  assert.match(screens, /key=\{`live:\$\{studyId\}`\}/);
+  assert.match(screens, /key=\{`demo:\$\{studyId\}`\}/);
+});
+
+test("demo switch native accessible control changes checked state in shared responsive chrome", () => {
+  // Exercise the rendered native control and its handler, not a second implementation.
+  const ts = require("typescript") as typeof import("typescript");
+  let enabled = false;
+  const exported: any = {};
+  const code = ts.transpileModule(read("src/components/demo/demo-mode.tsx"), {
+    compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS },
+  }).outputText;
+  new Function("require", "exports", code)((name: string) => {
+    if (name === "@/lib/demo-mode") return { useDemoMode: () => [enabled, (value: boolean) => { enabled = value; }] };
+    if (name === "@/providers/study-provider") return {};
+    return require(name);
+  }, exported);
+  const control = () => {
+    const container = exported.DemoSwitch();
+    const label = container.props.children;
+    assert.equal(label.type, "label");
+    assert.ok(label.props.children.includes("Demo (no AI)"));
+    assert.doesNotMatch(container.props.className + label.props.className, /hidden/);
+    const input = label.props.children[0];
+    assert.equal(input.type, "input");
+    assert.equal(input.props.type, "checkbox"); // Native Space activation and focus semantics.
+    assert.equal(input.props.role, "switch");
+    assert.equal(input.props.disabled, undefined);
+    assert.equal(input.props.tabIndex, undefined); // Native focus order remains intact.
+    return input;
+  };
+  assert.equal(control().props.checked, false);
+  control().props.onChange({ target: { checked: true } });
+  assert.equal(control().props.checked, true);
+  control().props.onChange({ target: { checked: false } });
+  assert.equal(control().props.checked, false);
+});
+
+test("demo switch cross-tab subscriber observes storage events and cleans up", () => {
+  const ts = require("typescript") as typeof import("typescript");
+  const target = new EventTarget();
+  const values = new Map<string, string>();
+  let subscribe!: (listener: () => void) => () => void;
+  const exported: any = {};
+  const code = ts.transpileModule(read("src/lib/demo-mode.ts"), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS },
+  }).outputText;
+  new Function("require", "exports", "window", code)(() => ({
+    useSyncExternalStore(sub: typeof subscribe, snapshot: () => boolean) { subscribe = sub; return snapshot(); },
+  }), exported, {
+    localStorage: { getItem: (key: string) => values.get(key) ?? null },
+    addEventListener: target.addEventListener.bind(target), removeEventListener: target.removeEventListener.bind(target),
+  });
+  exported.useDemoMode();
+  const observed: boolean[] = [];
+  const unsubscribe = subscribe(() => observed.push(exported.isDemoMode()));
+  const storage = (key: string | null) => target.dispatchEvent(Object.assign(new Event("storage"), { key }));
+  values.set(DEMO_MODE_STORAGE_KEY, "true");
+  storage(DEMO_MODE_STORAGE_KEY);
+  storage("unrelated");
+  values.clear();
+  storage(null);
+  assert.deepEqual(observed, [true, false]);
+  unsubscribe();
+  storage(DEMO_MODE_STORAGE_KEY);
+  assert.equal(observed.length, 2);
+});

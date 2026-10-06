@@ -975,6 +975,8 @@ def continue_interview_chat(
     payload: Dict[str, Any],
 ) -> Dict[str, Any]:
     """Continue a follow-up conversation with a selected interview persona."""
+    from src.services.demo_mode import refuse_demo_session
+    refuse_demo_session(session, str(payload.get("session_id") or "").strip())
     if payload.get("standalone"):
         return continue_standalone_interview_chat(session, settings, study, payload)
 
@@ -1022,8 +1024,6 @@ def continue_interview_chat(
     if not model:
         model = DEFAULT_MODEL_A
     session_id = str(payload.get("session_id") or "").strip() or make_public_id("ses")
-    from src.services.demo_mode import refuse_demo_session
-    refuse_demo_session(session, session_id)
 
     system_prompt = _build_persona_followup_system_prompt(
         session=session,
@@ -1155,6 +1155,8 @@ def generate_interviewer_question(
     payload: Dict[str, Any],
 ) -> Dict[str, Any]:
     """Ask the AI interviewer for one brief-led, answer-derived question."""
+    from src.services.demo_mode import refuse_demo_session
+    refuse_demo_session(session, str(payload.get("session_id") or "").strip())
     brief_section = _get_section_or_none(session, study, "research_brief")
     research_brief = brief_section and brief_section.value_json
     if not research_brief or not str(research_brief.get("primary_question") or "").strip():
@@ -1181,8 +1183,6 @@ def generate_interviewer_question(
         raise ValidationApiError(str(exc)) from exc
 
     session_id = str(payload.get("session_id") or "").strip() or make_public_id("ses")
-    from src.services.demo_mode import refuse_demo_session
-    refuse_demo_session(session, session_id)
     persisted_answer_count = len(
         session.scalars(
             select(InterviewTurn).where(

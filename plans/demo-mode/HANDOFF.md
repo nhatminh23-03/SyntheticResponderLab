@@ -67,3 +67,36 @@ plans/demo-mode/check.sh fixtures
 
 The builder did not run mutation scripts or deployed-site verification. The
 wrapper owns those. Do not mark ALL DONE while fixture realness is red.
+
+
+## Round 2
+
+Entry commit: `06dc048` (demo-mode: build round 1); prior commits `7ca4fbf`,
+`ff2c81a`, `b6e0b4f`. The wrapper/user had modified DONE.md at entry; its added
+outcomes are preserved and now have executable check commands. Preserve all
+current dirty files: API service guard ordering, API/web demo tests, DONE.md,
+DECISIONS.md and this handoff. No survey, scoring, prompts or fixtures were changed.
+
+Added behavioral tests for concurrent reopening with a saved memo, all-table
+preservation (including quota), saved themes and rejection of fabricated citations,
+history flags, generator service calls and cost reservations, alternate HTTP AI
+routes, rendered native switch state, and cross-tab notification cleanup. Static
+checks additionally cover photo/control isolation and browser memo storage guards;
+these do not replace harness verification in a real deployed browser.
+
+The alternate chat and interviewer-question routes now reject demo IDs before
+checking live-only prerequisites. This corrects misleading errors in empty studies;
+live inputs continue through the existing logic. Design decision 1 records this.
+
+Focused checks: 22 API demo tests and 10 web demo tests; typecheck and diff check.
+Full regression results follow. No mutation scripts or deployment were run.
+The real-model fixture gate remains pending; do not mark ALL DONE or remove the
+provisional flags. Next patch remains the real fixture-generation command above.
+
+Round 2 final regression (run once): **601 API passed, 13 skipped; 200 web
+passed; production build passed; TypeScript and `git diff --check` passed**.
+Logs: `/tmp/demo-round2-api.log`, `/tmp/demo-round2-web.log`,
+`/tmp/demo-round2-build.log`. Skips are existing opt-in tests. No mutation suite
+was run. Added outcome checkboxes reflect their executable checks; deployed
+browser behavior remains for the harness. The final action attempts the real
+fixture generator, which fails closed if API settings still lack a key.

@@ -65,6 +65,9 @@ def test_focus_group_demo_memo_and_export(demo):
     path = f"{base}/focus-group/rooms/{room['room_id']}"
     saved = client.post(path + "/manual-memo", json={"base_version": 0, "memo": memo})
     assert saved.status_code == 200, saved.text
+    with ThreadPoolExecutor(4) as pool:
+        copies = list(pool.map(lambda _: opened(demo, "focus-group")["room"], range(8)))
+    assert all(copy["room_id"] == room["room_id"] and copy["manual_memo"]["themes"][0]["label"] == "Quiet space" for copy in copies)
     restored = opened(demo, "focus-group")["room"]
     assert restored["manual_memo"]["themes"][0]["label"] == "Quiet space"
     for format in ["markdown", "csv"]:
@@ -196,5 +199,133 @@ def test_demo_invalid_fixture_never_inserts(demo, db_session, monkeypatch, tmp_p
     (tmp_path / "focus-group.json").write_text(json.dumps(source))
     monkeypatch.setattr(demo_mode, "FIXTURES", tmp_path)
     client, base = demo
-    assert client.post(base + "/demo/focus-group").status_code == 409
+    response = client.post(base + "/demo/focus-group")
+    assert response.status_code == 409
+    assert "seed_data/demo/focus-group.json" in response.text and "make_demo_fixtures.py" in response.text
+    assert "No live run was started" in response.text
     assert db_session.scalar(select(func.count()).select_from(Job)) == 0
+
+
+def test_demo_preserves_existing_data_and_quota(demo, db_session):
+    from copy import deepcopy
+    from src.persistence.base import Base
+    from src.persistence.models import StudySectionState
+    study = db_session.scalar(select(Study))
+    product = db_session.scalar(select(StudySectionState).where(StudySectionState.study_id == study.id, StudySectionState.section_key == "product"))
+    product.value_json = {"concept": "CUSTOM CONCEPT", "photo": "private-photo.png"}
+    db_session.add(Job(public_id="live_preserved", study_id=study.id, job_type="standalone_batch",
+                       status="completed", payload_json={"custom": "untouched"},
+                       result_json={"transcripts": [{"content": "existing live answer"}]}))
+    db_session.commit()
+    def snapshot():
+        return {table.name: deepcopy([dict(row) for row in db_session.execute(select(table)).mappings()])
+                for table in Base.metadata.sorted_tables}
+    before = snapshot()
+    for kind in demo_mode.KINDS:
+        result = opened(demo, kind)
+        assert "CUSTOM CONCEPT" not in json.dumps(result)
+        assert "private-photo.png" not in json.dumps(result)
+    after = snapshot()
+    for table, rows in before.items():
+        if table == Job.__tablename__:
+            assert all(row in after[table] for row in rows)
+            assert len(after[table]) == len(rows) + 3
+        else:
+            assert after[table] == rows, f"Demo changed {table} (including quota/usage/configuration)"
+
+
+def test_demo_saved_themes_are_grounded(demo, monkeypatch, tmp_path):
+    from copy import deepcopy
+    fixture = demo_mode.load_fixture("batch")
+    transcripts = fixture["state"]["transcripts"]
+    quote = transcripts[0]["messages"][1]["content"]
+    pid = transcripts[0]["persona_id"]
+    words = quote.split()
+    memo = {"themes": [{"label": f"Theme {i}", "synthesis": "Example synthesis", "sentiment": "neutral",
+                         "count": 1, "representative_quote": quote, "quote_persona_id": pid} for i in range(3)],
+            "surprise": {"summary": "Example surprise", "quote": quote, "quote_persona_id": pid},
+            "answer_options": [{"text": " ".join(words[i:i+8]), "quote_persona_id": pid} for i in range(3)]}
+    fixture["state"]["insights"] = memo
+    (tmp_path / "batch.json").write_text(json.dumps(fixture))
+    monkeypatch.setattr(demo_mode, "FIXTURES", tmp_path)
+    batch = opened(demo, "batch")["batch"]
+    client, base = demo
+    view = client.get(f"{base}/batches/{batch['job_id']}/themes").json()["data"]["insights"]
+    assert view["available"] and not view["eligible"] and view["saved"] == memo
+    invalid = deepcopy(fixture)
+    invalid["state"]["insights"]["themes"][0]["representative_quote"] = "A fabricated citation"
+    (tmp_path / "batch.json").write_text(json.dumps(invalid))
+    from src.services.exceptions import ConflictApiError
+    with pytest.raises(ConflictApiError, match="batch.json"):
+        demo_mode.load_fixture("batch")
+
+
+def test_demo_history_retains_flags_and_read_only(demo):
+    client, base = demo
+    room = opened(demo, "focus-group")["room"]
+    restored = client.get(f"{base}/focus-group/rooms/{room['room_id']}").json()["data"]["room"]
+    assert restored["demo"] and restored["demo_label"] == demo_mode.LABEL
+    assert restored["rounds"] == room["rounds"]
+    test_focus_group_demo_refuses_ai(demo)
+    test_interview_batch_demo(demo)
+
+
+def test_demo_generator_conservative_reservation_on_failure():
+    from scripts.make_demo_fixtures import CappedProvider, SpendingLimit, LIMIT
+    calls = []
+    def fail(**kwargs):
+        calls.append(kwargs)
+        raise RuntimeError("uncertain provider result")
+    cap = CappedProvider(fail)
+    with pytest.raises(RuntimeError):
+        cap(model="openai/gpt-4o-mini", messages=[{"role": "user", "content": "hello"}])
+    assert cap.reserved > 0 and calls[0]["max_tokens"] == 512 and calls[0]["max_attempts"] == 1
+    cap.reserved = LIMIT
+    with pytest.raises(SpendingLimit):
+        cap(model="openai/gpt-4o-mini", messages=[])
+    assert len(calls) == 1
+
+
+def test_demo_generator_drives_services_in_isolated_database(monkeypatch, tmp_path):
+    from scripts import make_demo_fixtures as generator
+    calls = {}
+    for module, name in [(generator.fg, "start_room"), (generator.fg, "ask_round"),
+                         (generator.si, "start_batch"), (generator.si, "advance_batch"),
+                         (generator.si, "next_human_question")]:
+        original = getattr(module, name)
+        def counted(*args, _name=name, _original=original, **kwargs):
+            calls[_name] = calls.get(_name, 0) + 1
+            return _original(*args, **kwargs)
+        monkeypatch.setattr(module, name, counted)
+    monkeypatch.setattr(generator, "OUTPUT", tmp_path)
+    generator.build(provisional=True)
+    monkeypatch.setattr(demo_mode, "FIXTURES", tmp_path)
+    for kind in demo_mode.KINDS:
+        fixture = demo_mode.load_fixture(kind)
+        assert fixture["provisional"] and fixture["generation"]["limit_usd"] == "2"
+    assert calls == {"start_room": 1, "ask_round": 7, "start_batch": 1,
+                     "advance_batch": 96, "next_human_question": 8}
+
+
+def test_demo_alternate_http_endpoints_refuse_before_budget(demo, db_session, monkeypatch):
+    from src.persistence.models import Persona
+    from src.persistence.persona_seed import load_persona_seed_rows
+    from src.services import interview_service
+    def forbidden(*args, **kwargs):
+        pytest.fail("Alternate demo route reached budget code")
+    monkeypatch.setattr(interview_service, "load_interview_budget_snapshot", forbidden)
+    row = load_persona_seed_rows()[0]
+    if db_session.get(Persona, row["persona_id"]) is None:
+        db_session.add(Persona(**row))
+        db_session.commit()
+    client, base = demo
+    for kind, key, id_key in [("focus-group", "room", "room_id"), ("batch", "batch", "job_id"), ("you", "interview", "sessionId")]:
+        session_id = opened(demo, kind)[key][id_key]
+        for endpoint, payload in [
+            ("chat", {"standalone": True, "prompt": "What matters?", "model": "openai/gpt-4o-mini"}),
+            ("chat", {"standalone": False, "prompt": "What matters?"}),
+            ("interviewer/next-question", {}),
+            ("compare", {"question": "What matters?", "model_ids": ["openai/gpt-4o-mini", "google/gemini-2.5-flash-lite"]}),
+        ]:
+            response = client.post(f"{base}/{endpoint}", json={**payload, "persona_id": row["persona_id"], "session_id": session_id})
+            assert response.status_code == 409 and demo_mode.READ_ONLY in response.text, response.text
