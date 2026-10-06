@@ -12,6 +12,7 @@ import requests
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from src.adapters.legacy_backend.jev_engine import JevUnavailableError
 from src.adapters.legacy_backend.runtime import load_module
 from src.adapters.legacy_backend.domain import (
     build_geography_context,
@@ -62,10 +63,12 @@ from src.services.exceptions import (
     ConflictApiError,
     ForbiddenApiError,
     NotFoundApiError,
+    ProviderUnavailableApiError,
     UnsupportedMediaTypeApiError,
     ValidationApiError,
 )
 from src.services.demo_interview_fixtures import ensure_demo_interview_run
+from src.services.demo_survey_run import build_demo_run_result
 from src.services.ids import make_public_id
 from src.services.interview_service import save_research_brief
 from src.services.url_security import validate_public_http_url
@@ -1162,12 +1165,31 @@ def get_prompt_preview(
     return {"prompt_preview": prompt_preview.model_dump(mode="json")}
 
 
+JEV_DOWN_WITH_STUDENT_QUESTIONS = ("Jev is temporarily unavailable. Your new question requires a live run. "
+                                   "You can retry or view the preloaded demo of the original survey.")
+NO_KEY_WITH_STUDENT_QUESTIONS = ("No AI key is configured on this server. Your new question requires a live run. "
+                                 "You can view the preloaded demo of the original survey.")
+
+
+def _live_engine_configured(settings: AppSettings) -> bool:
+    return bool(settings.openrouter_api_key or settings.typesafe_api_key)
+
+
+def _is_student_question(question_id: str) -> bool:
+    return question_id.startswith("SQ") and question_id[2:].isdigit()
+
+
+def _has_student_questions(survey: Dict[str, Any]) -> bool:
+    return any(_is_student_question(q.get("id", "")) for q in survey.get("questions", []))
+
+
 def start_simulation_run(
     session: Session,
     settings: AppSettings,
     study: Study,
     *,
     prompt_user_template_override: Optional[str] = None,
+    source: str = "live",
 ) -> Dict[str, Any]:
     sections = _get_sections(session, study)
     audience = sections["audience"].value_json
@@ -1183,25 +1205,33 @@ def start_simulation_run(
     if not experiment:
         raise ConflictApiError("Experiment plan must be saved before running the study.")
 
-    assert_no_in_flight_provider_job(session, owner_user_id=study.owner_user_id)
-    if study.owner_user_id:
-        consume_daily_quota(
-            session,
-            settings,
-            owner_user_id=study.owner_user_id,
-            metric_key=METRIC_SIMULATION_RUN,
-        )
+    if source not in {"live", "demo"}:
+        raise ValidationApiError("source must be 'live' or 'demo'.")
+    demo_reason = "requested" if source == "demo" else (None if _live_engine_configured(settings) else "no_key")
+    if demo_reason == "no_key" and _has_student_questions(survey):
+        # Only an explicit source="demo" may serve saved answers when a student's own question is in the survey.
+        raise ProviderUnavailableApiError(NO_KEY_WITH_STUDENT_QUESTIONS, details={"retry": False, "demo_available": True})
 
     normalized_prompt_override = (prompt_user_template_override or "").strip() or None
 
     geography_context = None
     geography_warning = None
-    zip_code = audience.get("zip_code")
-    if zip_code:
-        try:
-            geography_context = build_geography_context(zip_code, settings)
-        except Exception as exc:
-            geography_warning = f"Geography lookup degraded: {exc}"
+    if demo_reason is None:
+        assert_no_in_flight_provider_job(session, owner_user_id=study.owner_user_id)
+        if study.owner_user_id:
+            consume_daily_quota(
+                session,
+                settings,
+                owner_user_id=study.owner_user_id,
+                metric_key=METRIC_SIMULATION_RUN,
+            )
+
+        zip_code = audience.get("zip_code")
+        if zip_code:
+            try:
+                geography_context = build_geography_context(zip_code, settings)
+            except Exception as exc:
+                geography_warning = f"Geography lookup degraded: {exc}"
 
     job = Job(
         public_id=make_public_id("job"),
@@ -1213,6 +1243,7 @@ def start_simulation_run(
             "survey_title": survey.get("survey_title"),
             "experiment": experiment,
             "prompt_user_template_override": normalized_prompt_override,
+            "source": source,
         },
         result_json=None,
         error_json=None,
@@ -1224,18 +1255,31 @@ def start_simulation_run(
     session.refresh(job)
 
     try:
-        result = execute_simulation_run(
-            settings=settings,
-            audience_payload=audience,
-            survey_payload=survey,
-            experiment_payload=experiment,
-            product_payload=product,
-            market_payload=market,
-            geography_context=geography_context,
-            prompt_user_template_override=normalized_prompt_override,
-        )
-        if geography_warning:
-            result.setdefault("warnings", []).append(geography_warning)
+        if demo_reason is not None:
+            result = build_demo_run_result(survey_payload=survey, experiment_payload=experiment, reason=demo_reason)
+        else:
+            try:
+                result = execute_simulation_run(
+                    settings=settings,
+                    audience_payload=audience,
+                    survey_payload=survey,
+                    experiment_payload=experiment,
+                    product_payload=product,
+                    market_payload=market,
+                    geography_context=geography_context,
+                    prompt_user_template_override=normalized_prompt_override,
+                )
+            except JevUnavailableError as exc:
+                if _has_student_questions(survey):
+                    # A student's own question cannot be answered from saved demo data: stop, don't substitute.
+                    raise ProviderUnavailableApiError(
+                        JEV_DOWN_WITH_STUDENT_QUESTIONS, details={"retry": True, "demo_available": True}
+                    ) from exc
+                result = build_demo_run_result(
+                    survey_payload=survey, experiment_payload=experiment, reason="jev_unavailable", detail=exc.message
+                )
+            if geography_warning:
+                result.setdefault("warnings", []).append(geography_warning)
         job.status = "completed"
         job.result_json = result
         job.error_json = None

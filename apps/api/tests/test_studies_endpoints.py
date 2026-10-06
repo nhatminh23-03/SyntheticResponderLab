@@ -1375,7 +1375,7 @@ def test_model_catalog_endpoint_returns_fallback_when_provider_missing(client):
     assert payload["warning"]
 
 
-def test_start_simulation_run_endpoint_returns_saved_job(client, monkeypatch):
+def test_start_simulation_run_endpoint_returns_saved_job(client, monkeypatch, live_engine_configured):
     study_id = _create_ready_to_run_study(client)
 
     monkeypatch.setattr(
@@ -1432,7 +1432,7 @@ def test_start_simulation_run_endpoint_returns_saved_job(client, monkeypatch):
     assert latest_payload["simulation_run"]["result"]["total_generated_responses"] == 80
 
 
-def test_start_simulation_run_endpoint_passes_prompt_override(client, monkeypatch):
+def test_start_simulation_run_endpoint_passes_prompt_override(client, monkeypatch, live_engine_configured):
     study_id = _create_ready_to_run_study(client)
     captured: dict[str, object] = {}
 
@@ -1478,7 +1478,7 @@ def test_start_simulation_run_endpoint_passes_prompt_override(client, monkeypatc
     )
 
 
-def test_start_simulation_run_endpoint_requires_openrouter_and_saves_failed_job(client):
+def test_start_simulation_run_endpoint_requires_openrouter_and_saves_failed_job(client, live_engine_configured):
     study_id = _create_ready_to_run_study(client)
 
     response = client.post(f"/api/v1/studies/{study_id}/simulation-runs")
@@ -1493,7 +1493,7 @@ def test_start_simulation_run_endpoint_requires_openrouter_and_saves_failed_job(
     assert "OPENROUTER_API_KEY is required" in latest_payload["error"]["message"]
 
 
-def test_clear_latest_simulation_run_endpoint_removes_saved_jobs(client, monkeypatch):
+def test_clear_latest_simulation_run_endpoint_removes_saved_jobs(client, monkeypatch, live_engine_configured):
     study_id = _create_ready_to_run_study(client)
 
     monkeypatch.setattr(
@@ -1574,7 +1574,7 @@ def test_start_stability_check_endpoint_returns_saved_job(client, monkeypatch):
     assert latest_payload["stability_check"]["result"]["stability_labels"] == ["stable"]
 
 
-def test_analysis_endpoint_returns_summary_and_question_explorer(client, monkeypatch):
+def test_analysis_endpoint_returns_summary_and_question_explorer(client, monkeypatch, live_engine_configured):
     study_id = _create_ready_to_run_study(client)
 
     monkeypatch.setattr(
@@ -1772,7 +1772,7 @@ def test_insights_endpoint_returns_executive_summary_and_charts(client, monkeypa
     assert payload["evidence_package"]["from_run_id"] == "run_insights_001"
 
 
-def test_insights_endpoint_keeps_detailed_insights_when_llm_summary_unavailable(client, monkeypatch):
+def test_insights_endpoint_keeps_detailed_insights_when_llm_summary_unavailable(client, monkeypatch, live_engine_configured):
     study_id = _create_ready_to_run_study(client)
 
     monkeypatch.setattr(

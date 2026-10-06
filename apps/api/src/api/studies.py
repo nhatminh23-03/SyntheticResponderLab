@@ -557,6 +557,7 @@ def start_simulation_run_endpoint(
         settings,
         study,
         prompt_user_template_override=(payload.prompt_user_template if payload else None),
+        source=(payload.source if payload else "live"),
     )
     return response_envelope(request, result)
 

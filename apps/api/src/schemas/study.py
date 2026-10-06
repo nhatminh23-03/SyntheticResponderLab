@@ -162,6 +162,7 @@ class StabilityCheckRequest(BaseModel):
 
 class SimulationRunRequest(BaseModel):
     prompt_user_template: Optional[str] = None
+    source: Literal["live", "demo"] = "live"
 
 
 class InterviewChatMessage(BaseModel):
