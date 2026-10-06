@@ -110,14 +110,18 @@ export function AddQuestionCard({
             question.
           </p>
         ) : null}
-        {options.map((option, index) => (
-          <TextInput
-            key={index}
-            value={option}
-            placeholder={questionType === "likert" ? `Label for ${index + 1}` : `Option ${index + 1}`}
-            onChange={(value) => setOptions(options.map((current, i) => (i === index ? value : current)))}
-          />
-        ))}
+        {options.map((option, index) => {
+          const optionLabel = questionType === "likert" ? `Label for ${index + 1}` : `Option ${index + 1}`;
+          return (
+            <TextInput
+              key={index}
+              value={option}
+              placeholder={optionLabel}
+              ariaLabel={optionLabel}
+              onChange={(value) => setOptions(options.map((current, i) => (i === index ? value : current)))}
+            />
+          );
+        })}
         {questionType === "single_choice" && options.length < MAX_CHOICE_OPTIONS ? (
           <Button variant="secondary" onClick={() => setOptions([...options, ""])}>
             Add option
@@ -140,7 +144,12 @@ export function AddQuestionCard({
                 <span>
                   {question.id}: {question.text}
                 </span>
-                <Button variant="secondary" onClick={() => remove(question.id)} disabled={busy}>
+                <Button
+                  variant="secondary"
+                  aria-label={`Remove ${question.id}`}
+                  onClick={() => remove(question.id)}
+                  disabled={busy}
+                >
                   Remove
                 </Button>
               </li>

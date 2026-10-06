@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 
 import { JEV_MODEL_ID, normalizeSelectedModels, selectedModelsProblem, toggleModel } from "../src/lib/experiment-models";
 import { DEFAULT_LIKERT_ANCHORS, isStudentQuestion, toAddQuestionPayload, validateAddedQuestion } from "../src/lib/survey-question-form";
-import { demoBannerLines, describeDemoRun, isDemoRunId, runErrorNote } from "../src/lib/demo-run";
+import { demoBannerLines, describeDemoRun, isDemoGenerationMode, runErrorNote } from "../src/lib/demo-run";
 import { liveEngineAvailable, toBackendReadinessPayload } from "../src/lib/backend-readiness";
 
 test("Jev and other models are mutually exclusive", () => {
@@ -77,8 +77,9 @@ test("only a message that needs a live run gets the added-questions note", () =>
   assert.equal(runErrorNote("The preloaded demo covers the Tahoe Mini survey; use a live run for this survey."), null);
 });
 
-test("demo run ids are recognised, live ones are not", () => {
-  assert.equal(isDemoRunId("DEMO_20261007_101500"), true);
-  assert.equal(isDemoRunId("RUN_20261007_101500"), false);
-  assert.equal(isDemoRunId(undefined), false);
+test("a run is a preloaded demo only when its generation_mode says so", () => {
+  assert.equal(isDemoGenerationMode("demo_preloaded"), true);
+  for (const mode of ["jev_live", "openrouter_live", "mock", "", null, undefined]) {
+    assert.equal(isDemoGenerationMode(mode), false);
+  }
 });

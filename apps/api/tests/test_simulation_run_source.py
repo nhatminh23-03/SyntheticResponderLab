@@ -32,7 +32,10 @@ def test_demo_source_never_calls_a_provider_and_renders_analysis(client, monkeyp
     result = response.json()["data"]["simulation_run"]["result"]
     assert result["generation_mode"] == "demo_preloaded" and result["demo"]["reason"] == "requested"
     assert not any("Run live to answer" in w for w in result["warnings"])   # the Neo preset is fully covered
-    assert client.get(f"/api/v1/studies/{study_id}/analysis").status_code == 200
+    analysis = client.get(f"/api/v1/studies/{study_id}/analysis")
+    assert analysis.status_code == 200
+    # The web decides "preloaded demo" from this field, not from the shape of the run id.
+    assert analysis.json()["data"]["analysis"]["run"]["generation_mode"] == "demo_preloaded"
     assert client.get(f"/api/v1/studies/{study_id}/insights").status_code == 200
 
 
@@ -109,6 +112,7 @@ def test_insights_on_a_demo_run_never_call_a_provider_even_when_a_key_is_configu
     assert insights["llm_summary"]["available"] is False
     assert "No AI was called" in insights["llm_summary"]["message"]
     assert insights["llm_summary"]["cached"] is False
+    assert insights["llm_summary"]["model"] is None   # no model chip on demo data: no model wrote this
 
 
 @pytest.mark.parametrize("error_name, message", [

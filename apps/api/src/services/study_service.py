@@ -1569,7 +1569,7 @@ def get_insights_view(
         insights["llm_summary"] = {
             "available": False,
             "message": "Preloaded demo: no executive AI summary was generated. No AI was called. Run live to get one.",
-            "model": INSIGHTS_SUMMARY_MODEL,
+            "model": None,
             "from_run_id": run_id,
             "cached": False,
         }

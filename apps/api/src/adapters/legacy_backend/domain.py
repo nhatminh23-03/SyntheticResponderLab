@@ -1627,6 +1627,7 @@ def build_analysis_view(
             "models_used": list(latest_run_payload.get("models_used") or []),
             "requested_responses": latest_run_payload.get("total_requested_responses"),
             "generated_responses": latest_run_payload.get("total_generated_responses"),
+            "generation_mode": latest_run_payload.get("generation_mode"),
         },
         "summary": {
             **summary,

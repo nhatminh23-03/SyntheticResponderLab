@@ -1,10 +1,10 @@
 type RunLike = { generation_mode?: string | null; warnings?: string[] | null; demo?: { reason?: string } | null };
 
-export const DEMO_RUN_ID_PREFIX = "DEMO_";
+export const DEMO_GENERATION_MODE = "demo_preloaded";
 export const ADDED_QUESTIONS_NOT_IN_DEMO = "Your added questions are not in the preloaded demo.";
 
 export function describeDemoRun(result: RunLike | null | undefined): { reason: string; message: string } | null {
-  if (!result || result.generation_mode !== "demo_preloaded") return null;
+  if (!result || !isDemoGenerationMode(result.generation_mode)) return null;
   const warnings = result.warnings ?? [];
   return { reason: result.demo?.reason ?? "requested", message: [warnings[0], warnings[1]].filter(Boolean).join(" ") };
 }
@@ -17,9 +17,9 @@ export function demoBannerLines(result: RunLike | null | undefined): string[] {
   return [demo.message, ...rest].filter(Boolean);
 }
 
-/** Preloaded demo runs get ids starting with DEMO_ (live runs are RUN_, stability checks STABILITY_). */
-export function isDemoRunId(runId: string | null | undefined): boolean {
-  return typeof runId === "string" && runId.startsWith(DEMO_RUN_ID_PREFIX);
+/** A run is the preloaded demo only when the API says so in its generation_mode. */
+export function isDemoGenerationMode(mode: string | null | undefined): boolean {
+  return mode === DEMO_GENERATION_MODE;
 }
 
 /** An extra line for a run error: only the "needs a live run" refusals say the preloaded demo lacks the student's questions. */

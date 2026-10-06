@@ -13,7 +13,7 @@ import {
   getAnalysis,
 } from "@/lib/api";
 import { formatAnswerSourcing } from "@/lib/answer-sourcing";
-import { isDemoRunId } from "@/lib/demo-run";
+import { isDemoGenerationMode } from "@/lib/demo-run";
 import { cn } from "@/lib/utils";
 import { useStudy } from "@/providers/study-provider";
 import { useSectionRegistry } from "@/providers/section-registry-provider";
@@ -151,7 +151,7 @@ export function AnalysisSection() {
                       </h2>
               {(() => {
                 const sourcing = formatAnswerSourcing(analysis?.answer_sourcing ?? null, {
-                  demo: isDemoRunId(analysis?.run?.run_id),
+                  demo: isDemoGenerationMode(analysis?.run?.generation_mode),
                 });
                 if (!sourcing.shown) return null;
                 return (

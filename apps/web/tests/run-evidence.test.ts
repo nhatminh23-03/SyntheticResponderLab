@@ -92,3 +92,14 @@ test("a preloaded demo never reads as live answers or an empty live run", () => 
   assert.doesNotMatch(`${evidence.headline} ${evidence.detail}`, /live model|not reported|fabricat/i);
   assert.match(evidence.detail, /No AI was called/);
 });
+
+test("a demo with fewer personas than the panel says how many of the 100 it used", () => {
+  const some = describeRunEvidence({}, "preloaded_s1", "demo_preloaded", 20);
+  assert.equal(some.personaGrounding.label, "Preloaded panel (first 20 of 100 synthetic personas, S1)");
+
+  const all = describeRunEvidence({}, "preloaded_s1", "demo_preloaded", 100);
+  assert.equal(all.personaGrounding.label, "Preloaded panel (100 synthetic personas, S1)");
+
+  const unknown = describeRunEvidence({}, "preloaded_s1", "demo_preloaded");
+  assert.equal(unknown.personaGrounding.label, "Preloaded panel (100 synthetic personas, S1)");
+});

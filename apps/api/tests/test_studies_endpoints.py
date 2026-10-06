@@ -1660,6 +1660,7 @@ def test_analysis_endpoint_returns_summary_and_question_explorer(client, monkeyp
     assert payload["available"] is True
     assert payload["summary"]["total_records"] == 4
     assert payload["run"]["run_id"] == "run_analysis_001"
+    assert payload["run"]["generation_mode"] == "mock"   # a run that is not the preloaded demo says what it was
     assert payload["filters"]["selected_question_id"] == "S3"
     assert payload["question_explorer"]["question_id"] == "S3"
     assert payload["dashboard"]["selected_model"] == "All"

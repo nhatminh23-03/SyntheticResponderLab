@@ -559,6 +559,8 @@ export type AnalysisPayload = {
     models_used?: string[];
     requested_responses?: number;
     generated_responses?: number;
+    /** "demo_preloaded" for the preloaded demo; the web decides demo vs live from this alone. */
+    generation_mode?: string | null;
   };
   summary?: {
     total_records?: number;
@@ -657,7 +659,8 @@ export type InsightsLlmSummary = {
   };
   recommended_next_steps?: string[];
   researcher_note?: string;
-  model?: string;
+  /** Null for the preloaded demo, which no model wrote. */
+  model?: string | null;
   from_run_id?: string;
   generated_at?: string;
   cached?: boolean;

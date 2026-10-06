@@ -174,7 +174,8 @@ export function RunSimulationSection() {
   const runEvidence = describeRunEvidence(
     latestRun?.result?.run_debug_summary ?? null,
     latestRun?.result?.persona_generation_mode ?? null,
-    latestRun?.result?.generation_mode ?? null
+    latestRun?.result?.generation_mode ?? null,
+    latestRun?.result?.personas?.length ?? null
   );
   const demoRun = describeDemoRun(latestRun?.result);
   const demoLines = demoBannerLines(latestRun?.result);
@@ -765,6 +766,7 @@ function StatusBanner({
 }) {
   return (
     <div
+      role="status"
       className={cn(
         "rounded-[1.35rem] border px-4 py-3 text-sm leading-6",
         !compact && "sm:px-5 sm:py-4",

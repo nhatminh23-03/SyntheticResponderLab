@@ -6,6 +6,8 @@
  * whose answers were partly or wholly deterministic filler looked identical to a genuine one.
  */
 
+import { isDemoGenerationMode } from "./demo-run";
+
 export type RunDebugSummaryInput = {
   total_answers?: number;
   truly_live_answers?: number;
@@ -34,13 +36,19 @@ export type RunEvidence = {
 
 const GROUNDED_MODES = new Set(["grounded_priors", "grounded"]);
 const PRELOADED_PERSONA_MODE = "preloaded_s1";
-const DEMO_GENERATION_MODE = "demo_preloaded";
+const PRELOADED_PANEL_SIZE = 100;
 
-function describePersonaGrounding(mode: string | null | undefined) {
+function describePersonaGrounding(mode: string | null | undefined, personaCount?: number | null) {
   if (mode === PRELOADED_PERSONA_MODE) {
+    // A run can use only the first N of the panel's 100 personas; say so rather than imply all 100 answered.
+    const used = typeof personaCount === "number" && personaCount > 0 ? Math.trunc(personaCount) : null;
+    const panel =
+      used !== null && used < PRELOADED_PANEL_SIZE
+        ? `first ${used} of ${PRELOADED_PANEL_SIZE} synthetic personas, S1`
+        : `${PRELOADED_PANEL_SIZE} synthetic personas, S1`;
     return {
       isGrounded: false,
-      label: "Preloaded panel (100 synthetic personas, S1)",
+      label: `Preloaded panel (${panel})`,
       detail: "These personas come from the saved demo panel; none were generated for this run.",
     };
   }
@@ -70,11 +78,12 @@ function describePersonaGrounding(mode: string | null | undefined) {
 export function describeRunEvidence(
   summary: RunDebugSummaryInput,
   personaGenerationMode: string | null | undefined,
-  generationMode?: string | null
+  generationMode?: string | null,
+  personaCount?: number | null
 ): RunEvidence {
-  const personaGrounding = describePersonaGrounding(personaGenerationMode);
+  const personaGrounding = describePersonaGrounding(personaGenerationMode, personaCount);
 
-  if (generationMode === DEMO_GENERATION_MODE) {
+  if (isDemoGenerationMode(generationMode)) {
     // A demo saves no live-answer diagnostics. Reporting 0 of 0 live answers, or "not reported",
     // would read as a broken live run; it is a different thing and says so.
     return {
