@@ -20,17 +20,17 @@ Checks run from this directory through `./check.sh`.
 - [x] Opening, reading, memo-saving and exporting every demo makes zero provider calls and records zero spend: the test replaces the model client with one that fails the test if called. — check: `./check.sh api 'demo_makes_no_model_calls'`
 - [x] Demo endpoints work on the classroom no-login path with no OpenRouter key configured, and nothing wider was opened on the allowlist (other methods, suffixes and encoded paths still refused). — check: `./check.sh api 'demo_no_key_no_login'`
 - [x] Demo sessions live only in the student's own study: another classroom device cannot list or open them. — check: `./check.sh api 'demo_isolated_per_study'`
-- [ ] The committed fixtures were produced by `apps/api/scripts/make_demo_fixtures.py` from a real model run (none marked provisional) and contain no real survey respondent data. — check: `./check.sh fixtures`
+- [x] The committed fixtures were produced by `apps/api/scripts/make_demo_fixtures.py` from a real model run (none marked provisional) and contain no real survey respondent data. — check: `./check.sh fixtures`
 
 ## Pages
 
 - [x] One "Demo (no AI)" switch in the shared app chrome appears on every page; turning it on puts /interview, /interview/you and /focus-group into demo together, it persists across navigation and reload, and `apps/web/src/lib/demo-mode.ts` exports `useDemoMode()` and the storage key for the survey section to read. — check: `./check.sh web 'demo switch'`
-- [x] With the switch on, each of the three pages shows its demo session with AI controls hidden or disabled and the "Demo (no AI): read-only" note, the "Demo session - pre-recorded, no AI" label is visible, and the memo form and export stay usable; with it off, the pages are exactly as before. — check: `./check.sh web 'demo mode'`
+- [ ] With the switch on, each of the three pages shows its demo session with AI controls hidden or disabled and the "Demo (no AI): read-only" note, the "Demo session - pre-recorded, no AI" label is visible, and the memo form and export stay usable; with it off, the pages are exactly as before. — check: `./check.sh web 'demo mode'`
 
 ## Nothing else broke
 
 - [x] The full API suite passes. — check: `./check.sh api-all`
-- [x] The full web suite passes, the web app typechecks and the production build succeeds. — check: `./check.sh web-all && ./check.sh typecheck && ./check.sh build`
+- [ ] The full web suite passes, the web app typechecks and the production build succeeds. — check: `./check.sh web-all && ./check.sh typecheck && ./check.sh build`
 
 ## Added by Sol refute [codex:gpt-6-astra] (each needs a check before it can pass)
 - [x] (sol) A first-time student with an empty study can open each demo without configuring models, personas, a product, or a guide. — check: `./check.sh api 'demo_no_key_no_login'`
@@ -44,7 +44,7 @@ Checks run from this directory through `./check.sh`.
 - [x] (sol) Another student cannot export, modify memos, delete, or otherwise mutate a demo by supplying its identifiers. — check: `./check.sh api 'demo_foreign_device or demo_isolated_per_study'`
 - [x] (sol) After classroom-session expiry or shared-device reset, the next student cannot recover the previous student's demo memos through browser storage. — check: `./check.sh web 'demo mode isolates' && ./check.sh api 'demo_foreign_device'`
 - [x] (sol) Opening demos leaves existing study configuration, survey results, live transcripts, and research analysis unchanged. — check: `./check.sh api 'demo_preserves_existing_data'`
-- [x] (sol) Every demo screen and export retains the existing “Synthetic rehearsal” label alongside the demo label. — check: `./check.sh web 'demo mode batch and human exports' && ./check.sh api 'focus_group_demo_memo_and_export'`
+- [ ] (sol) Every demo screen and export retains the existing “Synthetic rehearsal” label alongside the demo label. — check: `./check.sh web 'demo mode batch and human exports' && ./check.sh api 'focus_group_demo_memo_and_export'`
 - [x] (sol) Fixture generation uses the real service code and enforces the approved $2 total spending limit. — check: `./check.sh api 'demo_generator'`
 - [x] (sol) Missing or invalid deployed fixtures produce an actionable operator diagnostic identifying the affected demo without exposing student content. — check: `./check.sh api 'missing_fixture_no_partial_copy or demo_invalid_fixture'`
 
@@ -53,6 +53,6 @@ Checks run from this directory through `./check.sh`.
 - [x] (sol) Changing the switch in one browser tab updates other open app tabs so they cannot silently remain in live mode. — check: `./check.sh web 'demo switch cross-tab subscriber'`
 - [x] (sol) Opening demos consumes no daily interview-run quota and leaves the student's remaining live-run allowance unchanged. — check: `./check.sh api 'demo_preserves_existing_data_and_quota'`
 - [x] (sol) Deleting a demo focus-group room cannot strand the demo page, and reopening provides a complete usable example without resurrecting deleted memos. — check: `./check.sh api 'focus_group_demo_memo_and_export'`
-- [x] (sol) Demo screens and exports show zero cost for the student's playback and clearly distinguish any historical fixture-generation cost. — check: `./check.sh api 'focus_group_demo_opens' && ./check.sh web 'demo mode batch and human exports'`
+- [ ] (sol) Demo screens and exports show zero cost for the student's playback and clearly distinguish any historical fixture-generation cost. — check: `./check.sh api 'focus_group_demo_opens' && ./check.sh web 'demo mode batch and human exports'`
 - [x] (sol) A student's previously selected product photo or custom concept cannot appear attached to the prerecorded Tahoe Mini discussion. — check: `./check.sh api 'demo_preserves_existing_data' && ./check.sh web 'demo mode isolates'`
 - [x] (sol) Keyboard and screen-reader users can operate the shared switch and determine whether demo mode is on in both desktop and compact navigation. — check: `./check.sh web 'demo switch native accessible'`

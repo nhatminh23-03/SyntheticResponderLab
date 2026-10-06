@@ -79,13 +79,15 @@ test("demo mode batch and human exports retain labels, transcript and zero playb
     job_id: "demo_batch", status: "completed", session_usage: { cost_usd: "0" }, error: null };
   const human = JSON.parse(read("../api/seed_data/demo/you.json"));
   for (const format of ["csv", "md"] as const) {
-    for (const exported of [batchExport(batch, format), humanInterviewExport({ ...human.state, demo: true,
-      provisional: true, sessionId: "you_demo", ended: true, turnLimit: 8, costUsd: "0" }, format)]) {
+    for (const [exported, provisional] of [[batchExport(batch, format), fixture.provisional], [humanInterviewExport({ ...human.state, demo: true,
+      provisional: human.provisional, sessionId: "you_demo", ended: true, turnLimit: 8, costUsd: "0" }, format), human.provisional]] as const) {
       const text = await exported.blob.text();
       assert.match(text, /Demo session - pre-recorded, no AI/);
       assert.match(text, /Synthetic rehearsal/);
       assert.match(text, /Playback cost: \$0/);
-      assert.match(text, /Provisional hand-written example/);
+      // The note tracks the fixture flag: shown for hand-written fixtures, absent for real recordings.
+      if (provisional) assert.match(text, /Provisional hand-written example/);
+      else assert.doesNotMatch(text, /Provisional hand-written example/);
     }
   }
 });
