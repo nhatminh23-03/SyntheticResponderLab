@@ -6,10 +6,14 @@ import { DEFAULT_LIKERT_ANCHORS, isStudentQuestion, toAddQuestionPayload, valida
 import { demoBannerLines, describeDemoRun, insightsHeader, isDemoGenerationMode, runErrorNote } from "../src/lib/demo-run";
 import {
   DEMO_NEEDS_UPDATED_API,
+  READINESS_RECHECK_INTERVAL_MS,
+  READINESS_RECHECK_WINDOW_MS,
   STUDY_MODELS_NEED_A_KEY,
+  WAKING_SERVER_HINT,
   demoRunControl,
   liveEngineAvailable,
   liveRunControl,
+  shouldRecheckReadiness,
   toBackendReadinessPayload,
 } from "../src/lib/backend-readiness";
 
@@ -163,4 +167,22 @@ test("the Insights header never says the LLM summarized a preloaded demo", () =>
   for (const mode of ["jev_live", "openrouter_live", null, undefined]) {
     assert.match(insightsHeader(mode).description, /summarized by the LLM/);
   }
+});
+
+test("the run step re-checks readiness every 5 s for up to 2 minutes while the server wakes up", () => {
+  assert.equal(READINESS_RECHECK_INTERVAL_MS, 5000);
+  assert.equal(READINESS_RECHECK_WINDOW_MS, 120000);
+  assert.equal(WAKING_SERVER_HINT, "Waking the server — buttons turn on in a moment.");
+  const waking = toBackendReadinessPayload(503, null);
+  const failedButNew = toBackendReadinessPayload(200, { data: { status: "failed", providers: { jev: true, openrouter: true } } });
+  // Missing, not ready, or no providers: check again while the window is open...
+  for (const readiness of [null, undefined, waking, failedButNew, READY()]) {
+    assert.equal(shouldRecheckReadiness(readiness, 0), true);
+    assert.equal(shouldRecheckReadiness(readiness, 119_999), true);
+    // ...and stop after 2 minutes, so the page does not poll forever.
+    assert.equal(shouldRecheckReadiness(readiness, 120_000), false);
+  }
+  // Ready with providers: stop, even when this server has no AI key (the demo works, Run live explains itself).
+  assert.equal(shouldRecheckReadiness(READY({ jev: true, openrouter: false }), 0), false);
+  assert.equal(shouldRecheckReadiness(READY({ jev: false, openrouter: false }), 0), false);
 });

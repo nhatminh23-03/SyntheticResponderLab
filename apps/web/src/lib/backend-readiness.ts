@@ -126,3 +126,19 @@ export function demoRunControl(readiness: BackendReadinessPayload | null | undef
   // When readiness is unknown or the backend is not ready, the Run live hint already says why both are off.
   return { enabled: false, hint: readiness?.ready ? DEMO_NEEDS_UPDATED_API : null };
 }
+
+export const READINESS_RECHECK_INTERVAL_MS = 5000;
+export const READINESS_RECHECK_WINDOW_MS = 120000;
+export const WAKING_SERVER_HINT = "Waking the server — buttons turn on in a moment.";
+
+/**
+ * Ruling R19: a cold start must not leave the Run step's buttons off until a reload. Check readiness again while the
+ * payload is missing, not ready, or lacks `providers`, for at most READINESS_RECHECK_WINDOW_MS since checking began.
+ */
+export function shouldRecheckReadiness(
+  readiness: BackendReadinessPayload | null | undefined,
+  elapsedMs: number
+): boolean {
+  if (readiness?.ready && readiness.providers) return false;
+  return elapsedMs < READINESS_RECHECK_WINDOW_MS;
+}

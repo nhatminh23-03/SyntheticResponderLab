@@ -11,7 +11,14 @@ import {
   SimulationStabilityResultPayload,
   startSimulationRun,
 } from "@/lib/api";
-import { demoRunControl, liveRunControl, type BackendReadinessPayload } from "@/lib/backend-readiness";
+import {
+  demoRunControl,
+  liveRunControl,
+  READINESS_RECHECK_INTERVAL_MS,
+  shouldRecheckReadiness,
+  WAKING_SERVER_HINT,
+  type BackendReadinessPayload,
+} from "@/lib/backend-readiness";
 import { demoBannerLines, describeDemoRun, runErrorNote } from "@/lib/demo-run";
 import { describeRunEvidence } from "@/lib/run-evidence";
 import { describeRunCounts } from "@/lib/run-counts";
@@ -47,6 +54,16 @@ const EXECUTION_PHASES = [
 
 const RESPONSE_RECORDS_PER_PAGE = 5;
 
+/** One readiness check; null when the check itself failed (network error or unreadable reply). */
+async function fetchReadiness(): Promise<BackendReadinessPayload | null> {
+  try {
+    const response = await fetch("/api/readiness", { cache: "no-store" });
+    return (await response.json()) as BackendReadinessPayload;
+  } catch {
+    return null;
+  }
+}
+
 const EMPTY_STATUS: StatusState = {
   tone: "neutral",
   message:
@@ -72,6 +89,9 @@ export function RunSimulationSection() {
   const [activeSource, setActiveSource] = useState<RunSource | null>(null);
   const [readiness, setReadiness] = useState<BackendReadinessPayload | null>(null);
   const [readinessChecked, setReadinessChecked] = useState(false);
+  const [isWaitingForServer, setIsWaitingForServer] = useState(false);
+  // Bumped to start a new re-check window (e.g. a click found the server asleep again).
+  const [readinessRound, setReadinessRound] = useState(0);
   const [isClearing, setIsClearing] = useState(false);
   const [executionPhaseIndex, setExecutionPhaseIndex] = useState(0);
   const [responseRecordPage, setResponseRecordPage] = useState(0);
@@ -134,24 +154,30 @@ export function RunSimulationSection() {
     study?.derived?.latest_persona_preview?.completed_at,
   ]);
 
+  // Ruling R19: while the server is waking (no payload, not ready, or no providers), check again every 5 s for up
+  // to 2 minutes, so a cold start does not leave both buttons off until a reload.
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/readiness", { cache: "no-store" })
-      .then((response) => response.json())
-      .then((payload: BackendReadinessPayload) => {
-        if (!cancelled) setReadiness(payload);
-      })
-      .catch(() => {
-        if (!cancelled) setReadiness(null);
-      })
-      .finally(() => {
-        if (!cancelled) setReadinessChecked(true);
-      });
+    let timer: number | null = null;
+    const startedAt = Date.now();
+
+    async function check() {
+      const payload = await fetchReadiness();
+      if (cancelled) return;
+      setReadiness(payload);
+      setReadinessChecked(true);
+      const again = shouldRecheckReadiness(payload, Date.now() - startedAt);
+      setIsWaitingForServer(again);
+      if (again) timer = window.setTimeout(() => void check(), READINESS_RECHECK_INTERVAL_MS);
+    }
+
+    void check();
 
     return () => {
       cancelled = true;
+      if (timer !== null) window.clearTimeout(timer);
     };
-  }, []);
+  }, [readinessRound]);
 
   useEffect(() => {
     setNavigationLocked(isRunning);
@@ -185,7 +211,9 @@ export function RunSimulationSection() {
   // enough to honour `source` (it reports `providers`).
   const liveControl = liveRunControl(study?.experiment?.value?.selected_models, readiness);
   const demoControl = demoRunControl(readiness);
-  const runHints = [liveControl.hint, demoControl.hint].filter((hint): hint is string => Boolean(hint));
+  const runHints = isWaitingForServer
+    ? [WAKING_SERVER_HINT]
+    : [liveControl.hint, demoControl.hint].filter((hint): hint is string => Boolean(hint));
   const latestParseWarnings = latestRun?.result?.survey_parse_warnings ?? [];
   const allPersonas = latestRun?.result?.personas ?? [];
   const runCounts = useMemo(
@@ -251,6 +279,23 @@ export function RunSimulationSection() {
 
     setIsRunning(true);
     setActiveSource(source);
+
+    // Ruling R19: check readiness once more right before acting on the click; the server may have restarted or
+    // been replaced since the last check (an older API would turn a demo click into a paid live run).
+    const fresh = await fetchReadiness();
+    setReadiness(fresh);
+    setReadinessChecked(true);
+    const control =
+      source === "demo" ? demoRunControl(fresh) : liveRunControl(study?.experiment?.value?.selected_models, fresh);
+    if (!control.enabled) {
+      const waking = shouldRecheckReadiness(fresh, 0);
+      if (waking) setReadinessRound((round) => round + 1);
+      setStatus({ tone: "warning", message: waking ? WAKING_SERVER_HINT : control.hint ?? WAKING_SERVER_HINT });
+      setIsRunning(false);
+      setActiveSource(null);
+      return;
+    }
+
     setStatus({
       tone: "neutral",
       message:
