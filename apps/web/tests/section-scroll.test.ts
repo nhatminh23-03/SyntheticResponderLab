@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { cssLengthToPx, sectionWindowScrollTop } from "../src/lib/section-scroll";
+import { cssLengthToPx, menuBarHeightPx, sectionWindowScrollTop } from "../src/lib/section-scroll";
 import { workflowSections } from "../src/lib/workflow-sections";
 
 const read = (path: string) => readFileSync(resolve(__dirname, "../..", path), "utf8");
@@ -54,9 +54,11 @@ test("the Demo strip, the menu bars and the viewport-height panels share one top
 
   // Every sticky menu bar sticks right below the strip instead of sliding behind it.
   for (const file of ["src/components/ui/workflow-nav.tsx", "src/components/ui/public-landing-shell.tsx"]) {
-    const source = read(file);
-    assert.doesNotMatch(source, /<header className="sticky top-0\b/, file);
-    assert.match(source, /<header className="sticky top-\[var\(--demo-bar-height\)\] z-50/, file);
+    const headers = read(file).match(/<header\b[^>]*>/g) ?? [];
+    assert.ok(headers.length > 0, file);
+    for (const header of headers) {
+      assert.match(header, /className="sticky top-\[var\(--demo-bar-height\)\] z-50 /, `${file}: ${header}`);
+    }
   }
 
   // Desktop panels fit the viewport below both, and anchor jumps clear both.
@@ -68,4 +70,36 @@ test("the Demo strip, the menu bars and the viewport-height panels share one top
   const provider = read("src/providers/section-registry-provider.tsx");
   assert.match(provider, /getPropertyValue\("--demo-bar-height"\)/);
   assert.doesNotMatch(provider, /resolveNavHeight\(\)/);
+});
+
+test("below lg the menu bar height is the compact bar's measured height, not the much shorter CSS default", () => {
+  // Phone and tablet: the compact bar (logo row, current step, progress) is about 210px; the defaults said 132/112.
+  assert.equal(menuBarHeightPx(375, 210), 210);
+  assert.equal(menuBarHeightPx(768, 211), 211);
+  // So a phone section landing clears the 40px strip plus the real bar: 4300 - (40 + 210) - 12.
+  assert.equal(sectionWindowScrollTop("survey", 4300, 40 + menuBarHeightPx(375, 210), false), 4038);
+  // Desktop: the compact bar is hidden (0) and the desktop bar is sized by --nav-height itself, so it stays 88.
+  assert.equal(menuBarHeightPx(1440, 0), 88);
+  assert.equal(menuBarHeightPx(1024, 0), 88);
+  // Not measured yet (or missing): the old per-breakpoint values.
+  assert.equal(menuBarHeightPx(768, 0), 112);
+  assert.equal(menuBarHeightPx(375, 0), 132);
+  assert.equal(menuBarHeightPx(375, Number.NaN), 132);
+});
+
+test("the workflow page keeps --nav-height equal to the compact menu bar it renders", () => {
+  const nav = read("src/components/ui/workflow-nav.tsx");
+  // Exactly one header is the compact (lg:hidden) bar, and it carries the measuring hook.
+  const compact = (nav.match(/<header\b[^>]*>/g) ?? []).filter((header) => header.includes("data-compact-menu-bar"));
+  assert.equal(compact.length, 1);
+  assert.match(compact[0], /lg:hidden/);
+  assert.doesNotMatch(compact[0], /var\(--nav-height\)/);
+
+  const shell = read("src/components/ui/app-shell.tsx");
+  assert.match(shell, /querySelector<HTMLElement>\(COMPACT_MENU_BAR_SELECTOR\)/);
+  assert.match(shell, /const COMPACT_MENU_BAR_SELECTOR = "\[data-compact-menu-bar\]";/);
+  assert.match(shell, /new ResizeObserver\(sync\)/);
+  assert.match(shell, /menuBarHeightPx\(window\.innerWidth, compactMenuBar\?\.offsetHeight \?\? 0\)/);
+  // The signed-out landing page sizes its own bar by --nav-height, so the measured value must not outlive the shell.
+  assert.match(shell, /removeProperty\("--nav-height"\)/);
 });

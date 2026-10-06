@@ -6,7 +6,8 @@
 
 :root {
   color-scheme: dark;
-  /* The menu bar's own height (it also changes at 640px and 1024px below). */
+  /* The menu bar's own height (it also changes at 640px and 1024px below). On the workflow
+     page AppShell overwrites it with the measured compact menu bar below lg (about 210px). */
   --nav-height: 8.25rem;
   /* The app-wide Demo (no AI) strip, pinned above the menu bar on every page. */
   --demo-bar-height: 2.5rem;

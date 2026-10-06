@@ -1,37 +1,59 @@
 "use client";
 
-import { PropsWithChildren, useEffect, useLayoutEffect } from "react";
+import { PropsWithChildren, useEffect, useLayoutEffect, useRef } from "react";
 
 import { ChapterNextArrow } from "@/components/ui/chapter-next-arrow";
 import { WorkflowNav } from "@/components/ui/workflow-nav";
+import { menuBarHeightPx } from "@/lib/section-scroll";
 
-function resolveNavHeightPx(width: number) {
-  if (width >= 1024) {
-    return 88;
+const COMPACT_MENU_BAR_SELECTOR = "[data-compact-menu-bar]";
+
+/**
+ * Writes the menu bar's real height to --nav-height (and so to --top-chrome), measuring the
+ * compact menu bar below lg, so section landings and anchor jumps clear the whole top chrome.
+ */
+function syncNavHeight(shell: HTMLElement | null) {
+  if (!shell) {
+    return; // unmounted: leave --nav-height to the CSS
   }
-
-  if (width >= 640) {
-    return 112;
-  }
-
-  return 132;
+  const compactMenuBar = shell.querySelector<HTMLElement>(COMPACT_MENU_BAR_SELECTOR);
+  document.documentElement.style.setProperty(
+    "--nav-height",
+    `${menuBarHeightPx(window.innerWidth, compactMenuBar?.offsetHeight ?? 0)}px`
+  );
 }
 
 export function AppShell({ children }: PropsWithChildren) {
+  const shellRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    const shell = shellRef.current;
+    const sync = () => syncNavHeight(shell);
+    sync();
+
+    // The compact bar changes height with its content and the viewport, and shows/hides at lg.
+    const compactMenuBar = shell?.querySelector<HTMLElement>(COMPACT_MENU_BAR_SELECTOR);
+    const observer =
+      compactMenuBar && typeof ResizeObserver !== "undefined" ? new ResizeObserver(sync) : null;
+    if (compactMenuBar && observer) {
+      observer.observe(compactMenuBar);
+    }
+    window.addEventListener("resize", sync, { passive: true });
+
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", sync);
+      // The signed-out landing page sizes its own menu bar by --nav-height: hand it back the CSS value.
+      document.documentElement.style.removeProperty("--nav-height");
+    };
+  }, []);
+
   useLayoutEffect(() => {
     if (typeof window === "undefined" || window.location.hash) {
       return;
     }
 
-    const applyNavHeight = () => {
-      document.documentElement.style.setProperty(
-        "--nav-height",
-        `${resolveNavHeightPx(window.innerWidth)}px`
-      );
-    };
-
     const previousScrollRestoration = window.history.scrollRestoration;
-    applyNavHeight();
     window.history.scrollRestoration = "manual";
     window.scrollTo(0, 0);
 
@@ -50,18 +72,8 @@ export function AppShell({ children }: PropsWithChildren) {
     let timeoutId: number | null = null;
 
     const forceTop = () => {
-      document.documentElement.style.setProperty(
-        "--nav-height",
-        `${resolveNavHeightPx(window.innerWidth)}px`
-      );
+      syncNavHeight(shellRef.current);
       window.scrollTo(0, 0);
-    };
-
-    const handleResize = () => {
-      document.documentElement.style.setProperty(
-        "--nav-height",
-        `${resolveNavHeightPx(window.innerWidth)}px`
-      );
     };
 
     forceTop();
@@ -75,8 +87,6 @@ export function AppShell({ children }: PropsWithChildren) {
       forceTop();
     }, 180);
 
-    window.addEventListener("resize", handleResize, { passive: true });
-
     return () => {
       if (frameOne) {
         window.cancelAnimationFrame(frameOne);
@@ -87,12 +97,11 @@ export function AppShell({ children }: PropsWithChildren) {
       if (timeoutId !== null) {
         window.clearTimeout(timeoutId);
       }
-      window.removeEventListener("resize", handleResize);
     };
   }, []);
 
   return (
-    <div className="relative min-h-screen overflow-x-clip bg-app-bg text-app-text">
+    <div ref={shellRef} className="relative min-h-screen overflow-x-clip bg-app-bg text-app-text">
       <div className="pointer-events-none fixed inset-0">
         <div
           className="absolute inset-x-0 top-0 h-[32rem]"

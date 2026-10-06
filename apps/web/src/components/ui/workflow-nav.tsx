@@ -189,7 +189,11 @@ export function WorkflowNav() {
         </div>
       </header>
 
-      <header className="sticky top-[var(--demo-bar-height)] z-50 border-b [background:var(--nav-bg)] [border-color:var(--nav-border)] backdrop-blur-2xl lg:hidden">
+      {/* Sized by its content, not --nav-height; AppShell measures it (data-compact-menu-bar) into --nav-height. */}
+      <header
+        data-compact-menu-bar
+        className="sticky top-[var(--demo-bar-height)] z-50 border-b [background:var(--nav-bg)] [border-color:var(--nav-border)] backdrop-blur-2xl lg:hidden"
+      >
         <div className="mx-auto max-w-[92rem] px-3 pb-2 pt-3 sm:px-4">
           <div className="flex items-start justify-between gap-3">
             <button

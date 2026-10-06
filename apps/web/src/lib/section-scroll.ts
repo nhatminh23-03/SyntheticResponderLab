@@ -36,3 +36,23 @@ export function cssLengthToPx(rawValue: string, rootFontSizePx: number, fallback
 
   return parsed;
 }
+
+/**
+ * The menu bar's own height in px, written to --nav-height on the workflow page.
+ * Below lg the compact menu bar is as tall as its content (logo row, current step,
+ * progress: about 210px on a phone or tablet), far more than the 132px/112px CSS
+ * defaults, so whenever it is on screen (`compactMenuBarHeight` > 0) its measured height
+ * is used. From lg up it is hidden (0) and the desktop bar, which is itself sized by
+ * --nav-height, keeps the fixed 88px.
+ */
+export function menuBarHeightPx(viewportWidth: number, compactMenuBarHeight: number): number {
+  if (Number.isFinite(compactMenuBarHeight) && compactMenuBarHeight > 0) {
+    return compactMenuBarHeight;
+  }
+
+  if (viewportWidth >= 1024) {
+    return 88;
+  }
+
+  return viewportWidth >= 640 ? 112 : 132;
+}
