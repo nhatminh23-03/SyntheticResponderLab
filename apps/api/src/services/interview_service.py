@@ -616,6 +616,8 @@ def compare_interview_models(
         raise ValidationApiError(f"Persona '{persona_id}' was not found.")
 
     session_id = str(payload.get("session_id") or "").strip() or make_public_id("ses")
+    from src.services.demo_mode import refuse_demo_session
+    refuse_demo_session(session, session_id)
     validate_session(session, study, session_id)
     system_prompt = _build_fixed_persona_system_prompt(dict(persona.profile_json))
     messages = [
@@ -823,6 +825,8 @@ def continue_standalone_interview_chat(
         raise ValidationApiError(f"Persona '{persona_id}' was not found.")
 
     session_id = str(payload.get("session_id") or "").strip() or make_public_id("ses")
+    from src.services.demo_mode import refuse_demo_session
+    refuse_demo_session(session, session_id)
     validate_session(session, study, session_id)
     system_prompt = _build_fixed_persona_system_prompt(dict(persona.profile_json))
     full_messages = [
@@ -971,6 +975,8 @@ def continue_interview_chat(
     payload: Dict[str, Any],
 ) -> Dict[str, Any]:
     """Continue a follow-up conversation with a selected interview persona."""
+    from src.services.demo_mode import refuse_demo_session
+    refuse_demo_session(session, str(payload.get("session_id") or "").strip())
     if payload.get("standalone"):
         return continue_standalone_interview_chat(session, settings, study, payload)
 
@@ -1149,6 +1155,8 @@ def generate_interviewer_question(
     payload: Dict[str, Any],
 ) -> Dict[str, Any]:
     """Ask the AI interviewer for one brief-led, answer-derived question."""
+    from src.services.demo_mode import refuse_demo_session
+    refuse_demo_session(session, str(payload.get("session_id") or "").strip())
     brief_section = _get_section_or_none(session, study, "research_brief")
     research_brief = brief_section and brief_section.value_json
     if not research_brief or not str(research_brief.get("primary_question") or "").strip():

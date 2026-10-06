@@ -44,6 +44,8 @@ export type FocusGroupAnswer = {
 };
 
 export type FocusGroupRoom = {
+  demo?: boolean;
+  provisional?: boolean;
   room_id: string;
   status: "running" | "completed" | "failed" | "budget_stopped" | "cancelled";
   revision: number;

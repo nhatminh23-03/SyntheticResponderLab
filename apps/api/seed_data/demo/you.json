@@ -1,0 +1,82 @@
+{
+  "config": {},
+  "state": {
+    "messages": [
+      {
+        "role": "user",
+        "content": "When you think about adding something significant to your home, like a backyard studio, what's your typical process for deciding if it's the right move?"
+      },
+      {
+        "role": "assistant",
+        "content": "I am a fictional graduate student living with my parents and a younger sibling. I study at the dining table."
+      },
+      {
+        "role": "user",
+        "content": "What are the challenges you face when studying at the dining table?"
+      },
+      {
+        "role": "assistant",
+        "content": "Evenings are difficult because everyone is home and I need quiet for reading."
+      },
+      {
+        "role": "user",
+        "content": "What happens when you can't find that quiet for reading in the evenings?"
+      },
+      {
+        "role": "assistant",
+        "content": "I use headphones or go to the library, but the library closes before I finish sometimes."
+      },
+      {
+        "role": "user",
+        "content": "What makes the library closing before you finish a problem for your studying?"
+      },
+      {
+        "role": "assistant",
+        "content": "A separate room could help me concentrate, though it would really be my parents' purchase."
+      },
+      {
+        "role": "user",
+        "content": "What would influence your parents' decision to buy something like that?"
+      },
+      {
+        "role": "assistant",
+        "content": "I would want to know whether it fits in the yard and who handles delivery and permits."
+      },
+      {
+        "role": "user",
+        "content": "What concerns you most about whether it fits in the yard?"
+      },
+      {
+        "role": "assistant",
+        "content": "My parents had a repair project that took weeks longer than expected. They want a clear schedule."
+      },
+      {
+        "role": "user",
+        "content": "What would make a schedule feel clear enough to overcome that past experience?"
+      },
+      {
+        "role": "assistant",
+        "content": "We would compare the total installed cost with improving the spare room, and how often we would use it."
+      },
+      {
+        "role": "user",
+        "content": "How often do you imagine yourselves using it to make that comparison worthwhile?"
+      },
+      {
+        "role": "assistant",
+        "content": "My sibling could use it for music too. We would need a schedule so it does not become another shared-space problem."
+      }
+    ],
+    "model": "google/gemini-2.5-flash-lite"
+  },
+  "kind": "you",
+  "provisional": false,
+  "source": "real-service-model-run",
+  "generation": {
+    "script": "scripts/make_demo_fixtures.py",
+    "cost_usd": "0.03595370",
+    "reserved_usd": "0.23571225",
+    "calls": 141,
+    "limit_usd": "2"
+  }
+}

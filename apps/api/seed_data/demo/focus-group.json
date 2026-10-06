@@ -1,0 +1,1008 @@
+{
+  "config": {
+    "persona_ids": [
+      "P001",
+      "P002",
+      "P003",
+      "P004",
+      "P005",
+      "P006"
+    ],
+    "model": "openai/gpt-4o-mini",
+    "max_rounds": 8,
+    "estimated_cost_usd": "0.02592",
+    "demo_cards": {
+      "P001": {
+        "persona_id": "P001",
+        "name": "Jorge Beltran",
+        "origin": "source_grounded_roster",
+        "origin_label": "Roster persona grounded in one ACS household record",
+        "attributes": [
+          {
+            "key": "name",
+            "label": "Name",
+            "value": "Jorge Beltran",
+            "source": "fictional"
+          },
+          {
+            "key": "household",
+            "label": "Household",
+            "value": "Nonfamily household: Male householder: Living alone, 1 person",
+            "source": "census"
+          },
+          {
+            "key": "tenure",
+            "label": "Homeowner or renter",
+            "value": "Owned with mortgage or loan (include home equity loans)",
+            "source": "census"
+          },
+          {
+            "key": "outdoor_space",
+            "label": "Usable outdoor space",
+            "value": "Unknown",
+            "source": "unknown"
+          },
+          {
+            "key": "willing_more_space",
+            "label": "Willing to consider more living/work space",
+            "value": "Unknown",
+            "source": "unknown"
+          },
+          {
+            "key": "current_space_use",
+            "label": "How they use their space today",
+            "value": "Unknown",
+            "source": "unknown"
+          },
+          {
+            "key": "age",
+            "label": "Age",
+            "value": "32, male",
+            "source": "census"
+          },
+          {
+            "key": "county",
+            "label": "Lives in",
+            "value": "San Diego County, California",
+            "source": "census"
+          },
+          {
+            "key": "home",
+            "label": "Home",
+            "value": "detached single-family, 3 rooms, built 1950 to 1959",
+            "source": "census"
+          },
+          {
+            "key": "moved_in",
+            "label": "Lived there",
+            "value": "10 to 19 years",
+            "source": "census"
+          },
+          {
+            "key": "income",
+            "label": "Household income",
+            "value": "$104,999 a year",
+            "source": "census"
+          },
+          {
+            "key": "housing_cost",
+            "label": "Housing cost share of income",
+            "value": "33%",
+            "source": "census"
+          },
+          {
+            "key": "work",
+            "label": "Work",
+            "value": "Chief Executives And Legislators; Civilian employed, at work; 60 hours/week; commutes by car, truck, or van, 45 min",
+            "source": "census"
+          }
+        ],
+        "screener": [
+          {
+            "criterion": "Homeowner or landowner",
+            "verdict": "meets",
+            "why": "Tenure: Owned with mortgage or loan (include home equity loans).",
+            "source": "census"
+          },
+          {
+            "criterion": "Has usable outdoor space",
+            "verdict": "unknown",
+            "why": "Not recorded. A detached home often has a yard, but that is an assumption to check with a screener question, not a fact.",
+            "source": "unknown"
+          },
+          {
+            "criterion": "Open to adding living or work space",
+            "verdict": "unknown",
+            "why": "Not recorded \u2014 this is exactly what a screener question has to ask.",
+            "source": "unknown"
+          }
+        ],
+        "source_note": "Source-backed attributes come from one real household record in the Census Bureau's American Community Survey microdata (ACS PUMS, California). The name is invented. In a focus group the persona is also given an invented speaking manner and, once the concept is shown, an invented stance toward it. Anything the record does not cover is marked unknown: the persona may improvise it, and nothing it says is evidence about real customers."
+      },
+      "P002": {
+        "persona_id": "P002",
+        "name": "Janet Keller",
+        "origin": "source_grounded_roster",
+        "origin_label": "Roster persona grounded in one ACS household record",
+        "attributes": [
+          {
+            "key": "name",
+            "label": "Name",
+            "value": "Janet Keller",
+            "source": "fictional"
+          },
+          {
+            "key": "household",
+            "label": "Household",
+            "value": "Married couple household, 4 people, 2 children",
+            "source": "census"
+          },
+          {
+            "key": "tenure",
+            "label": "Homeowner or renter",
+            "value": "Owned with mortgage or loan (include home equity loans)",
+            "source": "census"
+          },
+          {
+            "key": "outdoor_space",
+            "label": "Usable outdoor space",
+            "value": "Unknown",
+            "source": "unknown"
+          },
+          {
+            "key": "willing_more_space",
+            "label": "Willing to consider more living/work space",
+            "value": "Unknown",
+            "source": "unknown"
+          },
+          {
+            "key": "current_space_use",
+            "label": "How they use their space today",
+            "value": "Unknown",
+            "source": "unknown"
+          },
+          {
+            "key": "age",
+            "label": "Age",
+            "value": "32, female",
+            "source": "census"
+          },
+          {
+            "key": "county",
+            "label": "Lives in",
+            "value": "Kern County, California",
+            "source": "census"
+          },
+          {
+            "key": "home",
+            "label": "Home",
+            "value": "detached single-family, 3 bedrooms, 5 rooms, built 1980 to 1989",
+            "source": "census"
+          },
+          {
+            "key": "moved_in",
+            "label": "Lived there",
+            "value": "10 to 19 years",
+            "source": "census"
+          },
+          {
+            "key": "income",
+            "label": "Household income",
+            "value": "$100,547 a year",
+            "source": "census"
+          },
+          {
+            "key": "housing_cost",
+            "label": "Housing cost share of income",
+            "value": "17%",
+            "source": "census"
+          },
+          {
+            "key": "work",
+            "label": "Work",
+            "value": "Tutors; Not in labor force",
+            "source": "census"
+          }
+        ],
+        "screener": [
+          {
+            "criterion": "Homeowner or landowner",
+            "verdict": "meets",
+            "why": "Tenure: Owned with mortgage or loan (include home equity loans).",
+            "source": "census"
+          },
+          {
+            "criterion": "Has usable outdoor space",
+            "verdict": "unknown",
+            "why": "Not recorded. A detached home often has a yard, but that is an assumption to check with a screener question, not a fact.",
+            "source": "unknown"
+          },
+          {
+            "criterion": "Open to adding living or work space",
+            "verdict": "unknown",
+            "why": "Not recorded \u2014 this is exactly what a screener question has to ask.",
+            "source": "unknown"
+          }
+        ],
+        "source_note": "Source-backed attributes come from one real household record in the Census Bureau's American Community Survey microdata (ACS PUMS, California). The name is invented. In a focus group the persona is also given an invented speaking manner and, once the concept is shown, an invented stance toward it. Anything the record does not cover is marked unknown: the persona may improvise it, and nothing it says is evidence about real customers."
+      },
+      "P003": {
+        "persona_id": "P003",
+        "name": "Leilani Duarte",
+        "origin": "source_grounded_roster",
+        "origin_label": "Roster persona grounded in one ACS household record",
+        "attributes": [
+          {
+            "key": "name",
+            "label": "Name",
+            "value": "Leilani Duarte",
+            "source": "fictional"
+          },
+          {
+            "key": "household",
+            "label": "Household",
+            "value": "Married couple household, 4 people",
+            "source": "census"
+          },
+          {
+            "key": "tenure",
+            "label": "Homeowner or renter",
+            "value": "Owned with mortgage or loan (include home equity loans)",
+            "source": "census"
+          },
+          {
+            "key": "outdoor_space",
+            "label": "Usable outdoor space",
+            "value": "Unknown",
+            "source": "unknown"
+          },
+          {
+            "key": "willing_more_space",
+            "label": "Willing to consider more living/work space",
+            "value": "Unknown",
+            "source": "unknown"
+          },
+          {
+            "key": "current_space_use",
+            "label": "How they use their space today",
+            "value": "Unknown",
+            "source": "unknown"
+          },
+          {
+            "key": "age",
+            "label": "Age",
+            "value": "50, female",
+            "source": "census"
+          },
+          {
+            "key": "county",
+            "label": "Lives in",
+            "value": "Los Angeles County, California",
+            "source": "census"
+          },
+          {
+            "key": "home",
+            "label": "Home",
+            "value": "detached single-family, 3 bedrooms, 7 rooms, built 1950 to 1959",
+            "source": "census"
+          },
+          {
+            "key": "moved_in",
+            "label": "Lived there",
+            "value": "10 to 19 years",
+            "source": "census"
+          },
+          {
+            "key": "income",
+            "label": "Household income",
+            "value": "$229,025 a year",
+            "source": "census"
+          },
+          {
+            "key": "housing_cost",
+            "label": "Housing cost share of income",
+            "value": "23%",
+            "source": "census"
+          },
+          {
+            "key": "work",
+            "label": "Work",
+            "value": "Chief Executives And Legislators; Civilian employed, at work; 40 hours/week; commutes by car, truck, or van, 15 min",
+            "source": "census"
+          }
+        ],
+        "screener": [
+          {
+            "criterion": "Homeowner or landowner",
+            "verdict": "meets",
+            "why": "Tenure: Owned with mortgage or loan (include home equity loans).",
+            "source": "census"
+          },
+          {
+            "criterion": "Has usable outdoor space",
+            "verdict": "unknown",
+            "why": "Not recorded. A detached home often has a yard, but that is an assumption to check with a screener question, not a fact.",
+            "source": "unknown"
+          },
+          {
+            "criterion": "Open to adding living or work space",
+            "verdict": "unknown",
+            "why": "Not recorded \u2014 this is exactly what a screener question has to ask.",
+            "source": "unknown"
+          }
+        ],
+        "source_note": "Source-backed attributes come from one real household record in the Census Bureau's American Community Survey microdata (ACS PUMS, California). The name is invented. In a focus group the persona is also given an invented speaking manner and, once the concept is shown, an invented stance toward it. Anything the record does not cover is marked unknown: the persona may improvise it, and nothing it says is evidence about real customers."
+      },
+      "P004": {
+        "persona_id": "P004",
+        "name": "Paloma Acosta",
+        "origin": "source_grounded_roster",
+        "origin_label": "Roster persona grounded in one ACS household record",
+        "attributes": [
+          {
+            "key": "name",
+            "label": "Name",
+            "value": "Paloma Acosta",
+            "source": "fictional"
+          },
+          {
+            "key": "household",
+            "label": "Household",
+            "value": "Married couple household, 4 people, 1 child",
+            "source": "census"
+          },
+          {
+            "key": "tenure",
+            "label": "Homeowner or renter",
+            "value": "Owned with mortgage or loan (include home equity loans)",
+            "source": "census"
+          },
+          {
+            "key": "outdoor_space",
+            "label": "Usable outdoor space",
+            "value": "Unknown",
+            "source": "unknown"
+          },
+          {
+            "key": "willing_more_space",
+            "label": "Willing to consider more living/work space",
+            "value": "Unknown",
+            "source": "unknown"
+          },
+          {
+            "key": "current_space_use",
+            "label": "How they use their space today",
+            "value": "Unknown",
+            "source": "unknown"
+          },
+          {
+            "key": "age",
+            "label": "Age",
+            "value": "53, female",
+            "source": "census"
+          },
+          {
+            "key": "county",
+            "label": "Lives in",
+            "value": "Orange County, California",
+            "source": "census"
+          },
+          {
+            "key": "home",
+            "label": "Home",
+            "value": "detached single-family, 4 bedrooms, 9 rooms, built 1990 to 1999",
+            "source": "census"
+          },
+          {
+            "key": "moved_in",
+            "label": "Lived there",
+            "value": "20 to 29 years",
+            "source": "census"
+          },
+          {
+            "key": "income",
+            "label": "Household income",
+            "value": "$379,846 a year",
+            "source": "census"
+          },
+          {
+            "key": "housing_cost",
+            "label": "Housing cost share of income",
+            "value": "17%",
+            "source": "census"
+          },
+          {
+            "key": "work",
+            "label": "Work",
+            "value": "Lawyers, And Judges, Magistrates, And Other Judicial Workers; Unemployed; 10 hours/week",
+            "source": "census"
+          }
+        ],
+        "screener": [
+          {
+            "criterion": "Homeowner or landowner",
+            "verdict": "meets",
+            "why": "Tenure: Owned with mortgage or loan (include home equity loans).",
+            "source": "census"
+          },
+          {
+            "criterion": "Has usable outdoor space",
+            "verdict": "unknown",
+            "why": "Not recorded. A detached home often has a yard, but that is an assumption to check with a screener question, not a fact.",
+            "source": "unknown"
+          },
+          {
+            "criterion": "Open to adding living or work space",
+            "verdict": "unknown",
+            "why": "Not recorded \u2014 this is exactly what a screener question has to ask.",
+            "source": "unknown"
+          }
+        ],
+        "source_note": "Source-backed attributes come from one real household record in the Census Bureau's American Community Survey microdata (ACS PUMS, California). The name is invented. In a focus group the persona is also given an invented speaking manner and, once the concept is shown, an invented stance toward it. Anything the record does not cover is marked unknown: the persona may improvise it, and nothing it says is evidence about real customers."
+      },
+      "P005": {
+        "persona_id": "P005",
+        "name": "Marcus Barrett",
+        "origin": "source_grounded_roster",
+        "origin_label": "Roster persona grounded in one ACS household record",
+        "attributes": [
+          {
+            "key": "name",
+            "label": "Name",
+            "value": "Marcus Barrett",
+            "source": "fictional"
+          },
+          {
+            "key": "household",
+            "label": "Household",
+            "value": "Married couple household, 5 people, 1 child",
+            "source": "census"
+          },
+          {
+            "key": "tenure",
+            "label": "Homeowner or renter",
+            "value": "Owned with mortgage or loan (include home equity loans)",
+            "source": "census"
+          },
+          {
+            "key": "outdoor_space",
+            "label": "Usable outdoor space",
+            "value": "Unknown",
+            "source": "unknown"
+          },
+          {
+            "key": "willing_more_space",
+            "label": "Willing to consider more living/work space",
+            "value": "Unknown",
+            "source": "unknown"
+          },
+          {
+            "key": "current_space_use",
+            "label": "How they use their space today",
+            "value": "Unknown",
+            "source": "unknown"
+          },
+          {
+            "key": "age",
+            "label": "Age",
+            "value": "61, male",
+            "source": "census"
+          },
+          {
+            "key": "county",
+            "label": "Lives in",
+            "value": "Orange County, California",
+            "source": "census"
+          },
+          {
+            "key": "home",
+            "label": "Home",
+            "value": "detached single-family, 4 bedrooms, 7 rooms, built 1950 to 1959",
+            "source": "census"
+          },
+          {
+            "key": "moved_in",
+            "label": "Lived there",
+            "value": "20 to 29 years",
+            "source": "census"
+          },
+          {
+            "key": "income",
+            "label": "Household income",
+            "value": "$237,071 a year",
+            "source": "census"
+          },
+          {
+            "key": "housing_cost",
+            "label": "Housing cost share of income",
+            "value": "14%",
+            "source": "census"
+          },
+          {
+            "key": "work",
+            "label": "Work",
+            "value": "Software Developers; Civilian employed, at work; 40 hours/week; commutes by car, truck, or van, 30 min",
+            "source": "census"
+          }
+        ],
+        "screener": [
+          {
+            "criterion": "Homeowner or landowner",
+            "verdict": "meets",
+            "why": "Tenure: Owned with mortgage or loan (include home equity loans).",
+            "source": "census"
+          },
+          {
+            "criterion": "Has usable outdoor space",
+            "verdict": "unknown",
+            "why": "Not recorded. A detached home often has a yard, but that is an assumption to check with a screener question, not a fact.",
+            "source": "unknown"
+          },
+          {
+            "criterion": "Open to adding living or work space",
+            "verdict": "unknown",
+            "why": "Not recorded \u2014 this is exactly what a screener question has to ask.",
+            "source": "unknown"
+          }
+        ],
+        "source_note": "Source-backed attributes come from one real household record in the Census Bureau's American Community Survey microdata (ACS PUMS, California). The name is invented. In a focus group the persona is also given an invented speaking manner and, once the concept is shown, an invented stance toward it. Anything the record does not cover is marked unknown: the persona may improvise it, and nothing it says is evidence about real customers."
+      },
+      "P006": {
+        "persona_id": "P006",
+        "name": "Jeffrey Vo",
+        "origin": "source_grounded_roster",
+        "origin_label": "Roster persona grounded in one ACS household record",
+        "attributes": [
+          {
+            "key": "name",
+            "label": "Name",
+            "value": "Jeffrey Vo",
+            "source": "fictional"
+          },
+          {
+            "key": "household",
+            "label": "Household",
+            "value": "Married couple household, 6 people, 3 children",
+            "source": "census"
+          },
+          {
+            "key": "tenure",
+            "label": "Homeowner or renter",
+            "value": "Owned with mortgage or loan (include home equity loans)",
+            "source": "census"
+          },
+          {
+            "key": "outdoor_space",
+            "label": "Usable outdoor space",
+            "value": "Unknown",
+            "source": "unknown"
+          },
+          {
+            "key": "willing_more_space",
+            "label": "Willing to consider more living/work space",
+            "value": "Unknown",
+            "source": "unknown"
+          },
+          {
+            "key": "current_space_use",
+            "label": "How they use their space today",
+            "value": "Unknown",
+            "source": "unknown"
+          },
+          {
+            "key": "age",
+            "label": "Age",
+            "value": "45, male",
+            "source": "census"
+          },
+          {
+            "key": "county",
+            "label": "Lives in",
+            "value": "Los Angeles County, California",
+            "source": "census"
+          },
+          {
+            "key": "home",
+            "label": "Home",
+            "value": "detached single-family, 2 bedrooms, 7 rooms, built 1939 or earlier",
+            "source": "census"
+          },
+          {
+            "key": "moved_in",
+            "label": "Lived there",
+            "value": "10 to 19 years",
+            "source": "census"
+          },
+          {
+            "key": "income",
+            "label": "Household income",
+            "value": "$116,092 a year",
+            "source": "census"
+          },
+          {
+            "key": "housing_cost",
+            "label": "Housing cost share of income",
+            "value": "25%",
+            "source": "census"
+          },
+          {
+            "key": "work",
+            "label": "Work",
+            "value": "First-Line Supervisors Of Production And Operating Workers; Civilian employed, at work; 40 hours/week; commutes by car, truck, or van, 20 min",
+            "source": "census"
+          }
+        ],
+        "screener": [
+          {
+            "criterion": "Homeowner or landowner",
+            "verdict": "meets",
+            "why": "Tenure: Owned with mortgage or loan (include home equity loans).",
+            "source": "census"
+          },
+          {
+            "criterion": "Has usable outdoor space",
+            "verdict": "unknown",
+            "why": "Not recorded. A detached home often has a yard, but that is an assumption to check with a screener question, not a fact.",
+            "source": "unknown"
+          },
+          {
+            "criterion": "Open to adding living or work space",
+            "verdict": "unknown",
+            "why": "Not recorded \u2014 this is exactly what a screener question has to ask.",
+            "source": "unknown"
+          }
+        ],
+        "source_note": "Source-backed attributes come from one real household record in the Census Bureau's American Community Survey microdata (ACS PUMS, California). The name is invented. In a focus group the persona is also given an invented speaking manner and, once the concept is shown, an invented stance toward it. Anything the record does not cover is marked unknown: the persona may improvise it, and nothing it says is evidence about real customers."
+      }
+    }
+  },
+  "state": {
+    "revision": 7,
+    "stage_index": 4,
+    "rounds": [
+      {
+        "index": 0,
+        "stage": "icebreaker",
+        "question": "Who lives with you and what does a weekday look like?",
+        "post_exposure": false,
+        "kind": "core",
+        "recipients": null,
+        "answers": [
+          {
+            "persona_id": "P001",
+            "text": "I live alone, so my weekdays are pretty straightforward. I usually wake up early, around 6 AM, and then I\u2019m out the door by 7 to beat the traffic. I work long hours, about 60 a week, and I spend around 45 minutes commuting each way. After work, I might run some errands or just relax at home since I don\u2019t have anyone else to share my evenings with.",
+            "status": "answered",
+            "error": null
+          },
+          {
+            "persona_id": "P002",
+            "text": "I live with my husband and our two kids, who are 8 and 5. Our weekdays are pretty busy! In the mornings, I usually get up early to make breakfast and pack lunches before getting the kids ready for school. After dropping them off, I spend my day tutoring, which keeps me on my toes. Once the kids are back home, it\u2019s all about homework, dinner, and getting them ready for bed. It feels like a whirlwind sometimes, but I wouldn\u2019t trade it for anything!",
+            "status": "answered",
+            "error": null
+          },
+          {
+            "persona_id": "P003",
+            "text": "I live with my husband and our two kids, who are in their late teens. On a typical weekday, I wake up early to get everyone ready for the day. I usually make breakfast and pack lunches for the kids before I head out to work. My commute is about 15 minutes, which is nice, and then I spend my day at work, managing various projects. After work, I try to spend some time with the family, maybe help with homework or just catch up on our day. It can get a bit hectic, but we make it work!",
+            "status": "answered",
+            "error": null
+          },
+          {
+            "persona_id": "P004",
+            "text": "I live with my husband, our 14-year-old child, and we have a dog. On a typical weekday, my husband leaves for work early in the morning, and I usually get my child ready for school. I help with breakfast and make sure they have everything they need for the day. After they leave, I have some time to myself, which I often use to catch up on work or take care of household tasks. I work part-time as a lawyer, so I balance that with family responsibilities. In the evening, we all have dinner together, and then it's homework time for my child. We try to spend some quality time as a family before bed.",
+            "status": "answered",
+            "error": null
+          },
+          {
+            "persona_id": "P005",
+            "text": "I live with my wife, our 16-year-old child, and two pets\u2014a dog and a cat. On a typical weekday, I get up early to get ready for work while my wife prepares breakfast. My child is usually still getting ready for school, and we all try to sit down together for a quick meal before I head out. I commute about 30 minutes to my job as a software developer, and once I\u2019m back home in the evening, we often have dinner together and help our child with homework. It\u2019s a busy household, but we make it work.",
+            "status": "answered",
+            "error": null
+          },
+          {
+            "persona_id": "P006",
+            "text": "I live with my wife and our three kids, so there are six of us in total. On a typical weekday, I wake up around 6:00 AM, and I usually help get the kids ready for school. They leave by 7:30 AM, and then I head out to work by 8:00 AM. I work about 40 hours a week, so I\u2019m at work from around 8:30 AM to 5:00 PM. I get home around 5:30 PM, and then it\u2019s family time\u2014dinner, helping with homework, and getting everyone ready for bed. It\u2019s a busy routine, but I wouldn\u2019t have it any other way.",
+            "status": "answered",
+            "error": null
+          }
+        ]
+      },
+      {
+        "index": 1,
+        "stage": "space_needs",
+        "question": "Where do you run out of space at home?",
+        "post_exposure": false,
+        "kind": "core",
+        "recipients": null,
+        "answers": [
+          {
+            "persona_id": "P001",
+            "text": "I run out of space mostly in my living area and kitchen. Since I live alone, I don\u2019t have a lot of furniture, but I still find it cramped sometimes, especially when I try to entertain friends or family. The kitchen can feel cluttered, too, since I don\u2019t have much counter space to work with. I think if I had more room, I\u2019d like to have a dedicated area for hobbies or just a more comfortable space to relax.",
+            "status": "answered",
+            "error": null
+          },
+          {
+            "persona_id": "P002",
+            "text": "For us, space is definitely tight in the kids' bedrooms. They have toys, clothes, and school supplies everywhere, and it feels like we\u2019re constantly trying to find places to store everything. I also wish we had a little more room in the kitchen; it can get crowded when I\u2019m cooking dinner and trying to help the kids with their homework at the same time. I can relate to P003 and P004, who also juggle family responsibilities, but for me, it\u2019s really about managing the chaos that comes with having younger kids.",
+            "status": "answered",
+            "error": null
+          },
+          {
+            "persona_id": "P003",
+            "text": "I can relate to P002's busy household; space can definitely feel tight sometimes. In our home, I\u2019d say we run out of space mainly in the kids' rooms and the common areas. With two teenagers, their stuff seems to multiply! Between school projects, sports equipment, and just general clutter, it can get overwhelming. Plus, our living room sometimes feels cramped when we all gather there, especially when we have friends or family over. I guess I wish we had a bit more storage or a designated area for everything to keep things organized.",
+            "status": "answered",
+            "error": null
+          },
+          {
+            "persona_id": "P004",
+            "text": "I find that we run out of space in our garage and the kids' play area. The garage has become a catch-all for things we don\u2019t use regularly, like seasonal decorations and old furniture. It\u2019s hard to park the cars in there because it\u2019s so cluttered. As for the kids' play area, with my child growing up, we have a lot of toys and sports equipment that just take up too much room. P002 mentioned a busy household, and I can relate to that feeling of needing more space for everything as the family grows.",
+            "status": "answered",
+            "error": null
+          },
+          {
+            "persona_id": "P005",
+            "text": "I can relate to P002\u2019s experience of a busy household. In my case, we definitely run out of space in the common areas, especially the living room and kitchen. With five people and two pets, it can feel cramped, especially during meal times or when everyone is trying to relax after a long day. Our four-bedroom home is great, but we could really use more storage space for all the kids' school supplies, sports equipment, and just general clutter that accumulates. It feels like we\u2019re constantly trying to find a place for everything, which can be frustrating.",
+            "status": "answered",
+            "error": null
+          },
+          {
+            "persona_id": "P006",
+            "text": "For us, space is definitely an issue in the bedrooms. We have two bedrooms for six people, which means the kids are sharing rooms, and it can get pretty cramped. With three kids, it feels like there\u2019s never enough room for their toys, clothes, and school stuff. We also struggle with storage in the kitchen; it\u2019s tough to find space for all the cooking supplies and groceries, especially when we\u2019re trying to prepare meals for a larger family. I can relate to P002\u2019s experience; it can feel overwhelming sometimes trying to keep everything organized.",
+            "status": "answered",
+            "error": null
+          }
+        ]
+      },
+      {
+        "index": 2,
+        "stage": "space_needs",
+        "question": "What makes that situation difficult for you?",
+        "post_exposure": false,
+        "kind": "probe",
+        "recipients": [
+          "P001"
+        ],
+        "answers": [
+          {
+            "persona_id": "P001",
+            "text": "The tight space makes it difficult to feel comfortable when I have friends over. I want to create a welcoming environment, but it can feel cramped, which makes it hard to relax and enjoy the time together. Plus, in the kitchen, not having enough counter space can be frustrating when I\u2019m trying to cook or prepare meals. It just adds to the stress of daily life when everything feels cluttered.",
+            "status": "answered",
+            "error": null
+          },
+          {
+            "persona_id": "P002",
+            "text": "",
+            "status": "silent",
+            "error": null
+          },
+          {
+            "persona_id": "P003",
+            "text": "",
+            "status": "silent",
+            "error": null
+          },
+          {
+            "persona_id": "P004",
+            "text": "",
+            "status": "silent",
+            "error": null
+          },
+          {
+            "persona_id": "P005",
+            "text": "",
+            "status": "silent",
+            "error": null
+          },
+          {
+            "persona_id": "P006",
+            "text": "",
+            "status": "silent",
+            "error": null
+          }
+        ]
+      },
+      {
+        "index": 3,
+        "stage": "concept",
+        "question": "I'd like to show you an idea. It's called the Tahoe Mini, from Neo Smart Living: a compact 117-square-foot studio, built in a factory, then delivered and installed in your backyard. It isn't an ADU, so there's no kitchen or bathroom. What's your first reaction, and what would you use it for?",
+        "post_exposure": false,
+        "kind": "core",
+        "recipients": null,
+        "stimulus": {
+          "kind": "concept",
+          "text": "PRODUCT CONCEPT SHOWN BY THE MODERATOR:\nName: Tahoe Mini by Neo Smart Living\nDescription: A compact 117-square-foot factory-built studio that is delivered and installed in a backyard. It is not an ADU and has no kitchen or bathroom.\n- 117 square feet\n- Factory-built; delivered and installed in your backyard\n- Not an ADU: no kitchen, no bathroom\nIntended for: homeowners with usable outdoor space"
+        },
+        "answers": [
+          {
+            "persona_id": "P001",
+            "text": "My first reaction is skepticism. A 117-square-foot space without a kitchen or bathroom seems really limiting. I can see it being useful as a home office or a personal retreat, but without basic amenities, I\u2019m not sure how practical it would be for long-term use. I\u2019d want to know more about how it could enhance my living situation before considering it seriously.",
+            "status": "answered",
+            "error": null
+          },
+          {
+            "persona_id": "P002",
+            "text": "My first reaction is that it sounds really interesting! I can see a lot of potential for it, especially since we\u2019re running out of space in our home. I think it could be a great playroom for the kids or even a quiet space for me to tutor without distractions. Having a dedicated area for activities would definitely help with the clutter in the main living areas. I know it doesn\u2019t have a kitchen or bathroom, but I think it could still serve a lot of purposes, like a home office or a cozy reading nook. I\u2019m definitely open to the idea!",
+            "status": "answered",
+            "error": null
+          },
+          {
+            "persona_id": "P003",
+            "text": "I appreciate the idea behind the Tahoe Mini, but my first reaction is that it might not fit seamlessly into my daily routine. Since it doesn't have a kitchen or bathroom, I\u2019m not sure how practical it would be for everyday use. I guess I could see it as a quiet space for working or maybe a small retreat for my kids when they need a break from the house. But without those essential amenities, I feel like it might just end up being an extra storage space rather than something we actively use. It really depends on how we could integrate it into our already busy lives.",
+            "status": "answered",
+            "error": null
+          },
+          {
+            "persona_id": "P004",
+            "text": "My first reaction is that it seems like an interesting concept, but I have some concerns about its practicality. Without a kitchen or bathroom, it feels more like a glorified shed than a usable space. I can see it being useful as a home office or a quiet retreat for reading or hobbies, but I question how much value it would actually add to my home. Given the cost of real estate and construction, I would want to know if the price reflects the utility and space it offers. I agree with P002 that having a dedicated area for activities is great, but I need to weigh that against what I\u2019d actually get for my investment.",
+            "status": "answered",
+            "error": null
+          },
+          {
+            "persona_id": "P005",
+            "text": "Honestly, my first reaction is skepticism. I understand the appeal of having extra space, especially for a busy household like mine, but I\u2019m not sure how practical this would be without a kitchen or bathroom. It feels like it could be a nice retreat or a place for my child to have their own space for studying or hobbies, but I worry about the lack of essential amenities. Plus, I have concerns about how connected devices might be involved in its operation\u2014I'm not comfortable trusting those technologies in my home. So while I see some potential, I have significant reservations about its overall usefulness for my family.",
+            "status": "answered",
+            "error": null
+          },
+          {
+            "persona_id": "P006",
+            "text": "My first reaction is that it sounds interesting, but I\u2019m a bit skeptical about how practical it would be for my family. With no kitchen or bathroom, I wonder how useful it really would be. I can see it being a nice space for a home office or a kids' play area, but I\u2019d worry it would end up unused like some other things we\u2019ve tried. For it to work for us, it would need to be a space that we could find a reason to use regularly, maybe for hobbies or as a quiet spot for my wife and me to unwind. Otherwise, it might just become another storage area.",
+            "status": "answered",
+            "error": null
+          }
+        ]
+      },
+      {
+        "index": 4,
+        "stage": "price_reactions",
+        "question": "What would you expect something like this to cost?",
+        "post_exposure": false,
+        "kind": "core",
+        "recipients": null,
+        "answers": [
+          {
+            "persona_id": "P001",
+            "text": "I\u2019d guess something like the Tahoe Mini could range anywhere from $20,000 to $40,000, but that\u2019s just a rough estimate. Considering it\u2019s a factory-built structure, I\u2019d expect it to be on the higher end of that scale, especially since it\u2019s being delivered and installed. However, without a kitchen or bathroom, I\u2019d want to know if the price reflects its actual utility and how much it could enhance my living space.",
+            "status": "answered",
+            "error": null
+          },
+          {
+            "persona_id": "P002",
+            "text": "That's a tough question since I haven't seen any pricing details yet. I would guess something like this could range from $10,000 to $20,000, maybe even a bit more, depending on the quality and materials used. It seems like a unique concept, but without a kitchen or bathroom, I wonder how much people would be willing to pay for just a compact space. I think if it could really enhance our living situation, it might be worth the investment, but I\u2019d want to see a clear value for that price.",
+            "status": "answered",
+            "error": null
+          },
+          {
+            "persona_id": "P003",
+            "text": "I think it\u2019s tough to say without knowing more about the specifics, but I would guess something like the Tahoe Mini could be in the range of $15,000 to $30,000. It really depends on the materials and the level of customization. For me, the price would need to reflect how useful it would be in our daily lives, especially since it lacks a kitchen or bathroom. If it\u2019s just a small space without those essentials, I\u2019d want to make sure it\u2019s a worthwhile investment for our family.",
+            "status": "answered",
+            "error": null
+          },
+          {
+            "persona_id": "P004",
+            "text": "I would guess that something like the Tahoe Mini could range anywhere from $25,000 to $50,000, but that's just a rough estimate. Given that it's a factory-built structure and considering the cost of construction and delivery, I think it would fall somewhere in that ballpark. However, I would want to know what specific features or quality of materials are included for that price. If it\u2019s going to be a significant investment, I need to be sure it offers enough value and utility to justify the cost.",
+            "status": "answered",
+            "error": null
+          },
+          {
+            "persona_id": "P005",
+            "text": "Well, that's a tough question because I don't have specific details about the materials or the construction quality. But if I had to guess, I would think something like this could range anywhere from $15,000 to $30,000, maybe even more depending on the finishes and features. It seems like a significant investment for a space that lacks a kitchen or bathroom, so I would want to ensure it\u2019s built well and offers good value for the money. Given my concerns about practicality, I\u2019d want to be sure it\u2019s worth the cost before considering it seriously.",
+            "status": "answered",
+            "error": null
+          },
+          {
+            "persona_id": "P006",
+            "text": "Honestly, I\u2019m just guessing here, but I would expect something like the Tahoe Mini to cost somewhere between $10,000 and $20,000. It\u2019s a compact space, but considering it\u2019s factory-built and delivered, I think there\u2019s a lot of labor and materials involved. I\u2019d want to see how that price reflects the quality and durability of the structure, especially since it doesn\u2019t have a kitchen or bathroom. If it\u2019s going to be a significant investment, I\u2019d need to feel confident that it would be worth it in terms of utility and longevity.",
+            "status": "answered",
+            "error": null
+          }
+        ]
+      },
+      {
+        "index": 5,
+        "stage": "price_reactions",
+        "question": "At about $23,000, how does your reaction change?",
+        "post_exposure": false,
+        "kind": "probe",
+        "recipients": null,
+        "stimulus": {
+          "kind": "price",
+          "text": "PRICE SHOWN BY THE MODERATOR: about $23,000"
+        },
+        "answers": [
+          {
+            "persona_id": "P001",
+            "text": "At $23,000, I still feel skeptical. While it\u2019s within the range I expected, I\u2019m not sure it justifies the lack of a kitchen or bathroom. I\u2019d want to see more about the quality of materials and how it could fit into my lifestyle. If it\u2019s going to be that much, I need to know it offers real value and isn\u2019t just a space that ends up being underutilized.",
+            "status": "answered",
+            "error": null
+          },
+          {
+            "persona_id": "P002",
+            "text": "At $23,000, I think it sounds like a more reasonable price point, especially considering it\u2019s factory-built and delivered. I still have some reservations since it doesn\u2019t have a kitchen or bathroom, but if we could use it as a dedicated space for the kids or for tutoring, it might be worth the investment. I\u2019d want to make sure it\u2019s well-built and durable, though, to justify that cost. Overall, I feel a bit more optimistic about the idea now that I know the price! It could definitely help alleviate some of the space issues we have at home.",
+            "status": "answered",
+            "error": null
+          },
+          {
+            "persona_id": "P003",
+            "text": "At $23,000, I think it\u2019s in a reasonable range, but it still raises some questions for me. I appreciate that it\u2019s not on the higher end of the estimates, but without a kitchen or bathroom, I still wonder about its overall practicality for our family. I\u2019d need to see how it could fit into our daily lives and whether it would be worth that investment. If it could serve as a dedicated workspace or a retreat for the kids, I might be more inclined to consider it. But I\u2019d still want to know more about the quality and features included to feel confident about spending that amount.",
+            "status": "answered",
+            "error": null
+          },
+          {
+            "persona_id": "P004",
+            "text": "At $23,000, I still have mixed feelings. It\u2019s on the lower end of what I expected, which is a positive aspect, but I still struggle with the lack of a kitchen and bathroom. For that price, I would need to really evaluate how much I would use the space and whether it would genuinely enhance our living situation. If it could serve as a functional home office or a dedicated area for hobbies, then it might be worth considering. However, I still think about how much value I\u2019m getting for that investment, especially since it\u2019s not a fully functional living space. I agree with P001 that I\u2019d want to ensure it reflects its utility before making a decision.",
+            "status": "answered",
+            "error": null
+          },
+          {
+            "persona_id": "P005",
+            "text": "At $23,000, I still have mixed feelings. On one hand, that price is within the range I expected, but it still raises questions for me. Without a kitchen or bathroom, I wonder if it truly offers enough value for that investment. It could be a nice space for a home office or a retreat, but I\u2019d need to be confident that we would use it regularly to justify the cost. I\u2019m also concerned about the potential for connected devices, which makes me hesitant. Overall, I\u2019d need to weigh the benefits against my concerns about practicality and security before considering it seriously.",
+            "status": "answered",
+            "error": null
+          },
+          {
+            "persona_id": "P006",
+            "text": "At $23,000, I feel like it\u2019s a bit more reasonable, but I still have my reservations. It\u2019s on the higher end of what I expected, and without a kitchen or bathroom, I\u2019d need to really consider how we\u2019d use it to justify that price. If it could serve as a dedicated space for work or hobbies and we could find a way to integrate it into our daily lives, it might be worth it. But I\u2019d still want to see how durable it is and if it offers good value compared to other options, especially since I\u2019m concerned it could end up being unused like some other projects we\u2019ve tried.",
+            "status": "answered",
+            "error": null
+          }
+        ]
+      },
+      {
+        "index": 6,
+        "stage": "close",
+        "question": "What else should we have asked?",
+        "post_exposure": false,
+        "kind": "core",
+        "recipients": null,
+        "answers": [
+          {
+            "persona_id": "P001",
+            "text": "I think it would be helpful to ask about the potential for customization and what specific features come with the Tahoe Mini. For example, can you add storage solutions or insulation options? Also, understanding the warranty and maintenance requirements would be important. Lastly, it would be good to know how it compares to other similar products on the market in terms of value and functionality.",
+            "status": "answered",
+            "error": null
+          },
+          {
+            "persona_id": "P002",
+            "text": "I think it would be helpful to ask about the customization options available for the Tahoe Mini. Knowing if we could personalize the space to better suit our needs, like adding storage solutions or different layouts, would be really valuable. Also, it would be great to understand more about the installation process and any maintenance that might be required down the line. Lastly, asking about the warranty or guarantees on the structure could help address concerns about durability and long-term value. Those details would definitely influence my decision!",
+            "status": "answered",
+            "error": null
+          },
+          {
+            "persona_id": "P003",
+            "text": "I think it would have been helpful to discuss how the Tahoe Mini could be customized to fit different needs. For example, are there options for insulation, electrical work, or even furniture arrangements? Also, it might be valuable to know about the warranty or support that comes with it, especially since it's a significant investment. Understanding how it holds up in different weather conditions, particularly here in Los Angeles, would also be important. Lastly, it would be great to hear about any testimonials or experiences from other families who have used it to see how it truly fits into their lives.",
+            "status": "answered",
+            "error": null
+          },
+          {
+            "persona_id": "P004",
+            "text": "I think it would have been useful to ask about the specific features and customization options available with the Tahoe Mini. For example, what kind of materials are used in construction, and are there any additional upgrades or finishes that could enhance its appeal? Also, understanding the installation process and any ongoing maintenance requirements would be important. Lastly, it would be helpful to know if there are any warranties or guarantees that come with the purchase, as that could influence my decision on whether it\u2019s a worthwhile investment.",
+            "status": "answered",
+            "error": null
+          },
+          {
+            "persona_id": "P005",
+            "text": "I think it would have been helpful to discuss the potential for customization or additional features that might be available for the Tahoe Mini. For someone like me, who is concerned about practicality, knowing if there are options for insulation, energy efficiency, or even storage solutions could make a big difference in how I view its value. Additionally, it would be interesting to explore how it could be integrated into my existing home setup\u2014like whether it could connect to my current home systems or if there are any security features included. Those aspects could really influence my decision.",
+            "status": "answered",
+            "error": null
+          },
+          {
+            "persona_id": "P006",
+            "text": "I think it would have been helpful to ask about the maintenance and durability of the Tahoe Mini. Knowing how it holds up over time, especially in terms of weather and wear, would be important for making a decision. It would also be good to discuss any available customization options. If we could personalize it to better fit our needs, that might make it more appealing. Additionally, asking about any potential zoning or permit requirements for placing it in our backyard would be crucial, as that could impact whether it's even feasible for us.",
+            "status": "answered",
+            "error": null
+          }
+        ]
+      }
+    ],
+    "memo": null
+  },
+  "kind": "focus-group",
+  "provisional": false,
+  "source": "real-service-model-run",
+  "generation": {
+    "script": "scripts/make_demo_fixtures.py",
+    "cost_usd": "0.03595370",
+    "reserved_usd": "0.23571225",
+    "calls": 141,
+    "limit_usd": "2"
+  }
+}

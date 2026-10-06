@@ -1,7 +1,11 @@
 "use client";
 
+import { DemoScreens, DemoNotice, useDemoActivity } from "@/components/demo/demo-mode";
+import { isDemoMode } from "@/lib/demo-mode";
+
 import { useEffect, useRef, useState } from "react";
 
+import { interviewOperation } from "@/lib/standalone-interview";
 import { Button } from "@/components/ui/button";
 import { GlassPanel } from "@/components/ui/glass-panel";
 import {
@@ -24,18 +28,34 @@ export default function AiInterviewsYouPage() {
     <ThemeProvider>
       <StudyProvider>
         <WorkflowNav />
-        <AiInterviewsYouContent />
+        <DemoScreens>{demo => <AiInterviewsYouContent demoPlayback={demo} />}</DemoScreens>
       </StudyProvider>
     </ThemeProvider>
   );
 }
 
-function AiInterviewsYouContent() {
+function AiInterviewsYouContent({ demoPlayback = false }: { demoPlayback?: boolean } = {}) {
+  const [demoRetry, setDemoRetry] = useState(0);
   const { studyId, studyBootstrapError } = useStudy();
+  useEffect(() => {
+    if (!demoPlayback || !studyId) return;
+    let active = true;
+    setError("");
+    interviewOperation<{ interview: HumanInterview }>(studyId, "demo/you", {})
+      .then(result => {
+        if (!active) return;
+        setInterview(result.interview);
+      })
+      .catch((failure: Error) => { if (active) setError(failure.message); });
+    return () => { active = false; };
+  }, [studyId, demoPlayback, demoRetry]);
+
   const [interview, setInterview] = useState<HumanInterview>(NEW_HUMAN_INTERVIEW);
   const [answer, setAnswer] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
+  useDemoActivity(pending, demoPlayback);
+  const readOnly = demoPlayback || !!interview.demo;
   const transcriptEnd = useRef<HTMLDivElement | null>(null);
   const started = interview.messages.length > 0 || interview.ended;
   const unfinished = isUnfinished(interview);
@@ -51,7 +71,7 @@ function AiInterviewsYouContent() {
   }, [unfinished]);
 
   async function request(answered: HumanMessage[], sentAnswer: string) {
-    if (!studyId) return;
+    if (!studyId || readOnly || isDemoMode()) return;
     setPending(true);
     setError("");
     try {
@@ -87,6 +107,10 @@ function AiInterviewsYouContent() {
 
   return (
     <main className="mx-auto flex w-full max-w-4xl flex-col gap-6 px-6 py-12">
+      {readOnly ? <DemoNotice provisional={interview.provisional} /> : null}
+      {demoPlayback && interview.messages.length === 0 && !error ? <p role="status">Loading demo…</p> : null}
+      {demoPlayback && error ? <Button onClick={() => setDemoRetry(n => n + 1)}>Retry demo load</Button> : null}
+
       <header className="flex flex-col gap-2">
         <a href="/interview" className="text-sm text-app-muted hover:text-app-text">&larr; Back to interviews</a>
         <h1 className="text-3xl font-semibold">AI interviews you</h1>
@@ -106,7 +130,7 @@ function AiInterviewsYouContent() {
 
       {!started ? (
         <div>
-          <Button disabled={!studyId || pending} onClick={() => void request([], "")}>
+          <Button disabled={readOnly || !studyId || pending} onClick={() => void request([], "")}>
             {pending ? "Starting…" : "Start the interview"}
           </Button>
         </div>
@@ -157,7 +181,7 @@ function AiInterviewsYouContent() {
               <Button variant="secondary" onClick={() => download("csv")}>Export CSV</Button>
               <Button
                 variant="secondary"
-                disabled={pending}
+                disabled={readOnly || pending}
                 onClick={() => {
                   if (window.confirm("Start over? This transcript is not saved anywhere unless you exported it.")) {
                     setInterview(NEW_HUMAN_INTERVIEW);
