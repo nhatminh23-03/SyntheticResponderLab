@@ -1002,6 +1002,104 @@ def accept_generated_survey(
     }
 
 
+STUDENT_QUESTION_PREFIX = "SQ"
+DEFAULT_LIKERT_ANCHORS = [
+    "Not at all interested",
+    "Slightly interested",
+    "Moderately interested",
+    "Very interested",
+    "Extremely interested",
+]
+
+
+def _saved_survey(session: Session, study: Study) -> StudySectionState:
+    section = _get_sections(session, study)["survey"]
+    if section.status != "saved" or not section.value_json:
+        raise ConflictApiError("Save a survey before adding questions.")
+    return section
+
+
+def _persist_survey(
+    session: Session,
+    settings: AppSettings,
+    study: Study,
+    section: StudySectionState,
+    value: Dict[str, Any],
+) -> Dict[str, Any]:
+    validator = load_module("backend.survey.validator", settings.legacy_app_root)
+    try:
+        validated = validator.validate_survey_schema(value).model_dump()
+    except ValueError as exc:
+        raise ValidationApiError(f"Survey is not valid: {exc}") from exc
+    _save_section(session, study, "survey", validated, source_asset=section.source_asset)
+    _recompute_lifecycle_status(session, study)
+    session.commit()
+    session.refresh(study)
+    study_view = serialize_study(session, study)
+    return {
+        "survey": study_view.survey.model_dump(mode="json", by_alias=True),
+        "workflow": study_view.derived.workflow.model_dump(mode="json"),
+    }
+
+
+def add_survey_question(
+    session: Session,
+    settings: AppSettings,
+    study: Study,
+    *,
+    text: str,
+    question_type: str,
+    options: List[str],
+) -> Dict[str, Any]:
+    """Append a student-written 1-5 scale or single-choice question (ids SQ1, SQ2, ...)."""
+    text = " ".join((text or "").split())
+    if len(text) < 5 or len(text) > 300:
+        raise ValidationApiError("Question text must be at least 5 characters (and at most 300).")
+    cleaned = [o.strip() for o in options or []]
+    if question_type == "likert":
+        if not cleaned:
+            cleaned = list(DEFAULT_LIKERT_ANCHORS)
+        if len(cleaned) != 5 or not all(cleaned):
+            raise ValidationApiError("A 1–5 scale needs five labels, one per point.")
+        question = {"text": text, "question_type": "likert", "options": cleaned, "min_value": 1, "max_value": 5, "required": True}
+    elif question_type == "single_choice":
+        if not 2 <= len(cleaned) <= 8 or not all(cleaned) or len(set(cleaned)) != len(cleaned):
+            raise ValidationApiError("A single-choice question needs 2 to 8 different options.")
+        question = {"text": text, "question_type": "single_choice", "options": cleaned, "required": True}
+    else:
+        raise ValidationApiError("Jev answers only questions with listed options: use a 1–5 scale or single choice.")
+    section = _saved_survey(session, study)
+    value = dict(section.value_json)
+    existing = [q.get("id", "") for q in value.get("questions", [])]
+    numbers = [
+        int(i[len(STUDENT_QUESTION_PREFIX):])
+        for i in existing
+        if _is_student_question(i) and i.isascii()
+    ]
+    question["id"] = f"{STUDENT_QUESTION_PREFIX}{max(numbers, default=0) + 1}"
+    value["questions"] = list(value.get("questions", [])) + [question]
+    return _persist_survey(session, settings, study, section, value)
+
+
+def remove_survey_question(
+    session: Session,
+    settings: AppSettings,
+    study: Study,
+    *,
+    question_id: str,
+) -> Dict[str, Any]:
+    """Remove a student-added question; the original survey questions can never be removed."""
+    if not _is_student_question(question_id):
+        raise ValidationApiError("Only questions you added (SQ1, SQ2, ...) can be removed.")
+    section = _saved_survey(session, study)
+    value = dict(section.value_json)
+    kept = [q for q in value.get("questions", []) if q.get("id") != question_id]
+    if len(kept) == len(value.get("questions", [])):
+        raise NotFoundApiError(f"Question {question_id} is not in this survey.")
+    value["questions"] = kept
+    return _persist_survey(session, settings, study, section, value)
+
+
 def get_workflow(session: Session, study: Study) -> Dict[str, Any]:
     study_view = serialize_study(session, study)
     return study_view.derived.workflow.model_dump(mode="json")
@@ -1186,7 +1284,7 @@ def _live_engine_configured(settings: AppSettings) -> bool:
 
 
 def _is_student_question(question_id: str) -> bool:
-    return question_id.startswith("SQ") and question_id[2:].isdigit()
+    return question_id.startswith(STUDENT_QUESTION_PREFIX) and question_id[len(STUDENT_QUESTION_PREFIX):].isdigit()
 
 
 def _has_student_questions(survey: Dict[str, Any]) -> bool:
