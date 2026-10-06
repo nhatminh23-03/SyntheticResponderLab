@@ -1,6 +1,7 @@
 """The preloaded survey-run demo: answers saved from a synthetic run, served with no provider call."""
 from __future__ import annotations
 
+import copy
 import gzip
 import json
 from datetime import datetime, timezone
@@ -71,8 +72,8 @@ def build_demo_run_result(*, survey_payload: Dict[str, Any], experiment_payload:
         "run_debug_summary": {},
         "run_conditions": {"context_influence": {"enabled": False, "sources": []}, "generation_mode": "demo_preloaded",
                            "selected_models": models_used},
-        "personas": [r["persona"] for r in respondents],
+        "personas": [copy.deepcopy(r["persona"]) for r in respondents],
         "response_records": records, "response_record_preview": records[:24],
         "survey_parse_warnings": list(survey_payload.get("parse_warnings", [])),
-        "demo": {"reason": reason, "source": fixture["source"]},
+        "demo": {"reason": reason, "source": copy.deepcopy(fixture["source"])},
     }

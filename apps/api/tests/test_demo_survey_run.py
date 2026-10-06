@@ -52,3 +52,28 @@ def test_committed_fixture_is_synthetic_and_complete():
     assert len(fixture["respondents"]) == 100 and "Q1" in fixture["question_ids"]
     text = str(fixture).lower()
     assert "aytm" not in text and "driver_donor_id" not in text and "prior_consideration" not in text
+
+
+def test_missing_answers_stay_missing():
+    fixture_with_missing = {
+        "source": {"run_label": "R021 r1", "run_date": "2026-10-03"},
+        "question_ids": ["Q1", "Q0B"],
+        "models_used": ["a/m1", "b/m2"],
+        "respondents": [
+            {"respondent_id": "RESP_001", "model": "a/m1", "persona": {"persona_id": "P001", "lifestyle_tags": []}, "answers": {"Q1": 4, "Q0B": 2}},
+            {"respondent_id": "RESP_002", "model": "b/m2", "persona": {"persona_id": "P002", "lifestyle_tags": []}, "answers": {"Q1": 1}},
+        ],
+    }
+    result = build_demo_run_result(survey_payload=SURVEY, experiment_payload={"sample_size": 2}, reason="requested", fixture=fixture_with_missing)
+    records = result["response_records"]
+    assert len(records) == 3
+    resp2_q0b = [(r["respondent_id"], r["question_id"]) for r in records if r["respondent_id"] == "RESP_002" and r["question_id"] == "Q0b"]
+    assert len(resp2_q0b) == 0
+    assert all(r["answer"] is not None and r["answer"] != "" for r in records)
+
+
+def test_fixture_data_is_copied_not_cached():
+    result1 = build_demo_run_result(survey_payload=SURVEY, experiment_payload={"sample_size": 1}, reason="requested", fixture=FIXTURE)
+    result1["personas"][0]["persona_id"] = "MUTATED"
+    result2 = build_demo_run_result(survey_payload=SURVEY, experiment_payload={"sample_size": 1}, reason="requested", fixture=FIXTURE)
+    assert result2["personas"][0]["persona_id"] == "P001"
