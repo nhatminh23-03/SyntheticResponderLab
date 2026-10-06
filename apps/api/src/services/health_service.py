@@ -49,6 +49,7 @@ def build_health_payload(settings: AppSettings, session_factory: sessionmaker) -
     checks["python_dependencies"] = _python_dependency_check()
     checks["deployment_security"] = _deployment_security_check(settings)
     checks["openrouter"] = _openrouter_check(settings)
+    checks["jev"] = _jev_check(settings)
     checks["google_vision"] = _google_vision_check(settings)
     checks["grounding_priors"] = _grounding_priors_check(settings.legacy_app_root)
     checks["hud_lookups"] = _hud_lookups_check(settings.legacy_app_root, settings.hud_api_token)
@@ -59,7 +60,12 @@ def build_health_payload(settings: AppSettings, session_factory: sessionmaker) -
     elif any(check.status == "warn" for check in checks.values()):
         status = "degraded"
 
-    return HealthPayload(status=status, checks=checks)
+    return HealthPayload(
+        status=status,
+        checks=checks,
+        providers={"jev": bool(settings.typesafe_api_key), "openrouter": bool(settings.openrouter_api_key)},
+        demo_available=True,
+    )
 
 
 def _database_check(session_factory: sessionmaker) -> HealthCheckResult:
@@ -158,6 +164,12 @@ def _openrouter_check(settings: AppSettings) -> HealthCheckResult:
     if settings.openrouter_api_key:
         return HealthCheckResult(status="ok")
     return HealthCheckResult(status="warn", message="OPENROUTER_API_KEY missing.")
+
+
+def _jev_check(settings: AppSettings) -> HealthCheckResult:
+    if settings.typesafe_api_key:
+        return HealthCheckResult(status="ok")
+    return HealthCheckResult(status="warn", message="TYPESAFE_API_KEY missing; live Jev runs unavailable.")
 
 
 def _google_vision_check(settings: AppSettings) -> HealthCheckResult:

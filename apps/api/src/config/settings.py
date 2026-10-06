@@ -25,6 +25,8 @@ class AppSettings(BaseSettings):
 
     openrouter_api_key: Optional[str] = Field(default=None, alias="OPENROUTER_API_KEY")
     openrouter_base_url: str = Field(default="https://openrouter.ai/api/v1", alias="OPENROUTER_BASE_URL")
+    typesafe_api_key: Optional[str] = Field(default=None, alias="TYPESAFE_API_KEY")
+    typesafe_base_url: str = Field(default="https://api.typesafe.ai/v1/systemone", alias="TYPESAFE_BASE_URL")
     cache_mode: str = Field(default=CACHE_MODE, alias="CACHE_MODE")
     llm_budget_usd: Decimal = Field(default=RUN_BUDGET_USD, alias="NEO_LLM_BUDGET_USD")
 
