@@ -30,3 +30,20 @@ Checks run from this directory through `./check.sh`.
 
 - [ ] The full API suite passes. — check: `./check.sh api-all`
 - [ ] The full web suite passes, the web app typechecks and the production build succeeds. — check: `./check.sh web-all && ./check.sh typecheck && ./check.sh build`
+
+## Added by Sol refute [codex:gpt-6-astra] (each needs a check before it can pass)
+- [ ] (sol) A first-time student with an empty study can open each demo without configuring models, personas, a product, or a guide.
+- [ ] (sol) Demo access remains available when live-run budgets or quotas are exhausted.
+- [ ] (sol) Concurrent demo opens and retries after a lost response produce one complete copy without resetting the student's saved memo.
+- [ ] (sol) A failed demo load shows a recoverable error, leaves no partial session, and never falls back to a live run.
+- [ ] (sol) Returning through refresh or session history preserves the demo flag, labels, and read-only restrictions.
+- [ ] (sol) Switching between demo and live sessions preserves existing transcripts and memo drafts, and late responses cannot overwrite the newly selected session.
+- [ ] (sol) Saved fixture themes can be viewed with valid transcript citations, while fixtures without themes clearly report their absence without offering generation.
+- [ ] (sol) Direct next-question requests and alternate chat or comparison endpoints cannot use a demo session identifier to trigger model or budget work.
+- [ ] (sol) Another student cannot export, modify memos, delete, or otherwise mutate a demo by supplying its identifiers.
+- [ ] (sol) After classroom-session expiry or shared-device reset, the next student cannot recover the previous student's demo memos through browser storage.
+- [ ] (sol) Opening demos leaves existing study configuration, survey results, live transcripts, and research analysis unchanged.
+- [ ] (sol) Every demo screen and export retains the existing “Synthetic rehearsal” label alongside the demo label.
+- [ ] (sol) Fixture generation uses the real service code and enforces the approved $2 total spending limit.
+- [ ] (sol) Missing or invalid deployed fixtures produce an actionable operator diagnostic identifying the affected demo without exposing student content.
+- [ ] (sol) All three demos work through the deployed classroom website before the October 7 class, including study creation, fixture loading, memo saving, and downloads.
