@@ -521,6 +521,8 @@ def analysis_endpoint(
 def insights_endpoint(
     study_id: str,
     request: Request,
+    # ai=false (sent by the web's Demo (no AI) switch): serve a cached summary, never generate one.
+    ai: bool = Query(default=True),
     db: Session = Depends(get_db_session),
     settings: AppSettings = Depends(get_settings),
     current_user: AuthUser = Depends(get_current_user),
@@ -533,6 +535,7 @@ def insights_endpoint(
                 db,
                 settings,
                 study,
+                allow_ai=ai,
             )
         },
     )
@@ -741,12 +744,14 @@ def patch_research_brief_endpoint(
 def interview_insights_endpoint(
     study_id: str,
     request: Request,
+    # ai=false (sent by the web's Demo (no AI) switch): serve cached themes, never extract new ones.
+    ai: bool = Query(default=True),
     db: Session = Depends(get_db_session),
     settings: AppSettings = Depends(get_settings),
     current_user: AuthUser = Depends(get_current_user),
 ):
     study = get_owned_study_or_404(db, study_id, current_user)
-    result = get_interview_insights(db, settings, study)
+    result = get_interview_insights(db, settings, study, allow_ai=ai)
     return response_envelope(request, {"interview_insights": result})
 
 

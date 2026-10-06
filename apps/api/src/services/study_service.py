@@ -92,6 +92,8 @@ INSIGHTS_SUMMARY_MODEL = "openai/gpt-4o-mini"
 INSIGHTS_SUMMARY_TIMEOUT_SECONDS = 30
 INSIGHTS_SUMMARY_MAX_ATTEMPTS = 2
 INSIGHTS_SUMMARY_CACHE_VERSION = "v3"
+# The web's Demo (no AI) switch lives in the browser; it reaches the insights read only as `ai=false`.
+DEMO_SWITCH_NO_AI_SUMMARY = "Demo (no AI) is on: no AI summary was generated. Turn Demo off to get one."
 
 NEO_BOOTSTRAP_PERSONA_PREVIEW_SAMPLE_SIZE = 12
 NEO_BOOTSTRAP_AUDIENCE = {
@@ -1571,7 +1573,10 @@ def get_insights_view(
     session: Session,
     settings: AppSettings,
     study: Study,
+    *,
+    allow_ai: bool = True,
 ) -> Dict[str, Any]:
+    """The insights for the latest run. With allow_ai False no summary is generated; a cached one is still served."""
     latest_run = _latest_job(session, study.id, "simulation_run")
     latest_run_payload = latest_run.result_json if latest_run and latest_run.status == "completed" else None
 
@@ -1605,6 +1610,7 @@ def get_insights_view(
         study=study,
         run_id=run_id,
         evidence_package=evidence_package,
+        allow_ai=allow_ai,
     )
     return insights
 
@@ -1742,10 +1748,20 @@ def _load_or_generate_insights_summary(
     study: Study,
     run_id: str,
     evidence_package: Dict[str, Any],
+    allow_ai: bool = True,
 ) -> Dict[str, Any]:
     cached_summary = _get_cached_insights_summary(session, study, run_id)
     if cached_summary is not None:
         return cached_summary
+
+    if not allow_ai:
+        return {
+            "available": False,
+            "message": DEMO_SWITCH_NO_AI_SUMMARY,
+            "model": None,
+            "from_run_id": run_id,
+            "cached": False,
+        }
 
     if not settings.openrouter_api_key:
         return {

@@ -74,6 +74,8 @@ _OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 _MAX_RETRIES = 3
 
 INTERVIEW_SECTION_KEYS = ("interview_synthesis", "research_brief")
+# The web's Demo (no AI) switch lives in the browser; it reaches the interview insights read only as `ai=false`.
+DEMO_SWITCH_NO_AI_THEMES = "Demo (no AI) is on: no AI themes were generated. Turn Demo off to get them."
 
 _NEO_PRODUCT_CONTEXT = """PRODUCT BEING DISCUSSED:
 Name: Tahoe Mini by Neo Smart Living
@@ -463,11 +465,14 @@ def get_interview_insights(
     session: Session,
     settings: AppSettings,
     study: Study,
+    *,
+    allow_ai: bool = True,
 ) -> Dict[str, Any]:
     """Extract themes and representative quotes from the latest interview run.
 
     Uses an LLM to identify 3-6 recurring themes across the transcript corpus,
-    with a representative quote and sentiment label per theme.
+    with a representative quote and sentiment label per theme. With allow_ai False
+    no themes are extracted; themes already cached for the run are still served.
     """
     latest_run = _latest_interview_job(session, study.id)
     if not latest_run or latest_run.status != "completed" or not latest_run.result_json:
@@ -493,6 +498,9 @@ def get_interview_insights(
             "from_run_id": run_public_id,
             **existing_section.value_json,
         }
+
+    if not allow_ai:
+        return {"available": False, "message": DEMO_SWITCH_NO_AI_THEMES}
 
     api_key = settings.openrouter_api_key or ""
     if not api_key:
