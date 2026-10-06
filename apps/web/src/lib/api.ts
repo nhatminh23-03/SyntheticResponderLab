@@ -449,6 +449,8 @@ export type SimulationRunResultPayload = {
   response_record_preview?: Array<Record<string, unknown>>;
   response_records?: Array<Record<string, unknown>>;
   survey_parse_warnings?: string[];
+  /** Present only on a preloaded demo run (generation_mode "demo_preloaded"). */
+  demo?: { reason?: string; source?: Record<string, unknown> } | null;
 };
 
 export type SimulationStabilityResultPayload = {

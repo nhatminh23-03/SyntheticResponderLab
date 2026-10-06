@@ -33,8 +33,17 @@ export type RunEvidence = {
 };
 
 const GROUNDED_MODES = new Set(["grounded_priors", "grounded"]);
+const PRELOADED_PERSONA_MODE = "preloaded_s1";
+const DEMO_GENERATION_MODE = "demo_preloaded";
 
 function describePersonaGrounding(mode: string | null | undefined) {
+  if (mode === PRELOADED_PERSONA_MODE) {
+    return {
+      isGrounded: false,
+      label: "Preloaded panel (100 synthetic personas, S1)",
+      detail: "These personas come from the saved demo panel; none were generated for this run.",
+    };
+  }
   if (!mode) {
     return {
       isGrounded: false,
@@ -60,9 +69,31 @@ function describePersonaGrounding(mode: string | null | undefined) {
 
 export function describeRunEvidence(
   summary: RunDebugSummaryInput,
-  personaGenerationMode: string | null | undefined
+  personaGenerationMode: string | null | undefined,
+  generationMode?: string | null
 ): RunEvidence {
   const personaGrounding = describePersonaGrounding(personaGenerationMode);
+
+  if (generationMode === DEMO_GENERATION_MODE) {
+    // A demo saves no live-answer diagnostics. Reporting 0 of 0 live answers, or "not reported",
+    // would read as a broken live run; it is a different thing and says so.
+    return {
+      available: false,
+      tone: "caution",
+      liveAnswerRatePercent: null,
+      liveAnswerRateLabel: "Not a live run",
+      totalAnswers: 0,
+      liveAnswers: 0,
+      fabricatedAnswers: 0,
+      providerErrors: 0,
+      malformedJson: 0,
+      headline: "Preloaded demo answers",
+      detail:
+        "These answers were saved from an earlier synthetic run. No AI was called for this run, " +
+        "and they are not a live result for this survey.",
+      personaGrounding,
+    };
+  }
 
   if (!summary) {
     return {

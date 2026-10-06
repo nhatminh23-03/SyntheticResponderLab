@@ -11,6 +11,8 @@ import {
   SimulationStabilityResultPayload,
   startSimulationRun,
 } from "@/lib/api";
+import { liveEngineAvailable, type BackendReadinessPayload } from "@/lib/backend-readiness";
+import { demoBannerLines, describeDemoRun, runErrorNote } from "@/lib/demo-run";
 import { describeRunEvidence } from "@/lib/run-evidence";
 import { describeRunCounts } from "@/lib/run-counts";
 import { cn } from "@/lib/utils";
@@ -28,7 +30,11 @@ type StatusTone = "neutral" | "success" | "warning" | "error";
 type StatusState = {
   tone: StatusTone;
   message: string;
+  /** A second line shown under the message (the message itself is never reworded). */
+  note?: string | null;
 };
+
+type RunSource = "live" | "demo";
 
 const EXECUTION_PHASES = [
   "Validating setup",
@@ -63,6 +69,9 @@ export function RunSimulationSection() {
     useState<SimulationJobPayload<SimulationStabilityResultPayload> | null>(null);
   const [status, setStatus] = useState<StatusState>(EMPTY_STATUS);
   const [isRunning, setIsRunning] = useState(false);
+  const [activeSource, setActiveSource] = useState<RunSource | null>(null);
+  const [readiness, setReadiness] = useState<BackendReadinessPayload | null>(null);
+  const [readinessChecked, setReadinessChecked] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
   const [executionPhaseIndex, setExecutionPhaseIndex] = useState(0);
   const [responseRecordPage, setResponseRecordPage] = useState(0);
@@ -126,6 +135,25 @@ export function RunSimulationSection() {
   ]);
 
   useEffect(() => {
+    let cancelled = false;
+    fetch("/api/readiness", { cache: "no-store" })
+      .then((response) => response.json())
+      .then((payload: BackendReadinessPayload) => {
+        if (!cancelled) setReadiness(payload);
+      })
+      .catch(() => {
+        if (!cancelled) setReadiness(null);
+      })
+      .finally(() => {
+        if (!cancelled) setReadinessChecked(true);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     setNavigationLocked(isRunning);
 
     return () => {
@@ -145,9 +173,14 @@ export function RunSimulationSection() {
   const readinessBanner = useMemo(() => buildReadinessBanner(study), [study]);
   const runEvidence = describeRunEvidence(
     latestRun?.result?.run_debug_summary ?? null,
-    latestRun?.result?.persona_generation_mode ?? null
+    latestRun?.result?.persona_generation_mode ?? null,
+    latestRun?.result?.generation_mode ?? null
   );
-  const latestRunWarnings = latestRun?.result?.warnings ?? [];
+  const demoRun = describeDemoRun(latestRun?.result);
+  const demoLines = demoBannerLines(latestRun?.result);
+  // The demo banner already shows every warning of a demo run, so the warnings panel would repeat them.
+  const latestRunWarnings = demoRun ? [] : latestRun?.result?.warnings ?? [];
+  const liveReady = Boolean(readiness?.ready) && liveEngineAvailable(readiness);
   const latestParseWarnings = latestRun?.result?.survey_parse_warnings ?? [];
   const allPersonas = latestRun?.result?.personas ?? [];
   const runCounts = useMemo(
@@ -205,17 +238,20 @@ export function RunSimulationSection() {
     setExecutionPhaseIndex(finalIndex);
   }
 
-  async function handleRunStudy() {
+  async function handleRunStudy(source: RunSource = "live") {
     if (!runReady) {
       setStatus(readinessBanner);
       return;
     }
 
     setIsRunning(true);
+    setActiveSource(source);
     setStatus({
       tone: "neutral",
       message:
-        "Run started. The backend currently returns the completed result in one response, while the UI maps progress phases locally for a stronger launch experience.",
+        source === "demo"
+          ? "Loading the preloaded demo. No AI is called."
+          : "Run started. The backend currently returns the completed result in one response, while the UI maps progress phases locally for a stronger launch experience.",
     });
     startProgressAnimation();
 
@@ -225,22 +261,23 @@ export function RunSimulationSection() {
         throw new Error("No study is available yet.");
       }
 
-      const result = await startSimulationRun(resolvedStudyId);
+      const result = await startSimulationRun(resolvedStudyId, source);
       await refreshStudy(resolvedStudyId);
       setLatestRun(result.simulationRun);
       stopProgressAnimation(EXECUTION_PHASES.length - 1);
       setStatus(buildRunStatus(result.simulationRun, study));
     } catch (error) {
       stopProgressAnimation(Math.max(executionPhaseIndex, 1));
-      setStatus({
-        tone: "error",
-        message:
-          error instanceof Error
-            ? error.message
-            : "Unable to run the study right now.",
-      });
+      // The message is shown as the API wrote it. Both buttons stay enabled: "Run live" is the retry,
+      // and the preloaded demo is the way to the original survey's answers.
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Unable to run the study right now.";
+      setStatus({ tone: "error", message, note: runErrorNote(message) });
     } finally {
       setIsRunning(false);
+      setActiveSource(null);
     }
   }
 
@@ -304,10 +341,23 @@ export function RunSimulationSection() {
 
               <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
                 <Button
-                  onClick={handleRunStudy}
+                  onClick={() => handleRunStudy("live")}
+                  disabled={
+                    !runReady || isRunning || isCreatingStudy || isHydratingStudy || !liveReady
+                  }
+                >
+                  {isRunning && activeSource === "live"
+                    ? "Running live..."
+                    : `Run live${readiness?.providers?.jev ? " (Jev)" : ""}`}
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() => handleRunStudy("demo")}
                   disabled={!runReady || isRunning || isCreatingStudy || isHydratingStudy}
                 >
-                  {isRunning ? "Running Study..." : "Run Study"}
+                  {isRunning && activeSource === "demo"
+                    ? "Loading demo..."
+                    : "Show preloaded demo (no AI)"}
                 </Button>
                 <Button
                   variant="secondary"
@@ -318,8 +368,23 @@ export function RunSimulationSection() {
                 </Button>
               </div>
 
+              {readinessChecked && !liveReady ? (
+                <p className="mt-3 text-sm leading-6 text-app-muted">
+                  {readiness === null
+                    ? "Could not check which AI engines this server has. Use the preloaded demo, or reload to try again."
+                    : readiness.ready
+                      ? "No AI key on this server — use the preloaded demo."
+                      : "The backend is not ready yet, so Run live is unavailable. Use the preloaded demo, or try again in a moment."}
+                </p>
+              ) : null}
+
               <div className="mt-5">
-                <StatusBanner tone={status.tone} message={status.message} compact />
+                <StatusBanner
+                  tone={status.tone}
+                  message={status.message}
+                  note={status.note}
+                  compact
+                />
               </div>
 
               {isRunning ? (
@@ -370,6 +435,22 @@ export function RunSimulationSection() {
 
                 {latestRun.result ? (
                   <>
+                    {demoRun ? (
+                      <div
+                        role="status"
+                        className={cn(
+                          "mt-5 space-y-2 rounded-xl p-4 leading-6",
+                          demoRun.reason === "jev_unavailable"
+                            ? "border-2 border-red-500 bg-red-500/15 text-base font-bold [color:var(--status-error-text)]"
+                            : "border [border-color:var(--status-warning-border)] [background:var(--status-warning-bg)] text-sm [color:var(--status-warning-text)]"
+                        )}
+                      >
+                        {demoLines.map((line) => (
+                          <p key={line}>{line}</p>
+                        ))}
+                      </div>
+                    ) : null}
+
                     <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                       <MetaCard
                         label={runCounts.responsesLabel}
@@ -547,6 +628,12 @@ function buildRunStatus(
   study: unknown
 ): StatusState {
   if (latestRun?.status === "completed" && latestRun.result) {
+    if (describeDemoRun(latestRun.result)) {
+      return {
+        tone: "warning",
+        message: "Showing the preloaded demo, not a live run. No AI was called. The banner below says why.",
+      };
+    }
     const warningCount = latestRun.result.warnings?.length ?? 0;
     if (warningCount > 0) {
       const warningPreview = (latestRun.result.warnings ?? [])
@@ -668,10 +755,12 @@ function formatAnswer(answer: unknown) {
 function StatusBanner({
   tone,
   message,
+  note,
   compact = false,
 }: {
   tone: StatusTone;
   message: string;
+  note?: string | null;
   compact?: boolean;
 }) {
   return (
@@ -690,6 +779,7 @@ function StatusBanner({
       )}
     >
       {message}
+      {note ? <div className="mt-1">{note}</div> : null}
     </div>
   );
 }
@@ -785,7 +875,10 @@ function PersonaPreviewCard({
     "Not specified";
   const housing = toOptionalString(persona.home_type) || "Not specified";
   const workStyle = toOptionalString(persona.work_mode) || "Not specified";
-  const household = toOptionalString(persona.household_size) || "Not specified";
+  const household =
+    toOptionalString(persona.household_size) ||
+    toOptionalString(persona.household_size_bucket) ||
+    "Not specified";
   const geography =
     toOptionalString(persona.metro) ||
     toOptionalString(persona.state) ||

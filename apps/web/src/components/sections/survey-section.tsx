@@ -16,6 +16,7 @@ import {
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useStudy } from "@/providers/study-provider";
+import { AddQuestionCard } from "@/components/sections/add-question-card";
 import { SurveyGeneratorPanel } from "@/components/sections/survey-generator-panel";
 import { BadgeChip } from "@/components/ui/badge-chip";
 import { Button } from "@/components/ui/button";
@@ -617,6 +618,16 @@ export function SurveySection() {
             </div>
           </GlassPanel>
         </RevealOnScroll>
+
+        {studyId && savedSurvey ? (
+          <RevealOnScroll delay={0.12}>
+            <AddQuestionCard
+              studyId={studyId}
+              questions={surveyQuestions}
+              onChanged={() => refreshStudy(studyId)}
+            />
+          </RevealOnScroll>
+        ) : null}
       </div>
     </SectionWrapper>
   );

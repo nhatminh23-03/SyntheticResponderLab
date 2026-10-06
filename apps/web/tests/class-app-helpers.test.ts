@@ -1,9 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { JEV_MODEL_ID, normalizeSelectedModels, toggleModel } from "../src/lib/experiment-models";
+import { JEV_MODEL_ID, normalizeSelectedModels, selectedModelsProblem, toggleModel } from "../src/lib/experiment-models";
 import { DEFAULT_LIKERT_ANCHORS, isStudentQuestion, toAddQuestionPayload, validateAddedQuestion } from "../src/lib/survey-question-form";
-import { describeDemoRun } from "../src/lib/demo-run";
+import { demoBannerLines, describeDemoRun, isDemoRunId, runErrorNote } from "../src/lib/demo-run";
 import { liveEngineAvailable, toBackendReadinessPayload } from "../src/lib/backend-readiness";
 
 test("Jev and other models are mutually exclusive", () => {
@@ -41,4 +41,44 @@ test("readiness passes providers through", () => {
   assert.deepEqual(ready.providers, { jev: true, openrouter: false });
   assert.equal(liveEngineAvailable(ready), true);
   assert.equal(liveEngineAvailable(toBackendReadinessPayload(200, { data: { status: "ok" } })), false);
+});
+
+test("Jev is not kept when the server has no Jev key", () => {
+  assert.deepEqual(normalizeSelectedModels([JEV_MODEL_ID], ["a", "b"], false), ["a", "b"]);
+  assert.deepEqual(normalizeSelectedModels([JEV_MODEL_ID], ["a", "b"], true), [JEV_MODEL_ID]);
+});
+
+test("a lone Jev passes the client model rule in split and mirror, but not stability", () => {
+  assert.equal(selectedModelsProblem([JEV_MODEL_ID], "split"), null);
+  assert.equal(selectedModelsProblem([JEV_MODEL_ID], "mirror"), null);
+  assert.match(selectedModelsProblem([JEV_MODEL_ID], "stability") ?? "", /split or mirror/);
+  assert.equal(selectedModelsProblem(["a"], "split"), "Select at least 2 models.");
+  assert.equal(selectedModelsProblem([], "mirror"), "Select at least 2 models.");
+  assert.equal(selectedModelsProblem(["a", "b"], "split"), null);
+});
+
+test("the demo banner lists the message and every remaining warning on its own line", () => {
+  const lines = demoBannerLines({
+    generation_mode: "demo_preloaded",
+    warnings: ["Preloaded demo: x.", "You chose the preloaded demo.", "Detail: boom", "Run live to answer these: SQ1"],
+    demo: { reason: "requested" },
+  });
+  assert.deepEqual(lines, ["Preloaded demo: x. You chose the preloaded demo.", "Detail: boom", "Run live to answer these: SQ1"]);
+  assert.deepEqual(demoBannerLines({ generation_mode: "jev_live", warnings: ["a", "b", "c"] }), []);
+  assert.deepEqual(demoBannerLines(null), []);
+});
+
+test("only a message that needs a live run gets the added-questions note", () => {
+  assert.equal(
+    runErrorNote("Jev is temporarily unavailable. Your new question requires a live run. You can view the preloaded demo of the original survey."),
+    "Your added questions are not in the preloaded demo."
+  );
+  assert.equal(runErrorNote("Jev answered only 70 of 100 respondents."), null);
+  assert.equal(runErrorNote("The preloaded demo covers the Tahoe Mini survey; use a live run for this survey."), null);
+});
+
+test("demo run ids are recognised, live ones are not", () => {
+  assert.equal(isDemoRunId("DEMO_20261007_101500"), true);
+  assert.equal(isDemoRunId("RUN_20261007_101500"), false);
+  assert.equal(isDemoRunId(undefined), false);
 });
