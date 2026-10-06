@@ -1456,6 +1456,16 @@ def get_insights_view(
         or getattr(latest_run, "public_id", "")
         or "latest_simulation_run"
     ).strip()
+    if (latest_run_payload or {}).get("generation_mode") == "demo_preloaded":
+        # The preloaded demo says "No AI was called": its insights never reach a provider or a cached AI summary.
+        insights["llm_summary"] = {
+            "available": False,
+            "message": "Preloaded demo: no executive AI summary was generated. No AI was called. Run live to get one.",
+            "model": INSIGHTS_SUMMARY_MODEL,
+            "from_run_id": run_id,
+            "cached": False,
+        }
+        return insights
     evidence_package = insights.get("evidence_package") or {}
     insights["llm_summary"] = _load_or_generate_insights_summary(
         session=session,

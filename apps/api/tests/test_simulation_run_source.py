@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import pytest
+
 from tests.test_studies_endpoints import _create_ready_to_run_study
 
 
-def _fail_if_called(**kwargs):
+def _fail_if_called(*args, **kwargs):
     raise AssertionError("a provider was called")
 
 
@@ -88,3 +90,46 @@ def test_explicit_demo_with_a_student_question_serves_the_demo_with_the_run_live
     result = response.json()["data"]["simulation_run"]["result"]
     assert result["generation_mode"] == "demo_preloaded" and result["demo"]["reason"] == "requested"
     assert any("Run live to answer these: SQ1" in w for w in result["warnings"])
+
+
+def test_insights_on_a_demo_run_never_call_a_provider_even_when_a_key_is_configured(client, monkeypatch):
+    study_id = _create_ready_to_run_study(client)
+    keyed = client.app.state.settings.model_copy(update={"openrouter_api_key": "test-openrouter-key"})
+    monkeypatch.setattr(client.app.state, "settings", keyed)
+    monkeypatch.setattr("src.services.study_service.execute_simulation_run", _fail_if_called)
+    monkeypatch.setattr("src.services.study_service._generate_llm_insights_summary", _fail_if_called)
+    monkeypatch.setattr("src.services.study_service._request_llm_insights_summary", _fail_if_called)
+    run = client.post(f"/api/v1/studies/{study_id}/simulation-runs", json={"source": "demo"})
+    assert run.status_code == 200
+    assert run.json()["data"]["simulation_run"]["result"]["generation_mode"] == "demo_preloaded"
+    response = client.get(f"/api/v1/studies/{study_id}/insights")
+    assert response.status_code == 200
+    insights = response.json()["data"]["insights"]
+    assert insights["available"] is True   # the rule-based detailed insights still render
+    assert insights["llm_summary"]["available"] is False
+    assert "No AI was called" in insights["llm_summary"]["message"]
+    assert insights["llm_summary"]["cached"] is False
+
+
+@pytest.mark.parametrize("error_name, message", [
+    ("JevRequestError", "Jev refused the request: invalid key"),
+    ("JevTooManyFailuresError", "Jev failed for 31 of 100 respondents (more than 20%). Retry the run."),
+])
+def test_jev_refusal_and_too_many_failures_stay_503_and_never_become_demo_answers(
+    client, monkeypatch, live_engine_configured, error_name, message
+):
+    import src.adapters.legacy_backend.jev_engine as jev_engine
+
+    error_class = getattr(jev_engine, error_name)
+
+    def _raise(**kwargs):
+        raise error_class(message)
+
+    study_id = _create_ready_to_run_study(client)
+    monkeypatch.setattr("src.services.study_service.execute_simulation_run", _raise)
+    response = client.post(f"/api/v1/studies/{study_id}/simulation-runs")
+    assert response.status_code == 503
+    assert response.json()["error"]["message"] == message
+    latest = client.get(f"/api/v1/studies/{study_id}/simulation-runs/latest").json()["data"]["simulation_run"]
+    assert latest["status"] == "failed" and latest["result"] is None   # no demo answers were saved for this run
+    assert latest["error"]["message"] == message
