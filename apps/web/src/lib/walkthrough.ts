@@ -17,11 +17,14 @@ export function formatTime(seconds: number): string {
   return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`;
 }
 
+// A seek to a chapter's start can land a few microseconds short of it (129.7 reads back as 129.699998).
+const SEEK_TOLERANCE = 0.05;
+
 /** Index of the chapter playing at `time`: the last one that has started, or 0 before the first. */
 export function chapterFor(chapters: readonly WalkthroughChapter[], time: number): number {
   let index = 0;
   chapters.forEach((chapter, i) => {
-    if (chapter.t <= time) index = i;
+    if (chapter.t <= time + SEEK_TOLERANCE) index = i;
   });
   return index;
 }

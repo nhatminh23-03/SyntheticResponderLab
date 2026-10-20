@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { WalkthroughPlayer, type WalkthroughPlayerHandle } from "@/components/walkthrough/walkthrough-player";
 import { WALKTHROUGH } from "@/lib/walkthrough-chapters";
@@ -36,6 +36,7 @@ export function WalkthroughProvider({ children }: { children: ReactNode }) {
   const openedAt = useRef(0);
   const pressedOnBackdrop = useRef(false);
   const pathname = usePathname();
+  const [activated, setActivated] = useState(false);
 
   const show = useCallback((step: string | null, play: boolean) => {
     const dialog = dialogRef.current;
@@ -44,6 +45,7 @@ export function WalkthroughProvider({ children }: { children: ReactNode }) {
       dialog.showModal();
       openedAt.current = Date.now();
     }
+    setActivated(true);
     // Still inside the click that asked for it, which Safari requires before it plays with sound.
     playerRef.current?.start(step, play);
     dialog.querySelector("video")?.focus();
@@ -110,7 +112,7 @@ export function WalkthroughProvider({ children }: { children: ReactNode }) {
               </button>
             </form>
           </div>
-          <WalkthroughPlayer ref={playerRef} preload="none" />
+          <WalkthroughPlayer ref={playerRef} preload={activated ? "metadata" : "none"} idle={!activated} />
         </div>
       </dialog>
     </WalkthroughContext.Provider>
