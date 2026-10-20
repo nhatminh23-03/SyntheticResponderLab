@@ -17,11 +17,21 @@ type WalkthroughPlayerProps = {
   manifest?: WalkthroughManifest;
   /** "none" while hidden in the closed guide, so nothing downloads until someone opens it. */
   preload?: "none" | "metadata";
+  /** Until the guide is first opened, the poster and captions are left out too, so no page fetches them. */
+  idle?: boolean;
+  /** Height of everything above and below the video that has to stay on screen with it, so its controls are in
+   * view without scrolling. */
+  reserve?: string;
+  /** A chapter the viewer picked from the list. */
+  onChapter?: (step: string) => void;
   className?: string;
 };
 
 export const WalkthroughPlayer = forwardRef<WalkthroughPlayerHandle, WalkthroughPlayerProps>(
-  function WalkthroughPlayer({ manifest = WALKTHROUGH, preload = "metadata", className }, ref) {
+  function WalkthroughPlayer(
+    { manifest = WALKTHROUGH, preload = "metadata", idle = false, reserve = "9rem", onChapter, className },
+    ref
+  ) {
     const videoRef = useRef<HTMLVideoElement | null>(null);
     // A seek asked for before the video knows its duration; applied once, when the metadata arrives.
     const pendingTime = useRef<number | null>(null);
@@ -38,6 +48,12 @@ export const WalkthroughPlayer = forwardRef<WalkthroughPlayerHandle, Walkthrough
           video.currentTime = chapter.t;
         } else {
           pendingTime.current = chapter.t;
+          // Shown without playing (a link to a step): fetch the metadata now, so the seek lands and the step's
+          // frame is on screen, not the opening frame.
+          if (!play && video.preload === "none") {
+            video.preload = "metadata";
+            video.load();
+          }
         }
         // play() also starts loading; a browser may still refuse it, and the controls are there for that.
         if (play) void video.play().catch(() => undefined);
@@ -70,9 +86,9 @@ export const WalkthroughPlayer = forwardRef<WalkthroughPlayerHandle, Walkthrough
               // Never taller than the screen leaves room for, so the controls stay in view on short laptop
               // screens and landscape phones.
               className="mx-auto block aspect-[16/10] w-full rounded-xl bg-black"
-              style={{ maxWidth: "calc((100dvh - 9rem) * 1.6)" }}
+              style={{ maxWidth: `calc((100dvh - ${reserve}) * 1.6)` }}
               src={manifest.url}
-              poster={manifest.poster}
+              poster={idle ? undefined : manifest.poster}
               controls
               playsInline
               preload={preload}
@@ -84,7 +100,7 @@ export const WalkthroughPlayer = forwardRef<WalkthroughPlayerHandle, Walkthrough
               onTimeUpdate={(event) => setCurrent(chapterFor(manifest.chapters, event.currentTarget.currentTime))}
               onError={() => setFailed(true)}
             >
-              <track kind="captions" src={manifest.captions} srcLang="en" label="English" default />
+              {idle ? null : <track kind="captions" src={manifest.captions} srcLang="en" label="English" default />}
             </video>
           )}
         </div>
@@ -95,7 +111,10 @@ export const WalkthroughPlayer = forwardRef<WalkthroughPlayerHandle, Walkthrough
               <li key={chapter.step}>
                 <button
                   type="button"
-                  onClick={() => seekTo(index, true)}
+                  onClick={() => {
+                    seekTo(index, true);
+                    onChapter?.(chapter.step);
+                  }}
                   disabled={failed}
                   aria-current={index === current ? "step" : undefined}
                   className={cn(

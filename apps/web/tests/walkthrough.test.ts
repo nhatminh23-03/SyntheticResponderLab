@@ -41,6 +41,8 @@ test("the current chapter is the last one that has started", () => {
   assert.equal(chapterFor(manifest.chapters, 0), 0);
   assert.equal(chapterFor(manifest.chapters, 19.9), 0);
   assert.equal(chapterFor(manifest.chapters, 20), 1);
+  // A seek to 20 can read back as 19.999998.
+  assert.equal(chapterFor(manifest.chapters, 19.999998), 1);
   assert.equal(chapterFor(manifest.chapters, 89), 1);
   assert.equal(chapterFor(manifest.chapters, 500), 2);
 });
